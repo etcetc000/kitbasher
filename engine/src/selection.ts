@@ -59,27 +59,73 @@ export function merged(packs: Pack[]): MergedFamily[] {
   return [...fams.values()].map((f) => ({ ...f, models: bySeq(f.models), shared: bySeq(f.shared) }));
 }
 
-export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; shared: PackTable[] } {
+/**
+ * Former key -> current key, over every model of the packs. A renamed model lists the keys it was
+ * published under in `aliases`, so a layout saved, or a selection written, before the rename still
+ * finds it. An alias that is another model's key, or that two models claim, is an error: it could
+ * not say which model it means.
+ */
+export function keyAliases(models: PackModel[]): Map<string, string> {
+  const keys = new Set(models.map((m) => m.key));
+  const out = new Map<string, string>();
+  for (const m of models) {
+    for (const a of m.aliases ?? []) {
+      if (keys.has(a)) throw new Error(`${m.key} (${m.name.trim()}) lists alias ${a}, which is the key of another model`);
+      const had = out.get(a);
+      if (had !== undefined && had !== m.key) throw new Error(`alias ${a} is claimed by both ${had} and ${m.key}`);
+      out.set(a, m.key);
+    }
+  }
+  return out;
+}
+
+/** A key, or the current key of the model it is an alias of. */
+export const resolveKey = (aliases: Map<string, string>, key: string): string => aliases.get(key) ?? key;
+
+/**
+ * A layout with every machine under its model's current key. Unknown keys stay as they are (a map
+ * may name machines this catalog does not carry); the same model named twice, under an old key
+ * and its new one, is an error rather than a silent choice between two placements.
+ */
+export function resolveLayout(l: Layout, aliases: Map<string, string>): Layout {
+  if (!Object.keys(l.machines).some((k) => aliases.has(k))) return l;
+  const machines: Layout['machines'] = {};
+  const from = new Map<string, string>();
+  for (const [k, p] of Object.entries(l.machines)) {
+    const key = resolveKey(aliases, k);
+    if (from.has(key)) throw new Error(`the layout names ${key} twice: as ${from.get(key)} and as ${k}`);
+    from.set(key, k);
+    machines[key] = p;
+  }
+  return { format: l.format, base: l.base, categories: l.categories, machines };
+}
+
+export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; shared: PackTable[]; aliases: Map<string, string> } {
   const all = merged(packs);
+  const aliases = keyAliases(all.flatMap((f) => f.models));
   let keys: Set<string> | null = null;
   if (opt.modelKeys !== undefined) {
     if (!Array.isArray(opt.modelKeys) || !opt.modelKeys.length ||
       opt.modelKeys.some(k => typeof k !== 'string' || !k.length) ||
       new Set(opt.modelKeys).size !== opt.modelKeys.length) throw new Error('modelKeys requires unique nonempty model keys');
     if (opt.families !== undefined || opt.exclude !== undefined) throw new Error('modelKeys cannot be combined with families or exclude');
-    keys = new Set(opt.modelKeys);
+    keys = new Set(opt.modelKeys.map((k) => resolveKey(aliases, k)));
+    if (keys.size !== opt.modelKeys.length) throw new Error('modelKeys names the same model twice (under a former key and its current one)');
     const known = new Set(all.flatMap(f => f.models.map(m => m.key)));
     for (const key of keys) if (!known.has(key)) throw new Error(`selected model key is not in the catalog: ${key}`);
   }
   const want = opt.families ? new Set(opt.families) : null;
-  const ex = new Set(opt.exclude ?? []);
+  // `exclude` names modules; a model published from a directory has its key as its module, so a
+  // former key there means the renamed model's module
+  const moduleOf = new Map(all.flatMap((f) => f.models.map((m) => [m.key, m.module] as const)));
+  const ex = new Set((opt.exclude ?? []).map((e) => (aliases.has(e) ? moduleOf.get(aliases.get(e)!)! : e)));
   const fams = all.filter((p) => !want || want.has(p.name))
     .map((p) => ({ name: p.name, models: p.models.filter((m) => (!keys || keys.has(m.key)) && !ex.has(m.module)) }))
     // A family with no machine left gets no menu entry.
     .filter((f) => f.models.length > 0);
   // Shared tables come from every pack, selected or not: other families read DF's (ki, gi, ...).
   const shared = all.flatMap((p) => p.shared);
-  return { fams, shared };
+  return { fams, shared, aliases };
 }
 
 /**

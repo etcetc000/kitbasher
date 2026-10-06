@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "COMM/E12JU",
+  "key": "VOX/FR",
+  "aliases": [
+    "COMM/PIMG"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "SAWPW",
+    "name": "VOXFR",
     "category": "COM",
     "knobs": [
       {
@@ -19,23 +22,23 @@
         "default": 64
       },
       {
-        "label": "TONE",
+        "label": "FRMT",
         "default": 64
       },
       {
-        "label": "PWM",
-        "default": 48
+        "label": "BRRL",
+        "default": 0
       },
       {
-        "label": "SUB",
+        "label": "AIR",
         "default": 32
       },
       {
-        "label": "CHOR",
-        "default": 24
+        "label": "SQR",
+        "default": 0
       },
       {
-        "label": "",
+        "label": "FMFB",
         "default": 0
       },
       {
@@ -65,15 +68,15 @@
   ],
   "samples": [],
   "budget": {
-    "render_cps": 250,
-    "trigger_cycles": 64,
-    "init_cycles": 180
+    "render_cps": 200,
+    "trigger_cycles": 32,
+    "init_cycles": 128
   },
   "provenance": [
     {
-      "origin": "Community E12-JU v22 core",
+      "origin": "Community P-I MG v73 formant oscillator",
       "license": "NOASSERTION",
-      "reference": "Original Machinedrum voice by Nick Montgomery (E12-JU v22), ported to an md-model/1 add-on"
+      "reference": "Original Machinedrum voice by Nick Montgomery (P-I MG v73), ported to an md-model/1 add-on"
     }
   ]
 }

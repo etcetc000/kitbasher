@@ -7,11 +7,11 @@ places code and tables; no stock machine is replaced.
 
 | Directory | Machine | What it is | Worst cycles per sample |
 |---|---|---|---:|
-| `e12ac` | ACID | Resonant bass voice with filter envelope, slide and random intervals | 70.47 |
-| `efm4op` | FM4OP | Four operators and eight FM algorithms | 99.56 |
-| `e12ju` | SAWPW | Saw, pulse/PWM, sub oscillator and detuning | 120.81 |
-| `mangrove` | FORMT | Formant oscillator with air, barrel and feedback controls | 121.59 |
-| `e12sp` | SPECT | Two spectral banks with scanning, tilt and partial shaping | 106.78 |
+| `acid` | OSCAC | Resonant bass voice with filter envelope, slide and random intervals | 70.47 |
+| `efm4op` | FMS4O | Four operators and eight FM algorithms | 99.56 |
+| `sawpw` | OSCSP | Saw, pulse/PWM, sub oscillator and detuning | 120.81 |
+| `formant` | VOXFR | Formant oscillator with air, barrel and feedback controls | 121.59 |
+| `spect` | WAVSP | Two spectral banks with scanning, tilt and partial shaping | 106.78 |
 
 The costs are cold-cache DSP cycles per output sample at each voice's worst
 measured steady or control-change scenario; all five are under the 129-cycle
@@ -19,14 +19,14 @@ target. They describe one voice, not a guarantee for any 16-track kit (see
 [Models](../../docs/MODELS.md#cpu-cost)).
 
 Their controls follow the original voices but form a new control layout: kits made
-for the original replacement machines do not carry over. SPECT owns 153 words of
+for the original replacement machines do not carry over. WAVSP owns 153 words of
 per-track scratch; the others keep all their state in the voice block. Identical
 tables are stored once.
 
 ## Export and check
 
 ```text
-python packs/assembly_export.py examples/community/e12ac --out my-packs/acid --assembler /path/to/asm56.exe
+python packs/assembly_export.py examples/community/acid --out my-packs/osc-ac --assembler /path/to/asm56.exe
 ```
 
 With `assembler` configured (see [CONTRIBUTING](../../CONTRIBUTING.md)),

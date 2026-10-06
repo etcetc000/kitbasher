@@ -1,6 +1,6 @@
 import { menuCategory, menuOrder } from './sound_catalog.js';
-import { select, allocateIds, type Family, type Selected, type IdMove, type ModelFilter } from './selection.js';
-export { merged, select, allocateIds } from './selection.js';
+import { select, allocateIds, resolveLayout, type Family, type Selected, type IdMove, type ModelFilter } from './selection.js';
+export { merged, select, allocateIds, keyAliases, resolveKey, resolveLayout } from './selection.js';
 export type { Family, Selected, IdMove, MergedFamily } from './selection.js';
 // Planning a build without packing it: which machines, on which IDs, where each lands in DSP2,
 // and how big the RAM image is. `build` runs exactly this and then packs, so what the page shows as
@@ -505,9 +505,10 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   opt={...opt,features:recoveryFeatures(opt.features)};
   const D = base.dsp2;
   const main = fw.slots[0].raw;
-  const { fams, shared } = select(packs, opt);
+  const { fams, shared, aliases } = select(packs, opt);
   const problems: string[] = [];
-  const lay = opt.layout;
+  // a map saved before a model was renamed names it by its former key
+  const lay = opt.layout && resolveLayout(opt.layout, aliases);
   const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base));
   problems.push(...idProblems);
   const byFamily = opt.menus === 'family';

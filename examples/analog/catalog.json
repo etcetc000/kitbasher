@@ -2,31 +2,31 @@
   "models": [
     {
       "directory": "bd",
-      "key": "AN/BD"
+      "key": "VAD/BD"
     },
     {
       "directory": "sd",
-      "key": "AN/SD"
+      "key": "VAD/SD"
     },
     {
       "directory": "rc",
-      "key": "AN/RC"
+      "key": "VAD/RC"
     },
     {
       "directory": "pc",
-      "key": "AN/PC"
+      "key": "VAD/PC"
     },
     {
       "directory": "hh",
-      "key": "AN/HH"
+      "key": "VAD/HH"
     },
     {
       "directory": "cy",
-      "key": "AN/CY"
+      "key": "VAD/CY"
     },
     {
       "directory": "sy",
-      "key": "AN/SY"
+      "key": "VAD/SY"
     }
   ]
 }

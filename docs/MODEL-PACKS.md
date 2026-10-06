@@ -67,6 +67,23 @@ node packs/annotate_browse.mjs my-pack.json --out annotated/
 Each model in the copy carries a `browse` record: its category, description and
 help per control. Packs without it keep working as before.
 
+## Renaming a model
+
+A model's key (`VAD/BD`, `OSC/SW`, ...) is how a saved layout, a `--model`
+selection and an exclusion name it. When a model gets a new key, list the keys it
+had before in `aliases`, in its manifest (`model.json`) and in its pack entry:
+
+```json
+"key": "VAD/BD",
+"aliases": ["AN/BD"],
+```
+
+A layout that names a former key, including one read back from a patched OS,
+places the renamed model on the same ID and in the same category; the layout the
+build writes then uses the current key. An alias that is another model's key, an
+alias two models claim, and a layout naming one model under both keys are
+refused with an error.
+
 ## Memory a model can declare
 
 An assembly model's manifest lists the memory it owns in `memory`. Every model
@@ -108,4 +125,4 @@ Only the declared words belong to the model. Initialize each one before reading
 it, including after another model used the track; nothing clears the region for
 you. Tables are for immutable data only: never keep state in them, since two
 models with identical tables share one copy. The
-[Spectra example](../examples/community/e12sp/README.md) uses scratch this way.
+[Spectra example](../examples/community/spect/README.md) uses scratch this way.

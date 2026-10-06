@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/CY",
+  "key": "VAD/CY",
+  "aliases": [
+    "AN/CY"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN CY",
+    "name": "VADCY",
     "category": "AN",
     "knobs": [
       {
@@ -51,14 +54,14 @@
             "min": 0,
             "max": 25,
             "labels": {
-              "2": "CYCL"
+              "2": "CYM1"
             }
           },
           {
             "min": 26,
             "max": 51,
             "labels": {
-              "2": "CYMT"
+              "2": "CYM2"
             }
           },
           {
@@ -74,7 +77,7 @@
             "max": 102,
             "labels": {
               "3": "DET",
-              "2": "CBCL"
+              "2": "COW1"
             }
           },
           {
@@ -82,7 +85,7 @@
             "max": 127,
             "labels": {
               "3": "DET",
-              "2": "CBMT"
+              "2": "COW2"
             }
           }
         ]
@@ -121,9 +124,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

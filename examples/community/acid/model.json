@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "COMM/E12AC",
+  "key": "OSC/AC",
+  "aliases": [
+    "COMM/E12AC"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "ACID ",
+    "name": "OSCAC",
     "category": "COM",
     "knobs": [
       {
@@ -71,7 +74,7 @@
   },
   "provenance": [
     {
-      "origin": "Community E12-AC v40 core",
+      "origin": "Community acid bass v40 core",
       "license": "NOASSERTION",
       "reference": "Original Machinedrum voice by Nick Montgomery (E12-AC v40), ported to an md-model/1 add-on"
     }

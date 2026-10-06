@@ -6,6 +6,7 @@
     "isa_unit",
     "boot_safety",
     "model_contract",
+    "aliases",
     "model_runtime",
     "menu_refresh",
     "model_selection",

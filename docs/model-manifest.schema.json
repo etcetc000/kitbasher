@@ -24,6 +24,15 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$"
     },
+    "aliases": {
+      "description": "Keys this model was published under before a rename; saved layouts and key selections that name one resolve to this model.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$"
+      }
+    },
     "version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"

@@ -177,17 +177,17 @@ test('unknown top-level fields in a pack or manifest are ignored', () => {
   checkPack({ format: 'md-pack/1', family: 'CORE', extra: 'b' } as unknown as CorePack);
 });
 
-test('SAWPW unused controls stay absent in RAM and flash descriptors', () => {
-  const manifest = JSON.parse(readFileSync(new URL('../../../examples/community/e12ju/model.json', import.meta.url), 'utf8'));
+test('OSCSP unused controls stay absent in RAM and flash descriptors', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../../../examples/community/sawpw/model.json', import.meta.url), 'utf8'));
   assert.deepEqual(manifest.panel.knobs.slice(6).map((k: {label: string}) => k.label), ['', '']);
   const base = {os:{descriptorSize:86,familyTable:0,cfBase:0,
     levBar:{ctr:{ids:[124,127]},low:{ids:[88,95]}}},ext:{base:0x2bc000,end:0x2bd000},features:{}} as unknown as Base;
   const core = {knob_callback:'cAlOdQ=='} as unknown as CorePack;
-  const model = {name:'SAWPW',key:manifest.key,labels:manifest.panel.knobs.map((k: {label: string}) => k.label),
+  const model = {name:'OSCSP',key:manifest.key,labels:manifest.panel.knobs.map((k: {label: string}) => k.label),
     defaults:manifest.panel.knobs.map((k: {default: number}) => k.default),dyn_labels:[]} as unknown as PackModel;
   for (const flash of [false, true]) {
     const r = ramImage(base,new Uint8Array(8),core,[],[{m:model,family:'COM',id:6,preferred:6,mapped:false}],
-      {dyn:false,dsp1:null,host:false,ind:null,toFlash:new Set(flash ? ['SAWPW'] : []),dynFlash:new Set(),idSpace:192,flashAt:0x100e0000,redrawValues:0});
+      {dyn:false,dsp1:null,host:false,ind:null,toFlash:new Set(flash ? ['OSCSP'] : []),dynFlash:new Set(),idSpace:192,flashAt:0x100e0000,redrawValues:0});
     const descriptor = flash ? r.flashBlock : r.image.subarray(r.descs[0][1]-r.base);
     assert.deepEqual([...descriptor.subarray(50,54)], [0x11,0x11,0x11,0]);
     assert.deepEqual([...descriptor.subarray(34,42)], Array(8).fill(0));

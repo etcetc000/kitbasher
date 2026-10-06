@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/SY",
+  "key": "VAD/SY",
+  "aliases": [
+    "AN/SY"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN SY",
+    "name": "VADSY",
     "category": "AN",
     "knobs": [
       {
@@ -134,7 +137,7 @@
               "1": "DEC1",
               "4": "W1W2",
               "5": "LEV2",
-              "2": "RAW"
+              "2": "OSC"
             }
           },
           {
@@ -144,7 +147,7 @@
               "1": "DEC1",
               "4": "W1W2",
               "5": "LEV2",
-              "2": "RAWT"
+              "2": "OSCT"
             }
           },
           {
@@ -155,7 +158,7 @@
               "4": "WAVE",
               "5": "SPD",
               "6": "SDEC",
-              "2": "CHIP"
+              "2": "BITS"
             }
           }
         ]
@@ -188,9 +191,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

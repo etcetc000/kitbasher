@@ -1,4 +1,4 @@
-# ACID
+# OSCAC
 
 A resonant acid bass: the original E12-AC voice's core, with its random-interval
 generator and its slide and tonal behavior.

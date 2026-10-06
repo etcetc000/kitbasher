@@ -26,7 +26,12 @@ export interface PackNeed {
 
 export interface PackModel {
   contract?: ModelContract;
-  key: string;                      // 'DF/0', 'MM/8', ...
+  key: string;                      // 'OSC/SW', 'VAD/BD', ...
+  /**
+   * Keys this model was published under before (e.g. 'MM/4' for OSC/SW). A saved layout, a
+   * selection or an exclusion that names one of them means this model (selection.ts keyAliases).
+   */
+  aliases?: string[];
   module: string;                   // source module name, as matched by MD_EXCLUDE
   name: string;                     // 5 characters
   /**
@@ -107,6 +112,7 @@ export function checkPack(p: Pack | CorePack): void {
             !Array.isArray(h) || h.length !== 2 || !text(h[0], 80) || !text(h[1], 400)))))
         throw new Error(`${m.name}: invalid browse data`);
     }
+    checkAliases(m);
     checkModelContract(m, p.family);
     for (const n of m.needs ?? []) if (n.install !== undefined &&
       (!n.install || n.install.transport !== 'sds-handshake' || typeof n.install.file !== 'string' ||
@@ -117,6 +123,14 @@ export function checkPack(p: Pack | CorePack): void {
   }
 }
 
+/** A model's `aliases`: unique nonempty strings, none of them its own key. */
+export function checkAliases(m: PackModel): void {
+  if (m.aliases === undefined) return;
+  if (!Array.isArray(m.aliases) || m.aliases.some((a) => typeof a !== 'string' || !a.length || a.length > 32))
+    throw new Error(`${m.key}: aliases must be nonempty strings`);
+  if (new Set(m.aliases).size !== m.aliases.length) throw new Error(`${m.key}: an alias is listed twice`);
+  if (m.aliases.includes(m.key)) throw new Error(`${m.key}: a model cannot alias its own key`);
+}
 
 export function needLines(m: PackModel): string[] {
   return (m.needs ?? []).map((n) => `${m.name.trim()}: ${n.without} without the ${n.name} sample in a UW slot (${n.what})` +

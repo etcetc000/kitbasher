@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/PC",
+  "key": "VAD/PC",
+  "aliases": [
+    "AN/PC"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN PC",
+    "name": "VADPC",
     "category": "AN",
     "knobs": [
       {
@@ -52,28 +55,28 @@
             "max": 21,
             "labels": {
               "5": "SNAP",
-              "2": "BT"
+              "2": "BOOM"
             }
           },
           {
             "min": 22,
             "max": 42,
             "labels": {
-              "2": "XTLO"
+              "2": "TOM1"
             }
           },
           {
             "min": 43,
             "max": 63,
             "labels": {
-              "2": "XTMD"
+              "2": "TOM2"
             }
           },
           {
             "min": 64,
             "max": 85,
             "labels": {
-              "2": "XTHI"
+              "2": "TOM3"
             }
           },
           {
@@ -120,9 +123,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

@@ -10,6 +10,8 @@ def validate(m):
     schema = json.loads((ROOT / 'docs/model-manifest.schema.json').read_text())
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(m)
+    if m['key'] in m.get('aliases', []):
+        raise ValueError('a model cannot alias its own key')
     owned = set()
     mode_knobs = set()
     for mode in m['panel']['modes']:

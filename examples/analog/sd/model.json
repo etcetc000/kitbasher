@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/SD",
+  "key": "VAD/SD",
+  "aliases": [
+    "AN/SD"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN SD",
+    "name": "VADSD",
     "category": "AN",
     "knobs": [
       {
@@ -53,7 +56,7 @@
             "labels": {
               "4": "DET",
               "5": "TICK",
-              "2": "HARD"
+              "2": "PNCH"
             }
           },
           {
@@ -62,7 +65,7 @@
             "labels": {
               "4": "DET",
               "7": "BAL",
-              "2": "CLAS"
+              "2": "ROND"
             }
           },
           {
@@ -80,7 +83,7 @@
             "labels": {
               "4": "LPF",
               "5": "HPF",
-              "2": "NAT"
+              "2": "WARM"
             }
           },
           {
@@ -89,7 +92,7 @@
             "labels": {
               "4": "HOLD",
               "5": "IMP",
-              "2": "ACOU"
+              "2": "WOOD"
             }
           }
         ]
@@ -122,9 +125,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

@@ -1,24 +1,24 @@
 {
   "models": [
     {
-      "directory": "e12ac",
-      "key": "COMM/E12AC"
+      "directory": "acid",
+      "key": "OSC/AC"
     },
     {
       "directory": "efm4op",
-      "key": "COMM/EFM4OP"
+      "key": "FMS/4O"
     },
     {
-      "directory": "e12ju",
-      "key": "COMM/E12JU"
+      "directory": "sawpw",
+      "key": "OSC/SP"
     },
     {
-      "directory": "mangrove",
-      "key": "COMM/PIMG"
+      "directory": "formant",
+      "key": "VOX/FR"
     },
     {
-      "directory": "e12sp",
-      "key": "COMM/E12SP"
+      "directory": "spect",
+      "key": "WAV/SP"
     }
   ]
 }

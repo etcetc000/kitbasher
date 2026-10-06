@@ -3480,14 +3480,16 @@ dispatch_table:
               'Rwalk_LFree':('LFRE','BND','SMTH'),'satanWorkout':('SATN','FREQ','PWMD'),
               'Rwalk_SineFMFlange':('FLNG','FREQ','RATE'), 'grainGlitch':('GRN1','FREQ','GRAI'),
               'grainGlitchII':('GRN2','FREQ','GRAI'),'grainGlitchIII':('GRN3','FREQ','GRAI')}
-    panel={'name':('NPFST' if fast_fm else 'NPDEV') if development else 'NOISE','category':'NP',
+    panel={'name':('NPFST' if fast_fm else 'NPDEV') if development else 'NZEPL','category':'NP',
       'knobs':[{'label':label,'default':value} for label,value in KNOBS],
       # MODE (knob 2) selects the program and relabels itself and the program's X/Y knobs.
       'modes':[{'knob':2,'zones':[{'min':math.ceil(i*128/len(names)),'max':math.ceil((i+1)*128/len(names))-1,
           'labels':dict(zip(('2','3','4'),captions[name]))} for i,name in enumerate(names)]}]}
     if fm_voices!=6:
         panel['name']=f'NPFM{fm_voices}'
-    manifest={'format':'md-model/1','key':('EX/NPFAST' if fast_fm else 'EX/NPDEV') if development else 'NP/PLETHORA','version':'0.1.0','kit_abi':1,
+    manifest={'format':'md-model/1','key':('EX/NPFAST' if fast_fm else 'EX/NPDEV') if development else 'NZE/PL',
+      # the release's key until 2026-10-06 stays an alias, so layouts saved with it still find the model
+      **({} if development or fm_voices!=6 else {'aliases':['NP/PLETHORA']}),'version':'0.1.0','kit_abi':1,
       'injection':{'mode':'add'},'panel':panel,'components':{'dsp2':{'source':'dsp2.asm','tables':'tables.asm','abi':'md-voice/1'}},
       'memory':[{'kind':'voice','space':'XY','words':64,'alignment':64,'lifetime':'track-assignment','init':'model','release':'successor-init'},
                 {'kind':'pi','space':'XY','words':1536,'alignment':512,'lifetime':'track-assignment','init':'chunked-muted','release':'plain-audio'}],

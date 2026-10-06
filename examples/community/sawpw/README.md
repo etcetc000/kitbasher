@@ -1,4 +1,4 @@
-# SAWPW
+# OSCSP
 
 A saw and pulse synth: the original E12-JU voice's core, with PWM, a sub
 oscillator and a detuned second oscillator pair.

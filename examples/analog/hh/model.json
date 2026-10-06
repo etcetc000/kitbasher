@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/HH",
+  "key": "VAD/HH",
+  "aliases": [
+    "AN/HH"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN HH",
+    "name": "VADHH",
     "category": "AN",
     "knobs": [
       {
@@ -51,35 +54,35 @@
             "min": 0,
             "max": 21,
             "labels": {
-              "2": "CHCL"
+              "2": "CH 1"
             }
           },
           {
             "min": 22,
             "max": 42,
             "labels": {
-              "2": "OHCL"
+              "2": "OH 1"
             }
           },
           {
             "min": 43,
             "max": 63,
             "labels": {
-              "2": "CHMT"
+              "2": "CH 2"
             }
           },
           {
             "min": 64,
             "max": 85,
             "labels": {
-              "2": "OHMT"
+              "2": "OH 2"
             }
           },
           {
             "min": 86,
             "max": 106,
             "labels": {
-              "2": "HHBA"
+              "2": "HAT3"
             }
           },
           {
@@ -92,7 +95,7 @@
               "5": "OSC4",
               "6": "OSC5",
               "7": "OSC6",
-              "2": "HHLB"
+              "2": "HBLD"
             }
           }
         ]
@@ -131,9 +134,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

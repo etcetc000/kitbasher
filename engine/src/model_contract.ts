@@ -5,7 +5,7 @@ import { fromBase64 } from './bytes.js';
 import { checkDynamicPlans, type ModelPanel } from './model_panel.js';
 
 export interface ModelContract {
-  format: 'md-model/1'; key: string; version: string; kit_abi: number;
+  format: 'md-model/1'; key: string; aliases?: string[]; version: string; kit_abi: number;
   injection: { mode: 'add' | 'replace'; id?: number; target?: { family: string; name: string; abi: string } };
   panel: ModelPanel;
   components: Record<string, { provider?: string; entry?: string; source?: string; tables?: string; law?: string; abi: string }>;
@@ -27,6 +27,8 @@ export function checkModelContract(m: PackModel, category: string): void {
   const assembly = typeof c.components.dsp2?.source === 'string';
   if (c.key !== m.key || (assembly ? c.injection.id !== undefined || m.id !== 0 : c.injection.id !== m.id) || c.panel.name !== m.name || c.panel.category !== category)
     throw new Error(`${m.key}: manifest identity differs from exported descriptor`);
+  if (JSON.stringify(c.aliases ?? []) !== JSON.stringify(m.aliases ?? []))
+    throw new Error(`${m.key}: manifest aliases differ from exported descriptor`);
   if (c.panel.knobs.length !== 8 || c.panel.knobs.some((k, i) => k.label !== m.labels[i] || k.default !== m.defaults[i]))
     throw new Error(`${m.key}: manifest panel differs from exported descriptor`);
   checkDynamicPlans(c.panel, m.dyn_labels);

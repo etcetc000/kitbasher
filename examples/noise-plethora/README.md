@@ -1,6 +1,6 @@
 # Noise Plethora
 
-One Machinedrum machine, NOISE, that plays the 30 programs of the first three
+One Machinedrum machine, NZEPL, that plays the 30 programs of the first three
 banks of [Befaco's Noise Plethora](https://github.com/Befaco/Noise_plethora),
 rewritten for the DSP56300. Flurry and the later extra modes are not included.
 

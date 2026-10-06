@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "COMM/EFM4OP",
+  "key": "FMS/4O",
+  "aliases": [
+    "COMM/EFM4OP"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "FM4OP",
+    "name": "FMS4O",
     "category": "COM",
     "knobs": [
       {

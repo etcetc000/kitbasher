@@ -1,4 +1,4 @@
-# FM4OP
+# FMS4O
 
 Four-operator FM with eight algorithms: the original EFM-4OP voice's optimized
 operators, signed ratio behavior and block envelopes.

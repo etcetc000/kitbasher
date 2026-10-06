@@ -14,9 +14,9 @@ test('a pack\'s own browse data places a model the catalog does not know', () =>
 });
 
 test('browse data wins over the catalog; an unknown category falls back to it', () => {
-  assert.equal(menuCategory(model('NOISE', { category: 'Effects' })), 'FX');
-  assert.equal(menuCategory(model('NOISE', { category: 'Not a category' })), 'SYN');
-  assert.equal(describeModel(model('NOISE', { help: {} })).category, 'Synths & textures');
+  assert.equal(menuCategory(model('NZEPL', { category: 'Effects' })), 'FX');
+  assert.equal(menuCategory(model('NZEPL', { category: 'Not a category' })), 'SYN');
+  assert.equal(describeModel(model('NZEPL', { help: {} })).category, 'Synths & textures');
 });
 
 test('checkPack refuses malformed browse data', () => {

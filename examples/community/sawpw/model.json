@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "COMM/PIMG",
+  "key": "OSC/SP",
+  "aliases": [
+    "COMM/E12JU"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "FORMT",
+    "name": "OSCSP",
     "category": "COM",
     "knobs": [
       {
@@ -19,23 +22,23 @@
         "default": 64
       },
       {
-        "label": "FRMT",
+        "label": "TONE",
         "default": 64
       },
       {
-        "label": "BRRL",
-        "default": 0
+        "label": "PWM",
+        "default": 48
       },
       {
-        "label": "AIR",
+        "label": "SUB",
         "default": 32
       },
       {
-        "label": "SQR",
-        "default": 0
+        "label": "CHOR",
+        "default": 24
       },
       {
-        "label": "FMFB",
+        "label": "",
         "default": 0
       },
       {
@@ -65,15 +68,15 @@
   ],
   "samples": [],
   "budget": {
-    "render_cps": 200,
-    "trigger_cycles": 32,
-    "init_cycles": 128
+    "render_cps": 250,
+    "trigger_cycles": 64,
+    "init_cycles": 180
   },
   "provenance": [
     {
-      "origin": "Community P-I MG v73 formant oscillator",
+      "origin": "Community saw/pulse v22 core",
       "license": "NOASSERTION",
-      "reference": "Original Machinedrum voice by Nick Montgomery (P-I MG v73), ported to an md-model/1 add-on"
+      "reference": "Original Machinedrum voice by Nick Montgomery (E12-JU v22), ported to an md-model/1 add-on"
     }
   ]
 }

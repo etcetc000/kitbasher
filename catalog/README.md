@@ -14,7 +14,10 @@ the page. See [Model packs](../docs/MODEL-PACKS.md).
 | Pack | Models |
 |---|---|
 | `core.json` | Shared runtime: knob callback, dynamic labels, DSP1 drive |
-| `mm.json` | FM ST, FM PA, FM DY, MMSAW, MMPLS, MMWAV, MMVO6, MMDEN, MMDDR, MMSID, MMENS |
-| `np.json` | NOISE |
-| `community-*.json` | FM4OP, FORMT, SAWPW, ACID, SPECT |
-| `analog-*.json` | AN BD, AN SD, AN RC, AN PC, AN HH, AN CY, AN SY |
+| `synths.json` | FMS2O, FMS3O, FMSSW, OSCSW, OSCPW, WAVTB, VOXVO, OSC8B, WAVCH, OSCCH, WAVMR |
+| `np.json` | NZEPL |
+| `community-*.json` | FMS4O, VOXFR, OSCSP, OSCAC, WAVSP |
+| `analog-*.json` | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY |
+
+`uw/wave-single.syx` is the single wavetable WAVTB reads; `uw/wave-bank.syx` is
+the wave bank WAVCH and WAVMR read.

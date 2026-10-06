@@ -17,9 +17,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 - Automatic preparation of stock OS 1.63.
 - Model packs loaded in the browser or bundled from `catalog/`.
 - Model source exporter for DSP2 assembly, with a scaffold example.
-- Model sources: seven analog drum and synth recreations (AN BD, AN SD, AN RC,
-  AN PC, AN HH, AN CY, AN SY), five community synth voices (ACID, FM4OP, SAWPW,
-  FORMT, SPECT) and a 30-program port of Befaco's Noise Plethora (NOISE).
+- Model sources: seven analog drum and synth voices (VADBD, VADSD, VADRC, VADPC,
+  VADHH, VADCY, VADSY), five community synth voices (OSCAC, FMS4O, OSCSP, VOXFR,
+  WAVSP) and a 30-program port of Befaco's Noise Plethora (NZEPL).
 - Eight browsing categories in the page (kicks; snares, rims and claps; hats and
   cymbals; toms and hand percussion; FM; synths and textures; physical modeling;
   effects), which also set the default machine-select menu categories.
@@ -35,6 +35,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Changed
 
+- Models renamed to engine-based names (VAD, FMS, OSC, WAV, VOX, NZE); old layout
+  files still load.
 - The DSP2 idle routine's padding loop is cut from 50 passes to one, freeing DSP
   time on every idle track (`--no-stub-trim` keeps the original).
 - E12 trim is pair-aware: E12-SD and E12-RS trim their ring sample with their body

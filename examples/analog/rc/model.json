@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "AN/RC",
+  "key": "VAD/RC",
+  "aliases": [
+    "AN/RC"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "AN RC",
+    "name": "VADRC",
     "category": "AN",
     "knobs": [
       {
@@ -53,7 +56,7 @@
             "labels": {
               "4": "SYM",
               "5": "TICK",
-              "2": "RS H"
+              "2": "RIM1"
             }
           },
           {
@@ -63,7 +66,7 @@
               "4": "TUN2",
               "5": "TICK",
               "7": "SYM",
-              "2": "RS C"
+              "2": "RIM2"
             }
           },
           {
@@ -110,9 +113,9 @@
   },
   "provenance": [
     {
-      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "origin": "Original digital drum voices",
       "license": "NOASSERTION",
-      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+      "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
 }

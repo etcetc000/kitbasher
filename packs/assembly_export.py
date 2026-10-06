@@ -89,7 +89,7 @@ def export(directory, destination, assembler=None):
     panel=m['panel']
     pack=dict(format=E.FORMAT,family=panel['category'],order=1,
         source=dict(kind='assembly-directory',sha256=source_hash),shared=[],dsp1_laws=laws,models=[dict(
-            key=m['key'],module=m['key'],name=panel['name'],seq=0,id=0,contract=m,
+            key=m['key'],**({'aliases':m['aliases']} if m.get('aliases') else {}),module=m['key'],name=panel['name'],seq=0,id=0,contract=m,
             labels=[k['label'] for k in panel['knobs']],defaults=[k['default'] for k in panel['knobs']],
             workspace=bool(private),workspace_kind='private' if private else 'pi' if pi else None,wants_shared=[],uses_shared=[],dsp1_drive=law,
             dyn_labels=dynamic_plans(panel),needs=[],tables=[dict(name=n,words=E.b64words(w)) for n,w in tables.items()],code=code)])

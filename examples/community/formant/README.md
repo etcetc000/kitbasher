@@ -1,4 +1,4 @@
-# FORMT
+# VOXFR
 
 A formant oscillator after the original P-I MG voice: formant ratio with octave
 folding, barrel shaping, air saturation, a square sub and feedback FM. Despite

@@ -1,13 +1,16 @@
 {
   "format": "md-model/1",
-  "key": "COMM/E12SP",
+  "key": "WAV/SP",
+  "aliases": [
+    "COMM/E12SP"
+  ],
   "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
   },
   "panel": {
-    "name": "SPECT",
+    "name": "WAVSP",
     "category": "COM",
     "knobs": [
       {
