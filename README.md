@@ -17,15 +17,19 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    file again restores your machine.
 2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
    OS file (`.syx` or `.bin`).
-3. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
+3. **Swap samples (optional).** Replace any of the E12 machines' samples with
+   your own WAV or AIFF files. A new sample can be as long as the one it
+   replaces; a longer file is cut to fit. See [E12 samples](docs/SAMPLES.md).
+4. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
    synths, wavetables, vocal, physical modeling, effects) and check the machines you want. Click a
    model to see its screen and what every control does. The meters show how much
    DSP memory, menu space and firmware storage your selection uses; if it does
    not fit, the page trims the tails of the built-in E12 samples just enough to
    make room, or you can keep them and choose fewer models.
-4. **Arrange and download.** Keep the default menu categories or rearrange them,
-   then download the new `.syx` file.
-5. **Send it.** Hold FUNCTION while powering on, choose [5 LT] MIDI UPGRADE, and
+5. **Arrange and download.** Keep the default menu categories or rearrange them,
+   then download the new `.syx` file. **Save project** keeps your samples,
+   models and layout in a [project file](docs/PROJECT-FILE.md) for next time.
+6. **Send it.** Hold FUNCTION while powering on, choose [5 LT] MIDI UPGRADE, and
    send the file from a SysEx tool with a 20 ms gap between messages.
 
 Some models use a sample in UW memory; the page lists those and offers the

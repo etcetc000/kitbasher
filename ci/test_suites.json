@@ -17,7 +17,8 @@
     "outputpace",
     "ordered_recovery",
     "clean_recovery",
-    "stub_trim_unit"
+    "stub_trim_unit",
+    "samples_unit"
   ],
   "legacy": [],
   "alignment": []

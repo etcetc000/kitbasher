@@ -15,6 +15,7 @@ import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
 import { trimBank, type TrimEntry, type TrimOptions } from './e12.js';
+import { applySwaps, bankRun, type SampleEdits } from './samples.js';
 import { codeImages } from './bases.js';
 import { handlerAt } from './recover.js';
 import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js';
@@ -93,6 +94,11 @@ export interface Selection extends ModelFilter {
   dsp1Watchdog?: number;
   /** --ctr-control-all (build.ts BuildOptions): here so the plan can refuse it on a base without its sites */
   ctrControlAll?: boolean;
+  /**
+   * The user's E12 samples (engine/src/samples.ts): swapped entries, and entries the trim leaves
+   * whole. Absent or empty: the stock bank, and every output byte-identical to a build without it.
+   */
+  samples?: SampleEdits;
 }
 
 // Which descriptors 'auto' moves to flash first is the packs' `flash_rank` (the ones hardware has
@@ -106,6 +112,9 @@ export interface Trimmed {
   words: number[];                 // the re-laid bank
   end: number;                     // where the bank now ends
   report: TrimEntry[];
+  /** the sample edits this bank was laid with (null: stock), and swaps cut to their stock length */
+  edits: SampleEdits | null;
+  capped: number[];
 }
 
 export interface Placement {
@@ -213,30 +222,18 @@ export function baseCtrCoverage(fw: Firmware, base: Base): CtrCoverage {
  * memory loads what one record over the same words loads, so the run is re-recorded as one
  * (X.13's own upload is 1.63's re-recorded this way). Nothing else in the upload may write there.
  */
-export function trimFor(fw: Firmware, base: Base, opt: TrimOptions): Trimmed {
+export function trimFor(fw: Firmware, base: Base, opt: TrimOptions, samples?: SampleEdits): Trimmed {
   const D = base.dsp2;
-  const w = wordsLE(fw.slots[1].raw);
-  const { recs } = records(w);
-  const first = recs.findIndex((r) => r.addr === D.bankRecord && r.tag === 0);
-  if (first < 0 || recs.filter((r) => r.addr === D.bankRecord && r.tag === 0).length !== 1) {
-    throw new Error(`expected one upload record starting the E12 bank at ${h(D.bankRecord)}`);
+  const run = bankRun(fw, base);
+  const edited = !!samples && (samples.swaps.size > 0 || samples.noTrim.size > 0);
+  let bank = run.bank, bankEnd = D.bankEnd, capped: number[] = [];
+  if (samples && samples.swaps.size) {
+    const s = applySwaps(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, samples.swaps);
+    bank = s.words; bankEnd = s.end; capped = s.capped;
   }
-  let last = first;
-  while (D.bankRecord + recs.slice(first, last + 1).reduce((n, r) => n + r.count, 0) < D.bankEnd) {
-    const r = recs[last + 1];
-    const at = recs[last].addr + recs[last].count;
-    if (!r || r.tag !== 0 || r.addr !== at) throw new Error(`the E12 bank's records break off at ${h(at)} before ${h(D.bankEnd)}`);
-    last++;
-  }
-  const run = recs.slice(first, last + 1);
-  if (run[run.length - 1].addr + run[run.length - 1].count !== D.bankEnd) throw new Error('E12 bank record does not end where the bank does');
-  const other = recs.filter((r, i) => (i < first || i > last) && r.tag === 0 && r.addr < D.bankEnd && r.addr + r.count > D.bankRecord);
-  if (other.length) throw new Error(`another upload record writes into the E12 bank at ${h(other[0].addr)}`);
-  const bank = run.flatMap((r) => w.slice(r.index + 3, r.index + 3 + r.count));
-  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, opt);
-  const end = run[run.length - 1];
-  return { opt, bankIndex: run[0].index, bankEndIndex: end.index + 3 + end.count, bankRecords: run.length,
-           words: t.words, end: t.end, report: t.report };
+  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, bankEnd, opt, samples?.noTrim);
+  return { opt, bankIndex: run.bankIndex, bankEndIndex: run.bankEndIndex, bankRecords: run.bankRecords,
+           words: t.words, end: t.end, report: t.report, edits: edited ? samples! : null, capped };
 }
 
 /**
@@ -540,7 +537,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const needs = sel.filter((s) => s.m.needs?.length).map((s) => ({ name: s.m.name.trim(), needs: s.m.needs! }));
   const commits = [...new Set(packs.map((p) => p.source?.commit).filter(Boolean))];
   if (commits.length > 1) notes.push(`packs built from ${commits.length} different source commits: ${commits.map((c) => c.slice(0, 7)).join(', ')}`);
-  const trim = trimmed ?? trimFor(fw, base, opt.trim);
+  const trim = trimmed ?? trimFor(fw, base, opt.trim, opt.samples);
   const workspace = sel.some((s) => s.m.workspace);
   const wsNames = sel.filter((s) => s.m.workspace).map((s) => s.m.name.trim()).join(', ');
   if (workspace && trim.end > D.workspace.base) {

@@ -29,6 +29,8 @@ same code builds the same image in both places.
 | Help text for every control | `web/src/parameters.ts` |
 | Memory placement and layout | `plan.ts`, `layout.ts`, `align.ts`, `table_pool.ts` |
 | E12 sample trimming | `e12.ts`, `web/src/auto-trim.ts` |
+| E12 sample swapping and the machine map | `samples.ts`, `web/src/samples-ui.ts`, `web/src/convert.ts` ([E12 samples](SAMPLES.md)) |
+| Project file | `project.ts` ([format](PROJECT-FILE.md)) |
 | DSP2 idle-stub trim | `stub_trim.ts` |
 | Linking and image validation | `build.ts`, `isa_gate.ts`, `boot_safety.ts` |
 | Overload recovery | `clean_recovery.ts`, `retire.ts`, `outputpace.ts` |

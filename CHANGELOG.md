@@ -33,6 +33,13 @@ All notable changes to Kitbasher are recorded here. The format follows
   (`packs/annotate_browse.mjs`).
 - The local development server rebuilds on save; style changes keep your loaded
   firmware and selection.
+- E12 sample swapping: a Samples step after loading the OS shows the E12 bank by
+  machine (read from the OS's own code) with waveforms, lengths and word costs, and
+  replaces any sample with a WAV or AIFF file, converted in the browser to 12-bit
+  44.1 kHz mono. A new sample is never longer than the one it replaces. Per-sample
+  "Don't trim", and the memory meters and auto trim use the swapped bank.
+- Project files (`.kitbasher.json`): save samples, models, trim and layout, and load
+  them with the same OS to build the same firmware.
 
 ### Changed
 

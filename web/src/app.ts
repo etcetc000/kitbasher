@@ -1,6 +1,8 @@
 // The Kitbasher page. Everything runs in the browser: the firmware file never leaves the computer.
 //
-// Once a base is loaded, every change to the machine selection or the E12 trim re-plans the build
+// Once a base is loaded, the Samples step shows its E12 bank and lets the user swap samples
+// (web/src/samples-ui.ts); every change to the samples, the machine selection or the E12 trim
+// re-plans the build
 // (engine/src/plan.ts: the same placement the build does, without packing). Users can select
 // freely; a selection that does not fit prompts for removing models or trimming samples.
 // Continuing from Models also runs a full build in memory to check compressed slot capacity
@@ -27,6 +29,9 @@ import { uwDownloads } from './uw-downloads.js';
 import { currentFirmwareFixes } from '../../engine/src/clean_recovery.js';
 import { findTrimThreshold } from './auto-trim.js';
 import { selectCatalog } from '../../engine/src/catalog.js';
+import { readBank } from '../../engine/src/samples.js';
+import { decodeProject, encodeProject, osOf, osProblem, PROJECT_EXTENSION, type Project } from '../../engine/src/project.js';
+import { SamplesStep } from './samples-ui.js';
 
 interface Data { bases: BaseSet; packs: Pack[]; core: CorePack | null; source: { commit: string } }
 
@@ -57,7 +62,9 @@ let inputName = '';
 let fw: Firmware | null = null;
 let base: Base | null = null;
 let current: Plan | null = null;
-const trims = new Map<string, Trimmed>();       // per base file, per trim setting
+const trims = new Map<string, Trimmed>();       // per base file, per trim setting (cleared when the samples change)
+let samples: SamplesStep;                        // the E12 samples and the user's swaps (web/src/samples-ui.ts)
+let pendingProject: { project: Project; name: string } | null = null;  // loaded before its OS
 let layoutEd: LayoutEditor;                      // the menu categories and IDs (web/src/layout-ui.ts)
 let step = 1;
 let revision = 0;
@@ -77,27 +84,29 @@ function clearDownload(): void {
 }
 
 function syncWizard(): void {
-  $('memory-trim-slot').hidden = step !== 2;
-  if (step > 1) $(`step-${step}`).querySelector('.wizard-actions')!.before($('room'));
-  $('room').hidden = !fw || step === 1;
+  $('memory-trim-slot').hidden = step !== 3;
+  if (step > 2) $(`step-${step}`).querySelector('.wizard-actions')!.before($('room'));
+  $('room').hidden = !fw || step <= 2;
   const ready = !!current?.ok && current.sel.length > 0 && !packedCapacityProblem;
   $('firmware-next').toggleAttribute('disabled', !fw || building);
+  $('samples-next').toggleAttribute('disabled', !fw || building);
+  $('project-save').toggleAttribute('disabled', !fw || building);
   $('models-next').toggleAttribute('disabled', !ready || building);
   $('categories-next').toggleAttribute('disabled', !ready || building);
   $('build').toggleAttribute('disabled', !ready || building);
   document.querySelectorAll<HTMLButtonElement>('[data-step]').forEach(b => {
     const n = Number(b.dataset.step);
-    b.disabled = building || (n > 1 && !fw) || (n > 2 && !ready);
+    b.disabled = building || (n > 1 && !fw) || (n > 3 && !ready);
     if (n === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
   });
   document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(b => { b.disabled = building; });
 }
 
 function showStep(n: number): void {
-  if (building || (n > 1 && !fw) || (n > 2 && (!current?.ok || !current.sel.length || packedCapacityProblem))) return;
-  if (step === 2 && n > 2 && !cachedBuild) { void onBuild(n === 3 ? 'categories' : 'download'); return; }
+  if (building || (n > 1 && !fw) || (n > 3 && (!current?.ok || !current.sel.length || packedCapacityProblem))) return;
+  if (step <= 3 && n > 3 && !cachedBuild) { void onBuild(n === 4 ? 'categories' : 'download'); return; }
   step = n;
-  for (let i = 1; i <= 4; i++) $(`step-${i}`).hidden = i !== n;
+  for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== n;
   syncWizard();
   const heading = $(`step-${n}`).querySelector<HTMLElement>('h2');
   heading?.setAttribute('tabindex', '-1');
@@ -186,7 +195,7 @@ function trimOptions(): TrimOptions {
 function trimmed(opt = trimOptions()): Trimmed {
   const key = `${opt.db}|${opt.minSeconds}|${opt.cap}`;
   let t = trims.get(key);
-  if (!t) { t = trimFor(fw!, base!, opt); trims.set(key, t); }
+  if (!t) { t = trimFor(fw!, base!, opt, samples.edits()); trims.set(key, t); }
   return t;
 }
 
@@ -194,7 +203,7 @@ function trimmed(opt = trimOptions()): Trimmed {
 const allowIdMove = (): boolean => true;
 
 function planFor(exclude: string[], opt = trimOptions()): Plan {
-  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), ...currentFirmwareFixes() }, trimmed(opt));
+  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
@@ -301,7 +310,9 @@ function refresh(minAutoDb = -40): void {
   $('make-room-help').textContent = !p.dsp2.fits
     ? trimMode() === 'auto' ? 'Still too large. Remove models or lower At most.' : 'Remove models or choose Auto trim.'
     : 'Review the details or remove models. Trimming only frees sample memory.';
-  $('download-summary').textContent = `${p.sel.length} models. ${trimming ? 'E12 sample tails trimmed.' : 'Original E12 samples are kept.'}`;
+  const swapped = samples.state.swaps.size;
+  $('download-summary').textContent = `${p.sel.length} models. ${swapped ? `${swapped} E12 sample${swapped === 1 ? '' : 's'} replaced. ` : ''}` +
+    `${trimming ? 'E12 sample tails trimmed.' : swapped ? 'Sample tails are kept.' : 'Original E12 samples are kept.'}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
   $('download-needs').hidden = !needs.length;
   $('download-needs').replaceChildren(...(needs.length ? [
@@ -365,13 +376,17 @@ async function onFile(f: File): Promise<void> {
     input = bytes; inputName = f.name; base = b; fw = parsed;
     trims.clear();
     layoutEd.setBase(parsed, b);
+    try { samples.setBank(readBank(parsed, b)); }
+    catch (e) { samples.setBank(null, `Sample swapping is not available for this OS: ${(e as Error).message}`); }
     $('firmware-info').textContent = `${b.qualification.profile ? b.name : 'Unrecognized firmware version'}.` +
       (b.qualification.level === 'hardware-proven' ? '' : " We haven't tested this version on a Machinedrum yet.");
     $('firmware-details').hidden = false;
     status(`Loaded ${f.name}.`, 'ok');
+    if (pendingProject) applyProject(pendingProject.project, pendingProject.name);
   } catch (e) {
     if (request !== fileRequest) return;
     input = null; base = null; fw = null;
+    samples.setBank(null);
     status(`${f.name}: ${(e as Error).message}`, 'error');
   }
   refresh();
@@ -448,7 +463,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     while (!result) {
       try {
         result = await build(input, base, data.packs, data.core!,
-          { exclude: excludes(), trim: trimOptions(), allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), ...currentFirmwareFixes() }, trimmed());
+          { exclude: excludes(), trim: trimOptions(), allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed());
       } catch (error) {
         if (version !== revision) return;
         if (!(error instanceof CompressedCapacityError) || trimMode() !== 'auto') throw error;
@@ -507,9 +522,85 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
   } finally {
     building = false;
     syncWizard();
-    if (packedCapacityProblem) showStep(2);
-    else if (succeeded) showStep(destination === 'categories' ? 3 : 4);
+    if (packedCapacityProblem) showStep(3);
+    else if (succeeded) showStep(destination === 'categories' ? 4 : 5);
   }
+}
+
+// ---- the project file (engine/src/project.ts, docs/PROJECT-FILE.md)
+
+function projectNow(): Project {
+  const mode = trimMode();
+  return {
+    os: osOf(base!),
+    swaps: samples.state.swaps, sources: samples.state.sources, noTrim: samples.state.noTrim,
+    trim: { mode: mode === 'trim' ? 'manual' : mode === 'keep' ? 'keep' : 'auto',
+            db: Number($<HTMLInputElement>('db').value), cap: Number($<HTMLInputElement>('cap').value) },
+    models: boxes().filter((i) => i.checked).map((i) => i.dataset.module!),
+    layout: layoutEd.mapForPlan() ?? null,
+  };
+}
+
+async function saveProject(): Promise<void> {
+  if (!fw || !base) return;
+  const text = JSON.stringify(await encodeProject(projectNow()), null, 1);
+  const stem = inputName.replace(/\.(syx|bin)$/i, '');
+  const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: `${stem}${PROJECT_EXTENSION}` }) as HTMLAnchorElement;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  status(`Project saved as ${stem}${PROJECT_EXTENSION}. Load it with ${inputName} to build the same firmware.`, 'ok');
+}
+
+async function onProjectFile(f: File): Promise<void> {
+  const note = $('project-status');
+  try {
+    const p = await decodeProject(await f.text());
+    if (fw && base) {
+      const problem = osProblem(p.os, base);
+      if (problem) throw new Error(`${problem}. Load the ${p.os.name || p.os.base} file it was made with first.`);
+      if (applyProject(p, f.name)) { refresh(); showStep(2); }
+    } else {
+      pendingProject = { project: p, name: f.name };
+      note.textContent = `${f.name} is ready: now load the ${p.os.name || p.os.base} file it was made with.`;
+      status(note.textContent, 'ok');
+    }
+  } catch (e) {
+    pendingProject = null;
+    note.textContent = `Project not loaded: ${(e as Error).message}`;
+    status(note.textContent, 'error');
+  }
+}
+
+/** Put a project's choices on the page. Refused (false) unless the loaded OS is the project's. */
+function applyProject(p: Project, name: string): boolean {
+  pendingProject = null;
+  const problem = osProblem(p.os, base!);
+  const count = samples.bank!.entries.length;
+  const bad = [...p.swaps.keys(), ...p.noTrim].filter((e) => e >= count);
+  const why = problem ?? (bad.length ? `this OS has no E12 sample ${bad[0]}` : null);
+  if (why) {
+    $('project-status').textContent = `Project not loaded: ${why}.`;
+    status(`${name} not loaded: ${why}.`, 'error');
+    return false;
+  }
+  samples.state = { swaps: new Map(p.swaps), noTrim: new Set(p.noTrim), sources: new Map(p.sources), notes: new Map() };
+  samples.render();
+  trims.clear();
+  const radio = document.querySelector<HTMLInputElement>(`input[name=e12][value=${p.trim.mode === 'manual' ? 'trim' : p.trim.mode}]`);
+  if (radio) radio.checked = true;
+  $<HTMLInputElement>('db').value = String(p.trim.db);
+  $<HTMLInputElement>('cap').value = String(p.trim.cap);
+  const want = new Set(p.models);
+  const have = new Set(boxes().map((i) => i.dataset.module!));
+  for (const i of boxes()) i.checked = want.has(i.dataset.module!);
+  const missing = p.models.filter((m) => !have.has(m));
+  if (p.layout) layoutEd.adopt(p.layout, name); else layoutEd.map = null;
+  updateTrimControls();
+  $('project-status').textContent = `Loaded ${name}.`;
+  status(`Loaded project ${name}: ${p.swaps.size} sample${p.swaps.size === 1 ? '' : 's'} replaced, ${want.size - missing.length} models.` +
+    (missing.length ? ` Not in this page's catalog (load their packs to include them): ${missing.join(', ')}.` : ''), missing.length ? 'error' : 'ok');
+  return true;
 }
 
 async function main(): Promise<void> {
@@ -523,8 +614,14 @@ async function main(): Promise<void> {
     b.addEventListener('click', () => showStep(Number(b.dataset.step ?? b.dataset.back)));
   });
   $('firmware-next').addEventListener('click', () => showStep(2));
+  $('samples-next').addEventListener('click', () => showStep(3));
   $('models-next').addEventListener('click', () => void onBuild('categories'));
-  $('categories-next').addEventListener('click', () => showStep(4));
+  $('categories-next').addEventListener('click', () => showStep(5));
+  samples = new SamplesStep($('samples-panel'), () => { trims.clear(); refresh(); });
+  samples.render();
+  const projectFile = $<HTMLInputElement>('project-file');
+  projectFile.addEventListener('change', () => { if (projectFile.files?.[0]) void onProjectFile(projectFile.files[0]); projectFile.value = ''; });
+  $('project-save').addEventListener('click', () => void saveProject());
   $('enlarge-screen').addEventListener('click', () => {
     if (!inspected) return;
     drawLcd($('large-lcd') as HTMLCanvasElement, inspected);
