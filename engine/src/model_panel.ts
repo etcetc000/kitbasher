@@ -1,8 +1,9 @@
 // Independently validate author MODE zones and bind them to the exported label plan.
 import type { DynPlan } from './features.js';
+import type { Pitch } from './pitch.js';
 
 export interface PanelMode { knob: number; zones: { min: number; max: number; labels: Record<string, string> }[] }
-export interface ModelPanel { name: string; category: string; knobs: { label: string; default: number }[]; modes: PanelMode[] }
+export interface ModelPanel { name: string; category: string; knobs: { label: string; default: number }[]; modes: PanelMode[]; pitch?: Pitch }
 
 export function dynamicPlans(panel: ModelPanel): DynPlan[] {
   const raw = (v: number): boolean => Number.isInteger(v) && v >= 0 && v <= 127;
@@ -52,4 +53,19 @@ export function checkDynamicPlans(panel: ModelPanel, actual: DynPlan[]): void {
       JSON.stringify(p.mask) !== JSON.stringify(a.mask) || JSON.stringify(p.stop_of) !== JSON.stringify(a.stop_of) ||
       JSON.stringify(p.formula) !== JSON.stringify(a.formula);
   })) throw new Error('manifest MODE labels differ from exported descriptor');
+}
+
+/** The MODE selectors a compiled pack's dynamic-label plans describe, as manifest panel modes. */
+export function panelModesFromPlans(plans: DynPlan[]): PanelMode[] {
+  return plans.map(plan => {
+    const text = atob(plan.blocks);
+    return {
+      knob: plan.knob,
+      zones: Array.from({ length: plan.stops }, (_, s) => ({
+        min: plan.stop_of.indexOf(s),
+        labels: Object.fromEntries(plan.mask.map((k, j) => [String(k), text.slice((s * plan.mask.length + j) * 4, (s * plan.mask.length + j + 1) * 4).trimEnd()])),
+        max: plan.stop_of.lastIndexOf(s),
+      })),
+    };
+  });
 }
