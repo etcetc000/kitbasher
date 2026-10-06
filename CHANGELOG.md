@@ -45,6 +45,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 - DSP1 drive code moves around DSP1 code a base already occupies, and falls back
   to a compact dispatcher when the standard layout overflows.
 - Knobs without a function are hidden instead of showing a placeholder label.
+- The analog machines (VAD) vary slightly from hit to hit: a few cents of random
+  detune per hit, free-running oscillator phases on VADHH, VADCY and VADSY, and a
+  slow pitch drift on VADSY. Knobs are unchanged; the cost is per hit or per block.
 - Firmware status in the page is described in plain language.
 
 ### Fixed
