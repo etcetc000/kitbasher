@@ -62,7 +62,7 @@ const CSS = `
 .lay-cat li select{font:inherit;font-size:11px;max-width:100%}
 .lay-cat li .moved{color:#1e3f8a;font-size:10px}
 .icon{border:1px solid var(--line);background:#fff;border-radius:3px;font-size:11px;line-height:1;padding:3px 5px;cursor:pointer}
-.lay-empty{color:var(--muted);font-size:11px;padding:4px 8px}
+.lay-cat li.lay-empty{display:block;color:var(--muted);font-size:11px;padding:4px 8px}
 .lay-add{border:1px dashed #b7c1c7;background:none;border-radius:4px;padding:5px 10px;font-size:12px;width:100%;cursor:pointer}
 .lay-ids{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px;align-content:start}
 .lay-ids .cell{font-family:var(--mono);font-size:9px;line-height:1.1;height:30px;border-radius:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;border:1px solid transparent}
@@ -386,7 +386,7 @@ export class LayoutEditor {
       btn('↑', `Move category ${c} up`, move(-1), ci === 0), btn('↓', `Move category ${c} down`, move(1), ci === l.categories.length - 1), del);
     const ol = el('ol', { 'aria-label': `Machines in ${c}` });
     keys.forEach((k, i) => ol.append(this.row(l, k, c, i, keys)));
-    if (!keys.length) ol.append(el('li', { class: 'lay-empty' }, 'Empty: drag machines here. An empty category is kept in the map but not written to the menu.'));
+    if (!keys.length) ol.append(el('li', { class: 'lay-empty' }, 'Empty. Drag machines here; an empty category is not written to the menu.'));
     const card = el('section', { class: 'lay-cat', 'data-cat': c }, header, ol);
     card.addEventListener('focusin', () => {
       const select = this.root.querySelector<HTMLSelectElement>('#lay-preview-category');
