@@ -39,6 +39,9 @@ code is original and the coefficient tables are generated mathematically;
 parameter ranges and defaults follow documented analog drum-machine behavior. They
 are approximations, not circuit models. MODE switches the voice and relabels the
 other knobs to match. VADBD, VADHH and VADCY bring their own DSP1 drive curve.
+Each hit varies slightly, as an analog voice does: a few cents of random detune
+per hit, free-running oscillator phases on the hats, cymbals and VADSY, and a slow
+pitch drift on VADSY ([details](../examples/analog/README.md#analog-imperfections)).
 
 ## Community voices
 
@@ -82,13 +85,13 @@ compete for the same cache, and the whole OS adds its own work.
 
 | Machine | Worst cycles per sample |
 |---|---:|
-| VADBD | 134.2 |
-| VADSD | 130.4 |
-| VADRC | 130.0 |
-| VADPC | 117.8 |
-| VADHH | 126.2 |
-| VADCY | 126.2 |
-| VADSY | 134.8 |
+| VADBD | 135.4 (estimate) |
+| VADSD | 131.0 (estimate) |
+| VADRC | 131.1 (estimate) |
+| VADPC | 118.4 (estimate) |
+| VADHH | 127.0 (estimate) |
+| VADCY | 127.0 (estimate) |
+| VADSY | 139.2 (estimate) |
 | OSCAC | 70.5 |
 | FMS4O | 99.6 |
 | OSCSP | 120.8 |

@@ -30,7 +30,7 @@ trigger:
     move y:(r6+$3),y0
     move y0,x:(r6+$3e)
     move x0,y:(r6+$3)
-    bsr <local_4e
+    bsr <local_50
     move x:(r6+$3e),x0
     move x0,y:(r6+$3)
     rts
@@ -43,7 +43,7 @@ render:
     move x0,y:(r6+$3)
     bra <local_2a
 local_2a:
-    bsr <local_71
+    bsr <local_7d
     move x:(r6+$3e),x0
     move x0,y:(r6+$3)
     rts
@@ -75,8 +75,10 @@ local_3d:
     move x0,y:(r6+$21)
     move #>$200,x0
     move x0,y:(r6+$20)
+    move r6,a
+    move a1,y:(r6+$2f)
     rts
-local_4e:
+local_50:
     move #>$7fffff,x0
     move x0,y:(r6+$30)
     move x0,y:(r6+$31)
@@ -103,13 +105,22 @@ local_4e:
     lsr #$12,a
     move a1,a
     sub #<$6,a
-    bge <local_70
+    bge <local_72
     move #$0,x0
     move x0,y:(r6+$34)
     move x0,y:(r6+$35)
-local_70:
+local_72:
+    move y:(r6+$2f),a
+    or #<$1,a
+    move #>$19660d,y0
+    move a1,x0
+    mpy y0,x0,a
+    asr a
+    move a0,a
+    move a1,y:(r6+$2f)
+    move a1,x0
     rts
-local_71:
+local_7d:
     move y:(r6+$3),y0
     move #>$200000,x0
     mpy y0,x0,a
@@ -121,21 +132,21 @@ local_71:
     move y:(r6+$21),x0
     move a,y:(r6+$21)
     cmp x0,a
-    beq <local_8e
+    beq <local_9a
     move y:(r6+$37),a
     move y:(r6+$38),b
     add b,a
     tst a
-    bne <local_8e
+    bne <local_9a
     move r6,r0
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$9,>code_origin+139
+    do #<$9,>code_origin+151
     move x0,y:(r0)+
     move #>$1,x0
     move x0,y:(r6+$36)
-local_8e:
+local_9a:
     move y:(r6+$21),a
     asl #$3,a,a
     add #>e0_mode+1,a
@@ -168,10 +179,17 @@ local_8e:
     tfr y0,a            a,y1
     mac y1,x1,a
     move a,y:(r6+$9)
+    move y:(r6+$2f),x0
+    move #>$38c8,y0
+    mpy y0,x0,a
+    move y:(r6+$9),x0
+    tfr x0,a            a,y0
+    mac y0,x0,a
+    move a,y:(r6+$9)
     move y:(r6+$24),a
     sub #<$1,a
-    blt <local_f0
-    bgt <local_111
+    blt <local_104
+    bgt <local_125
     move y:(r6+$8),b
     and #>$3fe00,b
     asl #$5,b,b
@@ -224,8 +242,8 @@ local_8e:
     cmp x0,a
     tgt x0,a
     move a,y:(r6+$c)
-    bra <local_13e
-local_f0:
+    bra <local_152
+local_104:
     move y:(r6+$8),b
     and #>$3fe00,b
     asl #$5,b,b
@@ -254,8 +272,8 @@ local_f0:
     tfr y0,a            a,y1
     mac y1,x1,a
     move a,y:(r6+$25)
-    bra <local_131
-local_111:
+    bra <local_145
+local_125:
     move y:(r6+$7),b
     and #>$3fe00,b
     asl #$5,b,b
@@ -284,7 +302,7 @@ local_111:
     tfr y0,a            a,y1
     mac y1,x1,a
     move a,y:(r6+$25)
-local_131:
+local_145:
     move y:(r6+$25),x0
     move y:(r6+$9),y0
     mpy y0,x0,a
@@ -297,7 +315,7 @@ local_131:
     move #$0,x0
     move x0,y:(r6+$c)
     move x0,y:(r6+$d)
-local_13e:
+local_152:
     move y:(r6+$2),a
     asr #$12,a,a
     move a1,a
@@ -317,24 +335,24 @@ local_13e:
     move a,x0
     move y:(r6+$20),a
     cmp x0,a
-    bgt <local_157
+    bgt <local_16b
     move #>$7fffff,x0
     move x0,y:(r6+$19)
-local_157:
+local_16b:
     move #$0,x0
     move y:(r6+$20),a
     tst a
-    bne <local_15d
+    bne <local_171
     move #>$5ce14,x0
-local_15d:
+local_171:
     move x0,y:(r6+$1a)
     move y:(r6+$20),a
     sub #>$200,a
-    bge <local_165
+    bge <local_179
     move y:(r6+$20),a
     add #<$1,a
     move a,y:(r6+$20)
-local_165:
+local_179:
     move y:(r6+$1f),y0
     move #>$5b3333,x0
     mpy y0,x0,a
@@ -352,13 +370,13 @@ local_165:
     move x0,y:(r6+$1b)
     move y:(r6+$21),a
     sub #<$2,a
-    beq <local_17d
+    beq <local_191
     sub #<$1,a
-    beq <local_198
+    beq <local_1ac
     sub #<$1,a
-    beq <local_1c0
-    bra <local_1cb
-local_17d:
+    beq <local_1d4
+    bra <local_1df
+local_191:
     move y:(r6+$4),a
     asr #$12,a,a
     move a1,a
@@ -381,8 +399,8 @@ local_17d:
     move y:(r0),a
     move a,y:(r6+$16)
     move x0,y:(r6+$e)
-    bra <local_1e7
-local_198:
+    bra <local_1fb
+local_1ac:
     move y:(r6+$7),b
     and #>$3fe00,b
     asl #$5,b,b
@@ -411,14 +429,14 @@ local_198:
     lsr #$12,a
     move a1,a
     tst a
-    bne <local_1bc
+    bne <local_1d0
     move #>$7fffff,x0
     move x0,y:(r6+$18)
-local_1bc:
+local_1d0:
     move #>$70a3d7,x0
     move x0,y:(r6+$e)
-    bra <local_1e7
-local_1c0:
+    bra <local_1fb
+local_1d4:
     move y:(r6+$4),a
     move a,y:(r6+$1b)
     move a,y0
@@ -427,19 +445,19 @@ local_1c0:
     move a,y:(r6+$1b)
     move #>$70a3d7,x0
     move x0,y:(r6+$e)
-    bra <local_1e7
-local_1cb:
+    bra <local_1fb
+local_1df:
     move y:(r6+$4),y0
     move y:(r6+$23),x0
     mpy y0,x0,a
     lsr #$12,a
     move a1,a
     sub #<$6,a
-    blt <local_1d3
-    bra <local_1d4
-local_1d3:
+    blt <local_1e7
+    bra <local_1e8
+local_1e7:
     add #<$6,a
-local_1d4:
+local_1e8:
     move a,y:(r6+$23)
     asl #$2,a,a
     move y:(r6+$23),y0
@@ -458,7 +476,7 @@ local_1d4:
     move x0,y:(r6+$11)
     move y:(r0)+,x0
     move x0,y:(r6+$12)
-local_1e7:
+local_1fb:
     move y:(r6+$21),a
     asl #$3,a,a
     add #>e0_mode,a
@@ -466,7 +484,7 @@ local_1e7:
     nop
     move y:(r0),a
     tst a
-    beq <local_207
+    beq <local_21b
     move y:(r6+$a),x0
     move y:(r6+$30),y0
     mpy y0,x0,a
@@ -488,7 +506,7 @@ local_1e7:
     div x0,a
     move a0,a
     move a,y:(r6+$13)
-local_207:
+local_21b:
     move y:(r6+$5),a
     move a,y:(r6+$24)
     move a,x0
@@ -500,7 +518,7 @@ local_207:
     move a,y:(r6+$1e)
     move y:(r6+$21),a
     sub #<$1,a
-    bne <local_22d
+    bne <local_241
     move y:(r6+$24),x0
     move y:(r6+$1d),y0
     mpy y0,x0,a         y0,b
@@ -525,13 +543,13 @@ local_207:
     tfr y0,a            a,y1
     mac y1,x1,a
     move a,y:(r6+$1c)
-local_22d:
+local_241:
     move y:(r6+$37),a
     tst a
-    bne <local_232
+    bne <local_246
     move y:(r6+$18),x0
     move x0,y:(r6+$22)
-local_232:
+local_246:
     move y:(r6+$22),x0
     move x0,y:(r6+$18)
     move #>$7fffff,a
@@ -546,7 +564,7 @@ local_232:
     nop
     move y:(r0),a
     tst a
-    jne code_origin+838
+    jne code_origin+858
     move r6,r3
     move #$0,n3
     move (r3)+n3
@@ -594,13 +612,13 @@ local_232:
     move x0,x:(r3)+
     move y:(r6+$14),a
     tst a
-    bne <local_2db
+    bne <local_2ef
     move y:(r6+$15),a
     tst a
-    bne <local_2db
+    bne <local_2ef
     move y:(r6+$18),a
     tst a
-    bne <local_2db
+    bne <local_2ef
     move r6,r0
     move #$0,n0
     move (r0)+n0
@@ -621,7 +639,7 @@ local_232:
     move #>$7fff,m1
     move #$1,n4
     move #$1,n5
-    do #<$20,>code_origin+722
+    do #<$20,>code_origin+742
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -687,8 +705,8 @@ local_232:
     move #>$ffffff,m1
     move #>$ffffff,m4
     move #>$ffffff,m5
-    bra <local_3cd
-local_2db:
+    bra <local_3e1
+local_2ef:
     move r6,r0
     move #$0,n0
     move (r0)+n0
@@ -709,7 +727,7 @@ local_2db:
     move #>$7fff,m1
     move #$1,n4
     move #$1,n5
-    do #<$20,>code_origin+829
+    do #<$20,>code_origin+849
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -786,7 +804,7 @@ local_2db:
     move #>$ffffff,m1
     move #>$ffffff,m4
     move #>$ffffff,m5
-    bra <local_3cd
+    bra <local_3e1
     move r6,r3
     move #$0,n3
     move (r3)+n3
@@ -844,7 +862,7 @@ local_2db:
     move #>$7fff,m1
     move #$3,n4
     move #$3,n5
-    do #<$20,>code_origin+965
+    do #<$20,>code_origin+985
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -912,19 +930,19 @@ local_2db:
     move #>$ffffff,m1
     move #>$ffffff,m4
     move #>$ffffff,m5
-local_3cd:
+local_3e1:
     move y:(r6+$37),a
     move y:(r6+$38),b
     add b,a
     tst a
-    bne <local_3dc
+    bne <local_3f0
     move r6,r0
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$9,>code_origin+985
+    do #<$9,>code_origin+1005
     move x0,y:(r0)+
     move #>$1,x0
     move x0,y:(r6+$36)
-local_3dc:
+local_3f0:
     rts
