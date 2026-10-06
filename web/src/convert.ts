@@ -43,7 +43,10 @@ export function processAudio(channels: Float32Array[], cap: number, opt: Convert
     while (a < b && Math.abs(x[a]) < floor) a++;
     while (b > a && Math.abs(x[b - 1]) < floor) b--;
     if (a > 0 || b < x.length) {
-      notes.push(`silence trimmed: ${ms(a, SAMPLE_RATE)} at the start, ${ms(x.length - b, SAMPLE_RATE)} at the end`);
+      // a few samples under the floor at the very end are not worth a line in the report
+      if (a + x.length - b >= SAMPLE_RATE / 1000) {
+        notes.push(`silence trimmed: ${ms(a, SAMPLE_RATE)} at the start, ${ms(x.length - b, SAMPLE_RATE)} at the end`);
+      }
       x = x.slice(a, b);
     }
   }
