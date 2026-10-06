@@ -1738,3 +1738,9 @@ body.wizard .lay-grid{grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr)}
   .wizard-actions button{font-size:13px;padding:10px}
   body.wizard .layout-panel{padding:14px}
 }
+.page-head .tagline {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.35;
+}
