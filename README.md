@@ -4,7 +4,7 @@ Kitbasher adds new sound models to your Elektron Machinedrum's OS. Pick the
 machines you want, and it builds an OS update that keeps every stock machine and
 adds yours alongside them.
 
-It works on stock OS 1.63, X.13, X.14 and DEV, and runs entirely in your browser at
+It works on stock OS 1.63, X.13, X.14 and M's DEV firmware, and runs entirely in your browser at
 **[kitbasher.xyz](https://kitbasher.xyz)**. Your firmware never leaves your
 computer: nothing is uploaded, and there is no server-side build.
 
@@ -16,7 +16,7 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    patterns (GLOBAL › SYSEX SEND › ALL into a SysEx recorder). Sending that OS
    file again restores your machine.
 2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
-   OS file (`.syx` or `.bin`). Stock 1.63 is prepared for patching automatically.
+   OS file (`.syx` or `.bin`).
 3. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
    synths, physical modeling, effects) and check the machines you want. Click a
    model to see its screen and what every control does. The meters show how much
@@ -38,8 +38,8 @@ sample files with instructions.
 | OS 1.63 (stock) | Prepared automatically with a small boot hook, then patched; tested in the emulator |
 | OS X.13 | Patched directly; tested on hardware |
 | OS X.14 | Patched directly; tested in the emulator |
-| OS DEV (md-26912-190450) | Patched directly; tested on hardware |
-| OS DEV (md-26A01-183521) | Patched directly; tested in the emulator |
+| M's DEV firmware (md-26912-190450) | Patched directly; tested on hardware |
+| M's DEV firmware (md-26A01-183521) | Patched directly; tested in the emulator |
 
 Details per base are in [docs/BASES.md](docs/BASES.md).
 

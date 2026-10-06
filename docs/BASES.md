@@ -10,8 +10,8 @@ removing any stock machine.
 | OS 1.63, prepared | `bases/stock-163-prepared.json` | Patched directly |
 | OS X.13 | `bases/x13.json` | Patched directly, chaining onto X.13's own add-on |
 | OS X.14 | `bases/x14.json` | Patched directly, chaining onto X.14's own add-on |
-| OS DEV (md-26912-190450) | `bases/dev-26912.json` | Patched directly, chaining onto DEV's add-on; nothing after the DSP2 slot moves |
-| OS DEV (md-26A01-183521) | `bases/dev-26a01.json` | Patched directly, as for the earlier DEV build |
+| M's DEV firmware (md-26912-190450) | `bases/dev-26912.json` | Patched directly, chaining onto DEV's add-on; nothing after the DSP2 slot moves |
+| M's DEV firmware (md-26A01-183521) | `bases/dev-26a01.json` | Patched directly, as for the earlier DEV build |
 
 Each profile also records how far that base has been tested. X.13 and DEV 26912
 images have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,

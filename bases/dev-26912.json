@@ -1,7 +1,7 @@
 {
  "format": "md-base/2",
  "id": "dev-26912",
- "name": "OS DEV (md-26912-190450, a 1.63-derived community build)",
+ "name": "M's DEV firmware (md-26912-190450)",
  "about": "Tag 'DEV '. DSP2, DSP1 and both data slots are byte-identical to stock 1.63. The ColdFire slot is 1.63 with about 300 small in-place patches (addresses preserved), re-packed. It boots like X.13 (boot routine at 0x2be00) but unpacks a smaller add-on to 0x2ee000, which unpacks 19 further pieces through a scatter table at flash 0xf0000. That table holds absolute flash offsets, so nothing after the DSP2 slot may move (the DSP2 slot keeps its length).",
  "notes": [
   "Boot: 0x20003a jumps to 0x2be00: pea $2ee000; pea $e96e0; jsr $1c4 (boot-block NRV2B); addq #8; jsr $2ee000; jmp $213a0c. Same shape as X.13's, with operands at 0x2be08 and 0x2be1c.",

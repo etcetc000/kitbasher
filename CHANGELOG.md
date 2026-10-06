@@ -8,8 +8,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 ### Added
 
 - Browser and command-line patcher that adds sound models to Machinedrum OS 1.63,
-  X.13, X.14 and DEV, keeping every stock machine.
-- Support for OS X.14 and for the DEV build md-26A01-183521, both tested in the
+  X.13, X.14 and M's DEV firmware, keeping every stock machine.
+- Support for OS X.14 and for M's DEV firmware md-26A01-183521, both tested in the
   emulator.
 - Assembly models work on any base whose model runtime (DSP2 program, SRAM
   routines and add-on code) matches a tested one, even without a profile for
