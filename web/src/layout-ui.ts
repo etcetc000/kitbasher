@@ -37,7 +37,7 @@ const CSS = `
 .lay-preview select{margin:8px 0;max-width:100%}
 .lay-preview label{display:block}
 .lay-screen{background:#292c2d;border-radius:8px;padding:20px;max-width:360px;margin:8px 0}
-.lay-screen canvas{display:block;width:100%;aspect-ratio:2;image-rendering:pixelated;background:#ffa64a;border:3px solid #161818;border-radius:2px}
+.lay-screen canvas{display:block;width:100%;aspect-ratio:2;image-rendering:pixelated;background:#f27a3e;border:3px solid #161818;border-radius:2px}
 .lay-advanced{border-top:1px solid var(--line);margin-top:20px;padding-top:12px}
 .lay-advanced summary{cursor:pointer;font-weight:600}
 .lay-id-controls{display:flex;flex-wrap:wrap;gap:10px 18px;margin:14px 0}

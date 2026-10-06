@@ -584,8 +584,8 @@ code {
 }
 .lcd-glass {
   padding: 8px;
-  background: #fda044;
-  box-shadow: inset 0 0 9px #a63b2399, 0 0 7px #ff71181f;
+  background: #ee7036;
+  box-shadow: inset 0 0 9px #8f241699, 0 0 7px #ff71181f;
   position: relative;
 }
 #model-lcd {
@@ -593,7 +593,7 @@ code {
   width: 100%;
   aspect-ratio: 2/1;
   image-rendering: pixelated;
-  background: #ffa64a;
+  background: #f27a3e;
 }
 .machine-info {
   font-size: 10px;
@@ -814,7 +814,7 @@ h2 {
   aspect-ratio: auto;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  background: #ffa64a;
+  background: #f27a3e;
 }
 .trim-panel {
   padding: 18px;
@@ -903,7 +903,7 @@ h2 {
   width: 512px;
   height: 256px;
   image-rendering: pixelated;
-  background: #ffa64a;
+  background: #f27a3e;
 }
 #screen-dialog p {
   font-size: 13px;
@@ -1089,12 +1089,12 @@ h2 {
   border-radius: 0;
   padding: 0;
   cursor: help;
-  color: #36200e;
+  color: #2e0d06;
 }
 .lcd-hotspot:hover,
 .lcd-hotspot:focus-visible {
-  background: #36200e16;
-  outline: 1px solid #36200e;
+  background: #2e0d0616;
+  outline: 1px solid #2e0d06;
   outline-offset: -2px;
 }
 .lcd-tooltip {
@@ -1135,7 +1135,7 @@ h2 {
 }
 #screen-dialog .lcd-hotspot:hover,
 #screen-dialog .lcd-hotspot:focus-visible {
-  background: #36200e16;
+  background: #2e0d0616;
 }
 #screen-dialog .lcd-tooltip p {
   margin: 0;

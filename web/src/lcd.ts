@@ -20,11 +20,20 @@ const glyphs: Record<string, string> = {
  '[':'011010010010011',']':'110010010010110','_':'000000000000111',
 };
 
-/** Menu illustration using the actual category order and model names, not an emulator frame. */
+/** The screen's colours, shared by every preview canvas and its CSS backdrop. */
+export const LCD_PAPER = '#f27a3e', LCD_INK = '#2e0d06';
+
+/** The MD shows a five-character machine name as XXX-XX. */
+const mdName = (n: string): string => (n.includes('-') ? n : `${n.slice(0, 3)}-${n.slice(3, 5)}`).trim();
+
+/**
+ * Menu illustration in the style of the MD's EDIT KIT screen, using the actual category order and
+ * model names. Not an emulator frame: layout and glyphs are an approximation.
+ */
 export function drawMenuLcd(canvas: HTMLCanvasElement, categories: { name: string; machines: string[] }[], selected: string | number, selectedMachine = 0): void {
   canvas.width = 128; canvas.height = 64;
   const ctx = canvas.getContext('2d')!;
-  const ink = '#36200e', paper = '#ffa64a';
+  const ink = LCD_INK, paper = LCD_PAPER;
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, 128, 64);
@@ -34,32 +43,63 @@ export function drawMenuLcd(canvas: HTMLCanvasElement, categories: { name: strin
       for (let j = 0; j < 15; j++) if (bits[j] === '1') ctx.fillRect(x + i * 4 + j % 3, y + Math.floor(j / 3), 1, 1);
     });
   };
+  const dither = (x: number, y: number, w: number, h: number) => {
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if ((xx + yy) % 2 === 0) ctx.fillRect(xx, yy, 1, 1);
+  };
+  const box = (x: number, y: number, w: number, h: number) => {
+    ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1); ctx.fillRect(x, y, 1, h); ctx.fillRect(x + w - 1, y, 1, h);
+  };
+  /** A label sitting in a gap of a box's top edge; inverted labels get a solid block. */
+  const header = (label: string, x: number, y: number, inverted: boolean) => {
+    const w = label.length * 4 + 3;
+    ctx.fillStyle = inverted ? ink : paper;
+    ctx.fillRect(x, y - 3, w, 7);
+    ctx.fillStyle = inverted ? paper : ink;
+    text(label, x + 2, y - 2);
+    ctx.fillStyle = ink;
+  };
+  /** One list row: inverted when chosen. */
+  const row = (label: string, x: number, y: number, w: number, active: boolean) => {
+    if (active) { ctx.fillStyle = ink; ctx.fillRect(x, y - 1, w, 7); }
+    ctx.fillStyle = active ? paper : ink;
+    text(label, x + 2, y);
+    ctx.fillStyle = ink;
+  };
+
   ctx.fillStyle = ink;
-  text('MACHINE SELECTION', 3, 3);
-  ctx.fillRect(0, 11, 128, 1);
-  ctx.fillRect(37, 12, 1, 52);
+  // Frame: a dithered band inside a single rule, with the title tab on top.
+  box(0, 0, 128, 64);
+  dither(1, 1, 126, 2); dither(1, 61, 126, 2); dither(1, 3, 2, 58); dither(125, 3, 2, 58);
+  box(3, 3, 122, 58);
+  dither(4, 4, 120, 6);
+  ctx.fillStyle = paper; ctx.fillRect(43, 3, 42, 8); ctx.fillStyle = ink;
+  ctx.fillRect(44, 4, 40, 7);
+  ctx.fillStyle = paper; text('EDIT KIT', 48, 5); ctx.fillStyle = ink;
+  ctx.fillRect(3, 10, 122, 1);
+
   const at = typeof selected === 'number' ? selected : categories.findIndex(c => c.name === selected);
-  const start = Math.max(0, Math.min(at - 2, categories.length - 6));
-  categories.slice(start, start + 6).forEach((c, i) => {
-    const active = i + start === at, y = 15 + i * 8;
-    ctx.fillStyle = ink;
-    if (active) ctx.fillRect(1, y - 1, 35, 7);
-    ctx.fillStyle = active ? paper : ink;
-    text(c.name.slice(0, 4), 4, y);
-  });
   const machines = categories[at]?.machines ?? [];
-  const machineStart = Math.max(0, Math.min(selectedMachine - 2, machines.length - 6));
-  machines.slice(machineStart, machineStart + 6).forEach((name, i) => {
-    const y = 15 + i * 8;
-    const active = i + machineStart === selectedMachine;
-    ctx.fillStyle = ink;
-    if (active) ctx.fillRect(40, y - 1, 87, 7);
-    ctx.fillStyle = active ? paper : ink;
-    text(name.slice(0, 20), 43, y);
-  });
-  ctx.fillStyle = ink;
-  if (!machines.length) text('EMPTY CATEGORY', 43, 31);
-  if (machineStart + 6 < machines.length) text('...', 113, 58);
+  const current = machines[selectedMachine];
+  text(`POS:01-BD (${current ? mdName(current) : '------'}) ---`, 6, 13);
+
+  const top = 23, h = 37, rows = 4;
+  // Category column.
+  box(6, top, 30, h);
+  header('TYPE', 8, top, true);
+  const cStart = Math.max(0, Math.min(at - 1, categories.length - rows));
+  categories.slice(cStart, cStart + rows).forEach((c, i) => row(c.name.slice(0, 4), 8, top + 5 + i * 8, 26, i + cStart === at));
+  // Machine column.
+  box(39, top, 45, h);
+  header('MACHINE', 41, top, false);
+  const mStart = Math.max(0, Math.min(selectedMachine - 1, machines.length - rows));
+  machines.slice(mStart, mStart + rows).forEach((n, i) => row(mdName(n), 41, top + 5 + i * 8, 41, i + mStart === selectedMachine));
+  if (!machines.length) text('EMPTY', 50, top + 15);
+  if (mStart + rows < machines.length) { ctx.fillRect(80, top + h - 4, 1, 1); ctx.fillRect(79, top + h - 5, 3, 1); }
+  // Relate column, as on the hardware page.
+  box(87, top, 36, h);
+  header('RELATE', 89, top, false);
+  text('MUTE POS', 89, top + 5); text('-', 104, top + 13);
+  text('TRIG POS', 89, top + 21); text('-', 104, top + 29);
 }
 
 export function drawLcd(canvas: HTMLCanvasElement, model: PackModel): void {
@@ -67,7 +107,7 @@ export function drawLcd(canvas: HTMLCanvasElement, model: PackModel): void {
   canvas.width = 128; canvas.height = 64;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, 128, 64);
-  const ink = '#36200e';
+  const ink = LCD_INK;
   ctx.fillStyle = ink;
   const pixel = (x: number, y: number) => ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
   const text = (s: string, x: number, y: number, scale = 1) => {
@@ -86,9 +126,9 @@ export function drawLcd(canvas: HTMLCanvasElement, model: PackModel): void {
     ctx.fillRect(24,23,4,4);line(31,0,31,30);text('LEV',34,2);
     for(let i=0;i<7;i++){pixel(34,10+i*3);pixel(45,10+i*3);}
     ctx.fillRect(38,15,5,14);
-    ctx.fillRect(0,32,47,15);ctx.fillStyle='#ffa64a';text('KIT:01',11,34);text('PREVIEW',9,41);ctx.fillStyle=ink;
+    ctx.fillRect(0,32,47,15);ctx.fillStyle=LCD_PAPER;text('KIT:01',11,34);text('PREVIEW',9,41);ctx.fillStyle=ink;
     line(2,49,5,52);line(5,52,2,55);text('A01',9,49);
-    ctx.fillRect(0,57,47,7);ctx.fillStyle='#ffa64a';text(`01:${model.name.trim()}`,2,58);ctx.fillStyle=ink;
+    ctx.fillRect(0,57,47,7);ctx.fillStyle=LCD_PAPER;text(`01:${model.name.trim()}`,2,58);ctx.fillStyle=ink;
     line(47,0,47,63);
     for(let x=49;x<128;x+=2){pixel(x,10);pixel(x,32);pixel(x,42);}
     for(let x=68;x<128;x+=20)for(let y=0;y<64;y+=2)pixel(x,y);
