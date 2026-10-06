@@ -47,6 +47,13 @@ All notable changes to Kitbasher are recorded here. The format follows
 - Knobs without a function are hidden instead of showing a placeholder label.
 - Firmware status in the page is described in plain language.
 
+### Removed
+
+- Developer-only DSP1 recovery variants (`--dsp1-recover-variant`), the DSP1
+  codec diagnostics and realignment options (`--dsp1-diag`, `--dsp1-realign`) and
+  the emulator probe flags (`--ram-probe`, `--dsp2-probe`).
+- The Noise Plethora generator's `--development` experiment mode.
+
 ### Fixed
 
 - Every build is checked for boot-time memory safety: boot patches only write

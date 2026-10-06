@@ -386,13 +386,6 @@ code {
 #room[data-state=idle] .num {
   color: var(--muted);
 }
-.build-actions {
-  grid-column: 2;
-  grid-row: 1/3;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
 #summary {
   font-size: 11px;
   color: var(--muted);
@@ -472,11 +465,6 @@ code {
   }
   .selection-panel {
     padding: 16px;
-  }
-  .build-actions {
-    flex-direction: column;
-    gap: 5px;
-    justify-content: center;
   }
   .meter .top {
     flex-direction: column;
@@ -887,9 +875,6 @@ h2 {
 .stat .k {
   font-size: 13px;
 }
-.build-actions {
-  gap: 16px;
-}
 #screen-dialog {
   max-width: calc(100vw - 24px);
   padding: 20px;
@@ -930,9 +915,6 @@ h2 {
   }
   .workspace {
     gap: 18px;
-  }
-  .build-actions {
-    gap: 6px;
   }
   .family header {
     gap: 8px;
@@ -1016,10 +998,6 @@ h2 {
   }
   .num {
     font-size: 11px;
-  }
-  .build-actions {
-    flex-direction: column;
-    gap: 8px;
   }
   #summary {
     font-size: 11px;
@@ -1600,12 +1578,6 @@ body.bench .meters {
 body.bench .meter .top {
   gap: 5px;
 }
-body.bench .build-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-}
 body.bench #build {
   width: 100%;
 }
@@ -1666,10 +1638,6 @@ body.bench .section-head h2 {
   }
   body.bench .meters {
     grid-template-columns: 1fr 1fr;
-  }
-  body.bench .build-actions {
-    grid-column: 2;
-    grid-row: 1/3;
   }
   body.bench .trim-panel {
     padding: 0;
@@ -1750,7 +1718,6 @@ body.wizard .trim-panel h2{margin-bottom:8px}
 .pack-loader{margin-top:24px;padding-top:16px;border-top:1px solid var(--line)}
 .pack-loader summary,#capacity-details summary{cursor:pointer;font-size:13px;color:var(--muted)}
 .pack-loader label{display:block;margin:12px 0}
-.step-intro{max-width:760px}
 .uw-next{border:1px solid var(--line);padding:18px;margin:22px 0;max-width:850px}
 .uw-next p{margin:10px 0;font-size:14px}
 #download-summary{margin-top:10px}

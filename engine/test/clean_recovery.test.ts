@@ -9,12 +9,11 @@ import {fromWordsLE} from '../src/bytes.js';
 import type {Firmware} from '../src/container.js';
 import type {Base} from '../src/bases.js';
 
-test('clean recovery is explicit, preserves old recipes and rejects conflicting policies',()=>{
+test('clean recovery is opt-in, leaves other options alone and refuses --no-dsp1-recover',()=>{
   assert.deepEqual(recoveryFeatures({}),{});
   assert.deepEqual(recoveryFeatures({cleanRecovery:true,cpuIndicator:false}),
-    {cleanRecovery:true,cpuIndicator:false,dsp1Recover:true,dsp1Realign:false,dsp1RecoverVariant:'ordered'});
-  for(const f of [{dsp1Realign:true},{dsp1Recover:false},{dsp1RecoverVariant:'v8'},{dsp1Diag:true}])
-    assert.throws(()=>recoveryFeatures({cleanRecovery:true,...f}),/requires ordered/);
+    {cleanRecovery:true,cpuIndicator:false,dsp1Recover:true});
+  assert.throws(()=>recoveryFeatures({cleanRecovery:true,dsp1Recover:false}),/requires ordered/);
 });
 test('model allocator cannot occupy the recovery helper, without losing surrounding space',()=>{
   const rt=retireRoutine(),regions:[number,number][]=[[0x100000,0x120000],[0x146000,0x148000]];

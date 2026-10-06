@@ -149,54 +149,6 @@ export function putTable(): [number, number, number][] {
   return out;
 }
 
-/** --dsp1-diag: the transport area cleared (the digits are drawn over it by code). */
-export function clearTable(): [number, number, number][] {
-  const out: [number, number, number][] = [];
-  for (let x = PUT.x0; x <= PUT.x1; x++) for (const p of pages(PUT.y0, PUT.y1)) out.push([frameByte(x, p), ~rowsMask(p, PUT.y0, PUT.y1) & 0xff, 0]);
-  return out;
-}
-
-/**
- * --dsp1-diag's screen: two rows of 3 x 5 hex digits in the transport area of the pattern screen.
- *   row 1 (y 19..23): DSR1 at the last DMA0 block end (3 digits; in step: 400) . DDR0 there (2; 00)
- *                     . SSISR1 >> 3 (1: bit 0 RFS, bit 1 TUE, bit 2 ROE, bit 3 TDE)
- *   row 2 (y 24..28): missed frames (2, mod 256) . resyncs (1, mod 16) . DDR4 at the last resync (3)
- * The words are DSP1's (engine/src/recover.ts, --dsp1-diag), read with DSP1's own host command HV 6.
- */
-export const DIAG_WORDS = 6;
-export const DIAG_DIGITS: { word: number; shift: number; x: number; row: 0 | 1 }[] = [
-  { word: 0, shift: 8, x: 2, row: 0 }, { word: 0, shift: 4, x: 6, row: 0 }, { word: 0, shift: 0, x: 10, row: 0 },
-  { word: 1, shift: 4, x: 16, row: 0 }, { word: 1, shift: 0, x: 20, row: 0 },
-  { word: 2, shift: 3, x: 26, row: 0 },
-  { word: 3, shift: 4, x: 2, row: 1 }, { word: 3, shift: 0, x: 6, row: 1 },
-  { word: 4, shift: 0, x: 12, row: 1 },
-  { word: 5, shift: 8, x: 18, row: 1 }, { word: 5, shift: 4, x: 22, row: 1 }, { word: 5, shift: 0, x: 26, row: 1 },
-];
-/** 3 x 5 hex glyphs, three column bytes each, bit 0 = the top row. */
-export const FONT = [
-  0x1f, 0x11, 0x1f, 0x12, 0x1f, 0x10, 0x1d, 0x15, 0x17, 0x15, 0x15, 0x1f, 0x07, 0x04, 0x1f, 0x17, 0x15, 0x1d,
-  0x1f, 0x15, 0x1d, 0x01, 0x01, 0x1f, 0x1f, 0x15, 0x1f, 0x17, 0x15, 0x1f, 0x1e, 0x05, 0x1e, 0x1f, 0x15, 0x0a,
-  0x0e, 0x11, 0x11, 0x1f, 0x11, 0x0e, 0x1f, 0x15, 0x11, 0x1f, 0x05, 0x01,
-];
-/** The frame byte and the shift for a digit's first column: row 0 is page 2 from y 19 (bits 3..7), row 1 page 3 from y 24. */
-export const digitPlace = (x: number, row: 0 | 1): [number, number] => (row === 0 ? [frameByte(x, 2), 3] : [frameByte(x, 3), 0]);
-/** HI08 polls before the ColdFire gives up on a transaction (~10 cycles each). */
-export const DIAG_POLLS = 300;
-/** DSP1's host registers: CVR, ISR, and the 32-bit TX/RX window the OS's own sender writes. */
-export const DSP1_CVR = 0x500001, DSP1_TXRX = 0x500004;
-
-/** The digits as the screen will show them for these six words, as ASCII (for docs and tests). */
-export function diagAscii(words: number[]): string[] {
-  const g = new Map<string, boolean>();
-  for (const d of DIAG_DIGITS) {
-    const n = (words[d.word] >> d.shift) & 15;
-    for (let c = 0; c < 3; c++) for (let r = 0; r < 5; r++) if ((FONT[n * 3 + c] >> r) & 1) g.set(`${d.x + c},${(d.row ? 24 : 19) + r}`, true);
-  }
-  const rows: string[] = [];
-  for (let y = 19; y <= 28; y++) { let t = ''; for (let x = 1; x <= 29; x++) t += g.get(`${x},${y}`) ? '#' : '.'; rows.push(t); }
-  return rows;
-}
-
 /** The cue as ASCII, rows y0..y1 of columns 0..31, over a blank transport area. */
 export function cueAscii(): string[] {
   const rows: string[] = [];
@@ -351,8 +303,6 @@ export interface Parts {
   /** where the code goes */
   at: number;
   site: Site;
-  /** --dsp1-diag: the P address of DSP1's first published word (DIAG_WORDS consecutive words) */
-  diag?: { first: number };
 }
 
 export interface Stub {
@@ -403,9 +353,7 @@ export function stub(p: Parts): Stub {
   const at = (name: string): void => { label[name] = n; };
   const refs: [number, string][] = [];
   const ref = (name: string): void => { refs.push([out.length, name]); out.push(new Uint8Array(4)); n += 4; };
-  const always = typeof process !== 'undefined' && !!process.env?.MD_CPU_ALWAYS;
-  const dg = p.diag;
-  const chk = checkTable(), pt = dg ? clearTable() : putTable();
+  const chk = checkTable(), pt = putTable();
   if (chk.length > 127 || pt.length > 127) throw new Error('indicator tables too long for moveq');
   const byteIn = (): void => { put(hex('7000'), hex('1019')); };     // moveq #0,d0 ; move.b (a1)+,d0
 
@@ -429,24 +377,17 @@ export function stub(p: Parts): Stub {
   put(hex('2239')); ref('seen');                        // move.l seen,d1
   put(hex('23c2')); ref('seen');                        // move.l d2,seen
   put(hex('b481'));                                     // cmp.l d1,d2
-  br(always ? 0x60 : 0x66, 'hold');                     // bne.b hold   (debug env MD_CPU_ALWAYS: bra, cue always shown)
+  br(0x66, 'hold');                                     // bne.b hold
   put(Uint8Array.of(0x76, HF3_MASK), hex('c083'));      // moveq #$10,d3 ; and.l d3,d0
   br(0x66, 'hold');                                     // bne.b hold
   put(hex('2039')); ref('cnt');                         // move.l cnt,d0
-  brw(0x67, dg ? 'quiet' : 'out');                      // beq.w out        (diag: quiet -- digits, no corner)
+  brw(0x67, 'out');                                     // beq.w out
   put(hex('5380'));                                     // subq.l #1,d0
   put(hex('23c0')); ref('cnt');                         // move.l d0,cnt
-  br(0x60, dg ? 'showA' : 'show');                      // bra.b show
+  br(0x60, 'show');                                     // bra.b show
   at('hold');
   put(Uint8Array.of(0x70, HOLD));                       // moveq #HOLD,d0
   put(hex('23c0')); ref('cnt');                         // move.l d0,cnt
-  if (dg) {
-    at('showA');
-    put(hex('7001'), hex('23c0')); ref('act');          // moveq #1,d0 ; move.l d0,act     the cue is up
-    br(0x60, 'show');
-    at('quiet');
-    put(hex('42b9')); ref('act');                       // clr.l act
-  }
   at('show');
   put(hex('2079'), be32(p.site.next));                  // movea.l <next>,a0
   put(hex('43f9')); ref('chk');                         // lea chk,a1
@@ -456,7 +397,7 @@ export function stub(p: Parts): Stub {
   put(hex('7200'), hex('12300800'));                    // moveq #0,d1 ; move.b (a0,d0.l),d1
   put(hex('7400'), hex('1419'), hex('c282'));           // moveq #0,d2 ; move.b (a1)+,d2 ; and.l d2,d1
   put(hex('7400'), hex('1419'), hex('b282'));           // moveq #0,d2 ; move.b (a1)+,d2 ; cmp.l d2,d1
-  (dg ? brw : br)(0x66, 'corner');                      // bne.b corner   (diag: bne.w, the digits sit between)
+  br(0x66, 'corner');                                   // bne.b corner
   put(hex('5383'));                                     // subq.l #1,d3
   br(0x66, 'c');                                        // bne.b c
   put(hex('43f9')); ref('put');                         // lea put,a1
@@ -469,72 +410,8 @@ export function stub(p: Parts): Stub {
   put(hex('11810800'));                                 // move.b d1,(a0,d0.l)
   put(hex('5383'));                                     // subq.l #1,d3
   br(0x66, 'p');                                        // bne.b p
-  if (dg) {
-    // ---- --dsp1-diag: read DSP1's six words over the HI08 (its host command HV 6), draw them
-    put(hex('4feffff0'), hex('48d70c30'));              // lea -16(a7),a7 ; movem.l d4-d5/a2-a3,(a7)
-    put(hex('40c4'), hex('46fc2700'));                  // move.w sr,d4 ; move.w #$2700,sr   one transaction at a time
-    put(hex('45f9')); ref('vals');                      // lea vals,a2
-    put(hex('223c'), be32(dg.first));                   // move.l #<first P word>,d1
-    put(Uint8Array.of(0x76, DIAG_WORDS));               // moveq #6,d3
-    at('rd');
-    put(hex('2a3c'), be32(DIAG_POLLS));                 // move.l #N,d5
-    at('w1');                                           // wait: no host command pending, TX and HRX empty
-    put(hex('7000'), hex('1039'), be32(DSP1_CVR));      // moveq #0,d0 ; move.b CVR,d0
-    put(hex('08000007'));                               // btst #7,d0          HC
-    br(0x66, 'w1n');
-    put(hex('1039'), be32(DSP1_ISR));                   // move.b ISR,d0
-    put(hex('08000000'));                               // btst #0,d0          RXDF: a stale answer --
-    br(0x67, 'w1t');
-    put(hex('2039'), be32(DSP1_TXRX));                  // move.l RX,d0        drained
-    at('w1t');
-    put(hex('1039'), be32(DSP1_ISR));                   // move.b ISR,d0
-    put(hex('08000002'));                               // btst #2,d0          TRDY
-    br(0x66, 'go');
-    at('w1n');
-    put(hex('5385'));                                   // subq.l #1,d5
-    br(0x66, 'w1');
-    brw(0x60, 'rdx');                                   // bra.w <give up>
-    at('go');
-    put(hex('23c1'), be32(DSP1_TXRX));                  // move.l d1,TX        the P address asked for
-    put(hex('7086'), hex('13c0'), be32(DSP1_CVR));      // moveq #$86,d0 ; move.b d0,CVR   HC | HV 6
-    put(hex('2a3c'), be32(DIAG_POLLS));                 // move.l #N,d5
-    at('w2');
-    put(hex('1039'), be32(DSP1_ISR));                   // move.b ISR,d0
-    put(hex('08000000'));                               // btst #0,d0          RXDF
-    br(0x66, 'got');
-    put(hex('5385'));                                   // subq.l #1,d5
-    br(0x66, 'w2');
-    brw(0x60, 'rdx');
-    at('got');
-    put(hex('2039'), be32(DSP1_TXRX), hex('24c0'));     // move.l RX,d0 ; move.l d0,(a2)+
-    put(hex('5281'), hex('5383'));                      // addq.l #1,d1 ; subq.l #1,d3
-    brw(0x66, 'rd');
-    at('rdx');
-    put(hex('46c4'));                                   // move.w d4,sr
-    put(hex('45f9')); ref('vals');                      // lea vals,a2
-    put(hex('43f9')); ref('digits');                    // lea digits,a1
-    put(Uint8Array.of(0x76, DIAG_DIGITS.length));      // moveq #ND,d3
-    at('dg');
-    put(hex('7000'), hex('1019'), hex('22320800'));     // moveq #0,d0 ; move.b (a1)+,d0 ; move.l (a2,d0.l),d1
-    put(hex('7000'), hex('1019'), hex('e0a9'));         // moveq #0,d0 ; move.b (a1)+,d0 ; lsr.l d0,d1
-    put(hex('700f'), hex('c280'));                      // moveq #15,d0 ; and.l d0,d1
-    put(hex('2001'), hex('d081'), hex('d081'));         // move.l d1,d0 ; add.l d1,d0 ; add.l d1,d0     x 3
-    put(hex('47f9')); ref('font');                      // lea font,a3
-    put(hex('d7c0'));                                   // adda.l d0,a3
-    put(hex('7800'), hex('1819'));                      // moveq #0,d4 ; move.b (a1)+,d4   frame byte
-    put(hex('7400'), hex('1419'));                      // moveq #0,d2 ; move.b (a1)+,d2   row shift
-    for (let c = 0; c < 3; c++) {
-      put(hex('7000'), hex('101b'), hex('e5a8'));       // moveq #0,d0 ; move.b (a3)+,d0 ; lsl.l d2,d0
-      put(hex('7200'), hex('12304800'), hex('8280'));   // moveq #0,d1 ; move.b (a0,d4.l),d1 ; or.l d0,d1
-      put(hex('11814800'), hex('5084'));                // move.b d1,(a0,d4.l) ; addq.l #8,d4
-    }
-    put(hex('5383'));                                   // subq.l #1,d3
-    brw(0x66, 'dg');
-    put(hex('4cd70c30'), hex('4fef0010'));              // movem.l (a7),d4-d5/a2-a3 ; lea 16(a7),a7
-  }
   br(0x60, 'out');                                      // bra.b out
   at('corner');
-  if (dg) { put(hex('4ab9')); ref('act'); brw(0x67, 'out'); }   // tst.l act ; beq.w out   (diag: only while the cue is up)
   put(Uint8Array.of(0x70, cueMask()));                  // moveq #mask,d0
   for (let x = CUE.x0; x <= CUE.x1; x++) {
     const off = frameByte(x, 0);
@@ -548,13 +425,6 @@ export function stub(p: Parts): Stub {
   put(hex('4e75'));                                     // rts
   const codeBytes = n;
   for (const name of ['seen', 'cnt', 'latch', 'tsave']) { at(name); put(be32(0)); }
-  if (dg) {
-    at('act'); put(be32(0));
-    at('vals'); for (let k = 0; k < DIAG_WORDS; k++) put(be32(0));
-    at('digits');
-    put(Uint8Array.from(DIAG_DIGITS.flatMap((d) => { const [off, sh] = digitPlace(d.x, d.row); return [4 * d.word, d.shift, off, sh]; })));
-    at('font'); put(Uint8Array.from(FONT));
-  }
   at('chk'); put(Uint8Array.from(chk.flat()));
   at('put'); put(Uint8Array.from(pt.flat()));
   if (n % 2) put(Uint8Array.of(0));

@@ -1,7 +1,6 @@
 """Author the Noise Plethora DSP port; the importer never executes this file.
 
 Writes a source directory (model.json, dsp2.asm, tables.asm) for packs/assembly_export.py.
---development writes a separate EX/NPDEV model for experiments, under its own key and name.
 Derived synthesis graphs: Befaco Noise Plethora, GPL-3.0-or-later.
 """
 import argparse
@@ -655,17 +654,8 @@ pw_end:
     return result
 
 
-def sine_a(fast=False):
+def sine_a():
     """A1 phase -> interpolated sine in A; B/r0/r4 are preserved."""
-    if fast:
-        return '''    add #>$800,a
-    asr #12,a,a
-    and #>$fff,a
-    add #>fast_sine,a
-    move a1,r5
-    nop
-    move y:(r5),a
-'''
     # The shared sine (filt_sine1k): 1,024 points, phase>>14.
     return '''    asr #14,a,a
     and #>$3ff,a
@@ -766,24 +756,9 @@ basura_square_end:
 '''
 
 
-def fm_scale(tag, fast=False, double_depth=False):
+def fm_scale(tag, double_depth=False):
     # Match the original 16-bit modulation input and default eight-octave depth.
     # The table preserves the original de Soras quadratic, not an ideal exp2.
-    if fast:
-        assert not double_depth  # Experimental table covers only +/-8 octaves.
-        return '''    move a,x0
-    move y:(r6+$11),y0
-    mpy x0,y0,a
-    add #>$800,a
-    asr #12,a,a
-    add #>fast_fm+2048,a
-    move a1,r5
-    nop
-    move y:(r5),a
-    move a1,y:(r6+$13)
-    move #>8,x1
-    move x1,y:(r6+$12)
-'''
     return '''    move a,x0
     move y:(r6+$11),y0
     mpy x0,y0,a
@@ -987,7 +962,7 @@ crx_end:
 '''
 
 
-def fm_clusters(fast=False, voices=6):
+def fm_clusters():
     # crCluster2 is a common-modulator program (cr_cluster2). sineFM/TriFM keep six
     # independent parabolic-sine-modulated exponential FM pairs with triangle carriers.
     # The original modulator rates are ratio_i * rate_0, so modulator phases are k_i/256
@@ -1094,7 +1069,7 @@ def fm_clusters(fast=False, voices=6):
     return result
 
 
-def prime_clusters(fast=False):
+def prime_clusters():
     # Sixteen prime partials share one white-noise exponential FM factor, so partial i's
     # phase is prime_i * (one 48-bit phase, X/Y$20).  Each partial is a squared-phase
     # (parabolic) wave, two instructions; a 24-bit Lehmer generator (Y$1f) supplies the
@@ -1161,7 +1136,7 @@ def prime_clusters(fast=False):
     return result
 
 
-def phasing_cluster(fast=False):
+def phasing_cluster():
     """16 squares, each slowly detuned by its own triangle LFO (0.1-17 Hz, +/-0.04 octave).
 
     The LFOs and their (linearised) exponential detune run once per 32-sample block. Per sample
@@ -1261,7 +1236,7 @@ basurilla_end:
 '''
 
 
-def array_rocks(fast=False):
+def array_rocks():
     # FM group: parabolic-sine modulator, direct 2^x lookup, phases in r1/r3 and the
     # carrier step applied one sample later (in n3, saved in Y$24).
     # Y$21 depth, $22 carrier step, $23 per-track random; Y$20/$30 phases.
@@ -1519,7 +1494,7 @@ FILT_SVF_FMAX=q(.8)          # f <= 1.6 keeps the q=1/4 Chamberlin recurrence st
 
 
 @filt_shortened
-def filter_programs(fast=False):
+def filter_programs():
     # Four swept Chamberlin band-passes on a S&H-noise or 10% pulse source.
     # One pass per sample (f stored halved, band state doubled), coefficients
     # computed once per block from the LFO and ramped linearly across it.
@@ -3290,15 +3265,11 @@ def check_do_ends(source):
             labels=[]
 
 
-def generate(destination, development=False, fast_fm=False, fm_voices=6):
-    if fm_voices not in (4,5,6) or (fm_voices!=6 and not development):
-        raise SystemExit('Four/five-carrier variants are development experiments only')
-    if fast_fm and not development:
-        raise SystemExit('Approximate FM remains a development experiment')
+def generate(destination):
     missing=[name for name in PROGRAMS if name not in IMPLEMENTED]
-    if missing and not development:
+    if missing:
         raise SystemExit('Full catalog is incomplete; remaining: '+', '.join(missing))
-    names=list(IMPLEMENTED) if missing else PROGRAMS
+    names=PROGRAMS
     tables={
       'pitch':[q(2**((k-64)/32)/4) for k in range(128)],
       'attack':[q(1 if k==0 else min(1,32/(44100*(.001*1000**(k/127))))) for k in range(128)],
@@ -3431,16 +3402,6 @@ def generate(destination, development=False, fast_fm=False, fm_voices=6):
         tables['pink_fir'+tag]=[int(sum(2048*c*(2*((n>>i)&1)-1) for i,c in enumerate(coefficients))) for n in range(64)]
     tables.update(fm_group_tables())
     tables.update(filt_tables())
-    if fast_fm:
-        tables['fast_sine']=[sine[i//16]+((sine[i//16+1]-sine[i//16])*(i%16)//16) for i in range(4096)]
-        values=[]
-        for sample in range(-32768,32769,16):
-            exponent=(sample>>12)+1
-            n=(((sample&4095)<<15)+134217728)<<3
-            n=(n*n+(1<<31))>>32
-            n=(((n*715827883+(1<<31))>>32)<<3)+715827882
-            values.append(q((n/(1<<31))*2**exponent/256))
-        tables['fast_fm']=values
     source=header()+lookup(4,'pitch','x0')+'    move x0,y:(r6+$d)\n'
     # Select and reset program-local state when switching graphs, preserving the envelope.
     # Table dispatch: a compare chain fetched up to ~230 code words per block for late modes,
@@ -3463,7 +3424,7 @@ dispatch_table:
 """
     for name in names:
         source+=f'    jmp {name}\n'
-    source+='\n'.join(control_block(name) for name in names if name in ('clusterSaw','FibonacciCluster','partialCluster'))+'\n'+saw_cluster()+'\n'+sample_hold()+'\n'+pulse_cluster()+'\n'+fm_clusters(fast_fm,fm_voices)+'\n'+basura_total()+'\n'+prime_clusters(fast_fm)+'\n'+phasing_cluster(fast_fm)+'\n'+basurilla()+'\n'+array_rocks(fast_fm)+'\n'+walking_filomena()+'\n'+filter_programs(fast_fm)+'\n'+feedback_programs()+'\n'+resonoise()+'\n'+bitcrush_walk()+'\n'+lfree_walk()+'\n'+satan_workout()+'\n'+sine_fm_flange()+'\n'+granular_programs()+'\n'+pi_prepare()+'\n'+common_output()+reset_program(names)
+    source+='\n'.join(control_block(name) for name in names if name in ('clusterSaw','FibonacciCluster','partialCluster'))+'\n'+saw_cluster()+'\n'+sample_hold()+'\n'+pulse_cluster()+'\n'+fm_clusters()+'\n'+basura_total()+'\n'+prime_clusters()+'\n'+phasing_cluster()+'\n'+basurilla()+'\n'+array_rocks()+'\n'+walking_filomena()+'\n'+filter_programs()+'\n'+feedback_programs()+'\n'+resonoise()+'\n'+bitcrush_walk()+'\n'+lfree_walk()+'\n'+satan_workout()+'\n'+sine_fm_flange()+'\n'+granular_programs()+'\n'+pi_prepare()+'\n'+common_output()+reset_program(names)
     source=remap_controls(source).replace(BANDPASS_SLOT,bandpass())
     tables.update(bandpass_tables())
     captions={'clusterSaw':('SAW','FREQ','SPRD'),'FibonacciCluster':('FIB','FREQ','SPRD'),'partialCluster':('PART','FREQ','SPRD'),
@@ -3480,25 +3441,20 @@ dispatch_table:
               'Rwalk_LFree':('LFRE','BND','SMTH'),'satanWorkout':('SATN','FREQ','PWMD'),
               'Rwalk_SineFMFlange':('FLNG','FREQ','RATE'), 'grainGlitch':('GRN1','FREQ','GRAI'),
               'grainGlitchII':('GRN2','FREQ','GRAI'),'grainGlitchIII':('GRN3','FREQ','GRAI')}
-    panel={'name':('NPFST' if fast_fm else 'NPDEV') if development else 'NZEPL','category':'NP',
+    panel={'name':'NZEPL','category':'NP',
       'knobs':[{'label':label,'default':value} for label,value in KNOBS],
       # MODE (knob 2) selects the program and relabels itself and the program's X/Y knobs.
       'modes':[{'knob':2,'zones':[{'min':math.ceil(i*128/len(names)),'max':math.ceil((i+1)*128/len(names))-1,
           'labels':dict(zip(('2','3','4'),captions[name]))} for i,name in enumerate(names)]}]}
-    if fm_voices!=6:
-        panel['name']=f'NPFM{fm_voices}'
-    manifest={'format':'md-model/1','key':('EX/NPFAST' if fast_fm else 'EX/NPDEV') if development else 'NZE/PL',
-      # the release's key until 2026-10-06 stays an alias, so layouts saved with it still find the model
-      **({} if development or fm_voices!=6 else {'aliases':['NP/PLETHORA']}),'version':'0.1.0','kit_abi':1,
+    manifest={'format':'md-model/1','key':'NZE/PL',
+      # the former key stays an alias, so layouts saved with it still find the model
+      'aliases':['NP/PLETHORA'],'version':'0.1.0','kit_abi':1,
       'injection':{'mode':'add'},'panel':panel,'components':{'dsp2':{'source':'dsp2.asm','tables':'tables.asm','abi':'md-voice/1'}},
       'memory':[{'kind':'voice','space':'XY','words':64,'alignment':64,'lifetime':'track-assignment','init':'model','release':'successor-init'},
                 {'kind':'pi','space':'XY','words':1536,'alignment':512,'lifetime':'track-assignment','init':'chunked-muted','release':'plain-audio'}],
-      # Development claim reflects the measured prototype cost, not the <129 target.
-      'samples':[],'budget':{'render_cps':5000 if development else 129,'trigger_cycles':100,'init_cycles':300},
+      'samples':[],'budget':{'render_cps':129,'trigger_cycles':100,'init_cycles':300},
       'provenance':[{'origin':'Befaco Noise Plethora, original banks A-C','license':'GPL-3.0-or-later',
        'reference':'https://github.com/Befaco/Noise_plethora/tree/'+CATALOG['upstream_revision']}]}
-    if fm_voices!=6:
-        manifest['key']=f'EX/NPFM{fm_voices}'
     check_do_ends(source)
     destination.mkdir(parents=True,exist_ok=False)
     (destination/'model.json').write_text(json.dumps(manifest,indent=2)+'\n')
@@ -3511,15 +3467,11 @@ dispatch_table:
     (destination/'reference-tables.json').write_text(json.dumps(reference)+'\n')
     for notice in ('COPYING','TEENSY-NOTICE.txt'):
         (destination/notice).write_bytes(Path(__file__).with_name(notice).read_bytes())
-    (destination/'development.json').write_text(json.dumps({'complete':not missing,'implemented':names,'remaining':missing,'fast_fm':fast_fm,'fm_voices':fm_voices},indent=2)+'\n')
-    print(json.dumps({'destination':str(destination),'implemented':names,'remaining':len(missing)}))
+    print(json.dumps({'destination':str(destination),'implemented':names}))
 
 
 if __name__=='__main__':
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--out',required=True,type=Path)
-    ap.add_argument('--development',action='store_true')
-    ap.add_argument('--fast-fm',action='store_true',help='separate approximate FM/sine lookup experiment')
-    ap.add_argument('--fm-voices',type=int,choices=(4,5,6),default=6,help='experimental FM carrier count; original remains six')
     args=ap.parse_args()
-    generate(args.out,args.development,args.fast_fm,args.fm_voices)
+    generate(args.out)

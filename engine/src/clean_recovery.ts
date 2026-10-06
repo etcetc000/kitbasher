@@ -21,10 +21,9 @@ export function currentFirmwareFixes(): Pick<Selection,'ctrControlAll'|'features
 /** Expand --clean-recovery into the recovery options it implies; throws on a conflicting option. */
 export function recoveryFeatures(f: Features = {}): Features {
   if(!f.cleanRecovery)return f;
-  if(f.dsp1Recover===false || f.dsp1Realign || f.dsp1Diag ||
-     (f.dsp1RecoverVariant!==undefined && f.dsp1RecoverVariant!=='ordered'))
-    throw new Error('Clean recovery requires ordered recovery without codec realignment or diagnostic display');
-  return {...f,dsp1Recover:true,dsp1Realign:false,dsp1RecoverVariant:'ordered',cpuIndicator:f.cpuIndicator??true};
+  if(f.dsp1Recover===false)
+    throw new Error('Clean recovery requires ordered recovery (do not combine it with --no-dsp1-recover)');
+  return {...f,dsp1Recover:true,cpuIndicator:f.cpuIndicator??true};
 }
 /** A DSP upload's memory in one space (0 P, 1 X, 2 Y) as the loader leaves it. */
 export function memory(words:number[],space=0):Map<number,number> {

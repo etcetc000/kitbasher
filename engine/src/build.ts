@@ -53,14 +53,6 @@ import {recoveryFeatures,patchRetirement,cleanDsp1Records,cleanDsp1Sites,checkCl
 export interface BuildOptions extends Selection {
   trim: TrimOptions;
   /**
-   * Emulator only, never to be flashed: fill the ColdFire RAM after the RAM image up to `image`
-   * and after the label segment up to `labels` with the sentinel 0x5a5a5a5a, so a RAM probe can
-   * see whether anything else writes there. The window gate is lifted.
-   */
-  ramProbe?: { image: number; labels: number };
-  /** Emulator only, never to be flashed: the base's free DSP2 regions filled with 0x5a5a5a (no machines) */
-  dsp2Probe?: boolean | [number, number][];
-  /**
    * Debug: raise DSP1's DMA0 overrun watchdog from 3 consecutive missed frames to this many, by
    * rewriting the one immediate the count lives in (engine/src/watchdog.ts). A machine that costs
    * too much then glitches through up to N-1 late blocks instead of halting DSP1 until the unit is
@@ -98,7 +90,7 @@ export interface BuildReport {
   dsp2: { packed: number; base_packed: number; packed_capacity: number | null; raw: number; regions: [string, string][]; machine_words: number; free_words: number;
           /** words spent on instruction-cache alignment that nothing else took (0 with --no-align) */
           align_padding: number; aligned: number };
-  ext: { base: string; bytes: number; limit: number; free: number; probe_fill: number; lev_stub: string | null };
+  ext: { base: string; bytes: number; limit: number; free: number; lev_stub: string | null };
   /** machines not on their preferred ID: empty unless the build allowed moves */
   id_moves: { name: string; preferred: number; id: number; why: string }[];
   /** run-time data machines read that the firmware does not carry, one line each */
@@ -226,11 +218,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
        (c.missed.length ? `; not in the profile: ${c.missed.map(h).join(', ')}` : '') +
        (c.extra.length ? `; listed but not a CTR-range test: ${c.extra.map(h).join(', ')}` : ''));
   const regions = pl.dsp2.regions;
-  // Emulator only (dsp2Probe): no machines, the base's free DSP2 regions filled with the sentinel
-  // 0x5a5a5a, so an emulator RAM probe can see whether anything of the base writes there.
-  if (opt.dsp2Probe && sel.length) throw new Error('a DSP2 probe image carries no machines (--families none)');
-  const probeRanges = opt.dsp2Probe === true ? D.freeRegions : opt.dsp2Probe || [];
-  const dspRecords = opt.dsp2Probe ? probeRanges.map(([a, b]) => [a, new Array(b - a).fill(0x5a5a5a)] as [number, number[]]) : pl.dsp2.records;
+  const dspRecords = pl.dsp2.records;
 
   // ---- DSP2: the trimmed bank in place of the stock one (one record where the base may have had
   //      several back to back), the added records before the entry record
@@ -297,7 +285,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   const wdBase = wdN === undefined ? null : setWatchdog(baseW1, wdN);
   // --dsp1-recover: a replacement DMA0 handler in DSP1's free program RAM, and the vector's target
   // word pointed at it (engine/src/recover.ts). Off by default.
-  const rec = opt.features?.dsp1Recover ? recoverRecords(wdHalt(wordsLE(d1.raw)), !!opt.features?.dsp1Realign, REC.VARIANTS[opt.features?.dsp1RecoverVariant ?? 'v8'], !!opt.features?.dsp1Diag) : null;
+  const rec = opt.features?.dsp1Recover ? recoverRecords(wdHalt(wordsLE(d1.raw)), !!opt.features?.cleanRecovery) : null;
   if (pl.ram.dsp1) {
     const D = base.features.dsp1Drive!;
     const conflicts = drivePlacementProblems(baseW1, pl.ram.dsp1.link, D.hook, D.ret,
@@ -319,7 +307,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
       gate('dsp1-watchdog (debug: overruns glitch instead of halting)', wc.ok, wc.detail);
     }
     if (rec) {
-      const rc = checkRecover(baseW1, wordsLE(newDsp1), pl.ram.dsp1?.link ?? null, wordsLE(d2.raw), wordsLE(newDsp2), !!opt.features?.dsp1Realign, REC.VARIANTS[opt.features?.dsp1RecoverVariant ?? 'v8'], !!opt.features?.dsp1Diag,opt.features?.cleanRecovery?cleanDsp1Sites():[]);
+      const rc = checkRecover(baseW1, wordsLE(newDsp1), pl.ram.dsp1?.link ?? null, wordsLE(d2.raw), wordsLE(newDsp2), !!opt.features?.cleanRecovery, opt.features?.cleanRecovery?cleanDsp1Sites():[]);
       gate('dsp1-recover', rc.ok, rc.detail);
     }
     if(opt.features?.cleanRecovery) {
@@ -379,14 +367,12 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   const ram = pr.ram;
   img.push(ram.flashBlock);
   const E = base.ext.base;
-  const probe = opt.ramProbe;
-  const fill = (b: Uint8Array, to: number): Uint8Array => concat([b, new Uint8Array(Math.max(0, to - b.length)).fill(0x5a)]);
-  const extBytes = probe ? fill(ram.image, probe.image - base.ext.base) : ram.image;
+  const extBytes = ram.image;
   const ext = { length: extBytes.length, bytes: () => extBytes };
   const { descs, family, levStub } = ram;
   const inRange = (r: [number, number]): boolean => ids.some((v) => v >= r[0] && v <= r[1]);
   const lev = O.levBar;
-  gate(probe ? 'ext-ram (RAM probe: emulator only)' : 'ext-ram', ext.length % 4 === 0 && (probe ? E + ram.bytes <= base.ext.end : E + ext.length <= base.ext.end),
+  gate('ext-ram', ext.length % 4 === 0 && E + ext.length <= base.ext.end,
        `RAM image ${ext.length.toLocaleString('en')} of ${(base.ext.end - E).toLocaleString('en')} bytes ` +
        `(${h(E)}..${h(E + ext.length)}, the base's window ends at ${h(base.ext.end)}: ${base.qualification.level === 'hardware-proven' ? 'hardware-proven on this base' : 'free by discovery, not hardware-proven on this base'})` +
        (ram.flashBlock.length ? `; ${pr.features.descFlash.length} descriptors in flash at ${h(alias + flashAt)}` : ''));
@@ -396,7 +382,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   if (ram.dyn) {
     gate('dyn-segment', ram.dyn.blob.length % 4 === 0 && ram.dyn.blob.length <= ram.dyn.limit,
          `dynamic-label segment ${h(ram.dyn.base)}..${h(ram.dyn.base + ram.dyn.blob.length)} of ${ram.dyn.limit} bytes`);
-    const blob = probe ? fill(ram.dyn.blob, probe.labels - ram.dyn.base) : ram.dyn.blob;
+    const blob = ram.dyn.blob;
     // Use the remaining OS tail for this independently copied segment when it
     // fits together with the layout, leaving more DSP2 padding for the host payload.
     const dynHome = reclaimTail && ((container.length + 3) & ~3) + blob.length + encodeLayout(layout).length <= OS_LIMIT
@@ -544,7 +530,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
       equal(image.subarray(flashAt, flashAt + ram.flashBlock.length), ram.flashBlock) &&
       equal(image.subarray(extSrc, extSrc + ext.length), ext.bytes()) &&
       (!segment || equal(image.subarray(segment[0], segment[0] + segment[2] * 4),
-        probe ? fill(ram.dyn!.blob, probe.labels - ram.dyn!.base) : ram.dyn!.blob)),
+        ram.dyn!.blob)),
       `host payload ${h(payloadAt)}..${h(payloadEnd)} lies after the decoded DSP2 stream; checksum, descriptors and boot-copy sources read back unchanged`);
   }
   {
@@ -650,7 +636,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     dsp2: { packed: comp.length - (keep ? pad : 0), base_packed: d2.length, packed_capacity: keep ? room - (reclaimTail ? payloadEnd - streamEnd : 0) : null, raw: newDsp2.length, regions: regions.map(([a, b]) => [h(a), h(b)]),
             machine_words: pl.dsp2.capacity - pl.dsp2.free, free_words: pl.dsp2.free,
             align_padding: pl.dsp2.padding, aligned: pl.dsp2.machines.filter((m) => m.align).length },
-    ext: { base: h(E), bytes: ram.bytes, limit: base.ext.end - E, free: base.ext.end - E - ram.bytes, probe_fill: ext.length - ram.bytes, lev_stub: levStub === null ? null : h(levStub) },
+    ext: { base: h(E), bytes: ram.bytes, limit: base.ext.end - E, free: base.ext.end - E - ram.bytes, lev_stub: levStub === null ? null : h(levStub) },
     id_moves: pl.moves.map((m) => ({ name: m.name, preferred: m.preferred, id: m.id, why: m.why })),
     needs: sel.flatMap((s) => needLines(s.m)),
     pi_clean: pl.piClean ? { org: h(pl.piClean.org), words: pl.piClean.words, span: [h(pl.piClean.span.offset), pl.piClean.span.words],
@@ -703,7 +689,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     args: { trim_db: opt.trim.db, trim_min: opt.trim.minSeconds, trim_cap: opt.trim.cap, dsp1_drive: [], no_overlay: true,
             no_dyn_labels: !ram.dyn, clock_fix: false, host_reorder: !!ram.hostSend,
             ...(wdN === undefined ? {} : { dsp1_watchdog: wdN }),
-            ...(rec === null ? {} : { dsp1_recover: true, ...(opt.features?.dsp1Realign ? { dsp1_realign: true } : {}) }),
+            ...(rec === null ? {} : { dsp1_recover: true }),
             ...(ram.indicator === null ? {} : { cpu_indicator: true }),
             ...(opt.ctrControlAll ? { ctr_control_all: true } : {}) },
     // present only with --host-reorder: the reordered DSP2 host-command sender, so a checker can
@@ -717,10 +703,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
                                                     from: h(wdBase!.from), to: h(wdBase!.to) } }),
     // present only with --dsp1-recover: the DSP1 records this option adds, so a checker can allow
     // them and verify them
-    ...(rec === null ? {} : { dsp1_recover: { handler: h(REC.handlerAt(!!opt.features?.dsp1Realign, REC.VARIANTS[opt.features?.dsp1RecoverVariant ?? 'v8'], !!opt.features?.dsp1Diag)), words: REC.handlerWords(!!opt.features?.dsp1Realign, REC.VARIANTS[opt.features?.dsp1RecoverVariant ?? 'v8'], !!opt.features?.dsp1Diag),
-                                              diag: !!opt.features?.dsp1Diag,
-                                              variant: opt.features?.dsp1RecoverVariant ?? 'v8',
-                                              realign: !!opt.features?.dsp1Realign,
+    ...(rec === null ? {} : { dsp1_recover: { handler: h(REC.handlerAt(!!opt.features?.cleanRecovery)), words: REC.handlerWords(!!opt.features?.cleanRecovery),
                                               window: [h(0xa08), h(REC.P_FREE_END)],
                                               vector: h(REC.VECTOR), scratch: h(REC.SCRATCH),
                                               base_handler: h(findWatchdog(baseW1).at),

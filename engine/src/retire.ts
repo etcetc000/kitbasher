@@ -1,4 +1,4 @@
-// Experimental DSP2 block-boundary overload policy. DDR1 ($ffffea) is the
+// DSP2 block-boundary overload policy (--clean-recovery). DDR1 ($ffffea) is the
 // continuously running 256-word codec-input ring, not DDR2 ($ffffe6), which
 // the stock handshake resets. One rendered block should advance 64 input words.
 import { Emit } from './dsp_emit.js';

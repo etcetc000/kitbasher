@@ -1,8 +1,8 @@
-// --dsp1-recover's 'ordered' variant, executed: the handler's own words run through a small
+// The ordered DSP1 recovery handler (--clean-recovery), executed: its own words run through a small
 // DSP56300 interpreter (the same model as recover.test.ts, extended with M0 and with a nested long
 // interrupt injected at a chosen instruction boundary).
 //
-// It checks the two hazards the variant exists for: a nested interrupt landing between the stack
+// It checks the two hazards the ordering exists for: a nested interrupt landing between the stack
 // pop and push (which would replace the popped frame's SSL), and an interrupted context running with
 // modulo addressing in M0 (which would wrap the output clear early).
 
@@ -220,7 +220,7 @@ test('ordered: nested long interrupts cannot replace SSL while a frame is popped
   bad.injectAt=old.resync+2; // first instruction after SSH was popped
   irq(bad,old.at,0x75,false);
   assert.equal(bad.srOut,SR_IN_HANDLER,'control reproduces the unprotected SSL overwrite');
-  const h=R.handler(R.handlerAt(false,R.VARIANTS.ordered),0,false,R.VARIANTS.ordered);
+  const h=R.handler(R.handlerAt(true),0,true);
   // Every eligible instruction in both guard paths and the long resync interval.
   for(const path of ['miss','heal'] as const) for(let site=h.at;site<h.at+h.words.length;site++){  // the shared drain too
     const c=cpu(h.words,h.at);c.X.set(0x647,1);c.ddr4=0x7ff;
@@ -232,13 +232,13 @@ test('ordered: nested long interrupts cannot replace SSL while a frame is popped
 });
 
 test('ordered: interrupted modulo addressing cannot truncate the mute, and M0 survives every exit',()=>{
-  for(const name of ['v10','ordered']){
-    const h=R.handler(R.handlerAt(false,R.VARIANTS[name]),0,false,R.VARIANTS[name]);
+  for(const name of ['plain','ordered']){
+    const h=R.handler(R.handlerAt(name==='ordered'),0,name==='ordered');
     const c=cpu(h.words,h.at);c.m0=31;c.r0=0x123;c.a=0x123456789abcn;
     for(let a=0x400;a<0x580;a++)c.X.set(a,0x123456);
     c.X.set(0x647,1);irq(c,h.at,0x3c);
     const remaining=Array.from({length:384},(_,k)=>c.X.get(0x400+k)).filter(v=>v!==0).length;
-    assert.equal(remaining,name==='v10'?352:0);
+    assert.equal(remaining,name==='plain'?352:0,'the plain handler, the control, wraps at M0');
     assert.equal(c.m0,31);
     if(name==='ordered'){
       for(const pc of [0x3c,0x75,0x288]){

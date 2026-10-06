@@ -1,11 +1,10 @@
 // --dsp1-recover: the handler's words, executed, and the DSP1 <-> DSP2 link they act on.
 //
-// Three layers, all on the exact words recover.ts emits (no firmware files needed):
+// Two layers, both on the exact words recover.ts emits (no firmware files needed):
 //
 //  1. An interpreter for the ~30 DSP56300 encodings the handler uses runs it the way DSP1's DMA0
 //     interrupt does: return address on the system stack, the registers it saves and restores, the
-//     X/Y/P words and the I/O registers it touches (HCR, DDR4, DCR4, DSTR; with a codec model ESSI1
-//     and the codec DMAs).
+//     X/Y/P words and the I/O registers it touches (HCR, DDR4, DCR4, DSTR).
 //  2. A model of the audio path's block protocol, built from the base's own code: DSP1's main loop
 //     (P:$3c half wait, the per-track wait P:$73..$79, P:$270's re-arm-and-toggle at slot 15,
 //     P:$294 and the X:$647 clear), DSP2's block loop (a track rendered, its 32-word ESSI0 send, the
@@ -14,18 +13,8 @@
 //     on the DSP56303. The handler is run by the interpreter on every DMA0 interrupt. What is
 //     measured is which word of DSP2's stream lands in each of DSP1's sixteen 32-word mixer slots.
 //
-//  3. A model of the codec link as DSP1's power-on sets it up (P:$100080..$1000d4): ESSI1
-//     delivering a word every time slot, two slots a frame, RFS set on the first; DMA0 taking one
-//     word per request into X:$100..$17f, 128 a block, DE cleared at the block end and re-armed by
-//     the handler; DMA1 sending one 3-word line per request out of X:$400..$57f in its 3D mode, DE
-//     cleared every 16 passes and re-armed by its fast interrupt P:$1a. The handler runs on every
-//     DMA0 block end, with the codec advancing under it cycle by cycle, so its snapshot and its
-//     realign meet real word arrivals. What is measured is the alignment power-on establishes and
-//     the main loop depends on: DSR1 at every DMA0 block end, and the slot of the word it ended on.
-//
-// Three earlier handler revisions are kept as word-for-word fixtures, so the models can show the
-// failure each one has: v3 resyncs on the first missed frame, v4 also zeroes the voice feed back to
-// back, and v5 idles DMA4 with a `do` loop between the stack pop and push.
+// The ordered handler (--clean-recovery) uses M0 and a nested-interrupt model; engine/test/
+// ordered_recovery.test.ts runs it.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -54,8 +43,7 @@ interface Cpu {
   dcr4: number; cflag: boolean;
   /** per cycle: the internal X/Y 256-word bank the handler touched, or null */
   trace: (string | null)[];
-  /** the codec link (ESSI1 + DMA0 + DMA1), when a test models it; the interrupt mask state */
-  codec?: Codec;
+  /** the interrupt mask state */
   masked: boolean;
   /** every PC the handler executed, for the inertness checks */
   pcs: number[];
@@ -73,10 +61,9 @@ const cmp = (c: Cpu, s: bigint): void => { const d = c.a - s; c.n = d < 0n; c.z 
 const flags = (c: Cpu): void => { c.n = c.a < 0n; c.z = c.a === 0n; };
 const disp = (w: number): number => { const v = ((w >> 6) & 0xf) << 5 | (w & 0x1f); return v & 0x100 ? v - 0x200 : v; };
 
-/** X-space reads: HCR, DDR4, DSTR, and (with a codec) ESSI1 and the codec DMAs; memory otherwise. */
+/** X-space reads: HCR, DDR4, DSTR; memory otherwise. */
 function rd(c: Cpu, a: number): number {
   if (a === 0xffffc2) return c.hcr;
-  if (c.codec) { const v = c.codec.read(a, c); if (v !== undefined) return v; }
   if (a === 0xffffde) return c.ddr4;
   if (a === 0xfffff4) return 0x3f & ~(c.dcr4 & 0x800000 ? 0x10 : 0);   // DTD0..5, DTD4 from DCR4's DE
   return c.X.get(a) ?? 0;
@@ -85,7 +72,6 @@ function wr(c: Cpu, a: number, v: number): void {
   if (a === 0xffffc2) { c.hcr = v; return; }
   if (a === 0xffffdc) { c.dcr4 = v; return; }
   if (a === 0xffffec) c.dcr0 = v;
-  if (c.codec && c.codec.write(a, v)) return;
   c.X.set(a, v);
 }
 
@@ -179,7 +165,6 @@ function run(c: Cpu, pc: number): void {
     c.cycles += two ? 2 : 1;
     c.trace.push(acc);
     if (two) c.trace.push(null);
-    c.codec?.advance(two ? 2 : 1, c);
     const top = loops[loops.length - 1];
     if (top && pc === top.la && next === pc + 1) {
       if (--top.left > 0) next = top.top; else { loops.pop(); endLoop(); }
@@ -224,57 +209,8 @@ function irq(c: Cpu, at: number, pc: number, checkSr = true): number {
   return c.ssh;
 }
 
-const CUR = R.handler(R.HANDLER_AT, 0);   // the current default handler
+const CUR = R.handler(R.HANDLER_AT, 0);   // the plain --dsp1-recover handler
 
-// The v3 handler word for word: 81 words at P:$baf.
-const V3_AT = 0xbaf;
-const V3 = [
-  0x527000, 0x000646, 0x547000, 0x000645, 0x507000, 0x000644, 0x08f4ac, 0xc861c0, 0x56f000, 0x000647,
-  0x014180, 0x014285, 0x05141a, 0x0a82a4, 0x000bc7, 0x567000, 0x000647, 0x54f000, 0x000645, 0x52f000,
-  0x000646, 0x50f000, 0x000644, 0x000004, 0x607000, 0x000642, 0x60f400, 0x000400, 0x200013, 0x068081,
-  0x000bce, 0x565800, 0x014180, 0x60f000, 0x000642, 0x08f482, 0x00000c, 0x050fca, 0x08f482, 0x00001c,
-  0x607000, 0x000642, 0x60f400, 0x000400, 0x200013, 0x068081, 0x000bde, 0x565800, 0x60f400, 0x000600,
-  0x060082, 0x000be3, 0x5e5800, 0x044cfc, 0x0140c5, 0x000073, 0x059406, 0x0140c5, 0x00007a, 0x051403,
-  0x54f400, 0x00002e, 0x04ccfc, 0x56f000, 0x000647, 0x014180, 0x014385, 0x059403, 0x200013, 0x014380,
-  0x567000, 0x000647, 0x60f000, 0x000642, 0x54f000, 0x000645, 0x52f000, 0x000646, 0x50f000, 0x000644,
-  0x000004,
-];
-const v3Words = (): number[] => V3;
-// The v4 handler word for word: 115 words at P:$b8d (it zeroes the feed too).
-const V4_AT = 0xb8d;
-const V4W = [
-  0x527000, 0x000646, 0x547000, 0x000645, 0x507000, 0x000644, 0x08f4ac, 0xc861c0, 0x56f000, 0x000647,
-  0x014180, 0x014285, 0x05141f, 0x0a82a4, 0x000ba5, 0x567000, 0x000647, 0x54f000, 0x000645, 0x52f000,
-  0x000646, 0x50f000, 0x000644, 0x000004, 0x00fcb8, 0x607000, 0x000642, 0x60f400, 0x000400, 0x200013,
-  0x068081, 0x000bad, 0x565800, 0x07708c, 0x000bfd, 0x07708c, 0x000bfe, 0x014180, 0x60f000, 0x000642,
-  0x08f482, 0x00000c, 0x050fc5, 0x00fcb8, 0x08f482, 0x00001c, 0x607000, 0x000642, 0x60f400, 0x000400,
-  0x200013, 0x068081, 0x000bc2, 0x565800, 0x60f400, 0x000600, 0x060082, 0x000bc7, 0x5e5800, 0x077084,
-  0x000bff, 0x07f084, 0x000bfd, 0x084e1e, 0x07708c, 0x000bfd, 0x200045, 0x07f08e, 0x000bfe, 0x05a403,
-  0x200013, 0x050c06, 0x014180, 0x014385, 0x059403, 0x200013, 0x014380, 0x07708c, 0x000bfe, 0x07f084,
-  0x000bff, 0x014385, 0x05940c, 0x200013, 0x044cfc, 0x0140c5, 0x000073, 0x059406, 0x0140c5, 0x00007a,
-  0x051403, 0x54f400, 0x00002e, 0x04ccfc, 0x56f000, 0x000647, 0x014180, 0x014385, 0x059403, 0x200013,
-  0x014380, 0x567000, 0x000647, 0x60f000, 0x000642, 0x54f000, 0x000645, 0x52f000, 0x000646, 0x50f000,
-  0x000644, 0x000004, 0x000000, 0x000000, 0x000000,
-];
-
-// The v5 handler word for word: 132 words at P:$b7c.
-const V5W_AT = 0xb7c;
-const V5W = [
-  0x527000, 0x000646, 0x547000, 0x000645, 0x507000, 0x000644, 0x08f4ac, 0xc861c0, 0x56f000, 0x000647,
-  0x014180, 0x014285, 0x05144b, 0x0a82a4, 0x000b94, 0x567000, 0x000647, 0x54f000, 0x000645, 0x52f000,
-  0x000646, 0x50f000, 0x000644, 0x000004, 0x00fcb8, 0x607000, 0x000642, 0x07f08e, 0x000bff, 0x014180,
-  0x07708c, 0x000bff, 0x014185, 0x05240d, 0x60f400, 0x000400, 0x200013, 0x068081, 0x000ba4, 0x565800,
-  0x000000, 0x07708c, 0x000bfc, 0x07708c, 0x000bfd, 0x014180, 0x014885, 0x059403, 0x08f482, 0x00000c,
-  0x200013, 0x014180, 0x60f000, 0x000642, 0x050f99, 0x00fcb8, 0x08f482, 0x00001c, 0x607000, 0x000642,
-  0x60f400, 0x000400, 0x200013, 0x07708c, 0x000bff, 0x068081, 0x000bc0, 0x565800, 0x000000, 0x077084,
-  0x000bfe, 0x07f084, 0x000bfc, 0x084e1e, 0x07708c, 0x000bfc, 0x200045, 0x07f08e, 0x000bfd, 0x05a403,
-  0x200013, 0x050c06, 0x014180, 0x014385, 0x059403, 0x200013, 0x014380, 0x07708c, 0x000bfd, 0x07f084,
-  0x000bfe, 0x014385, 0x059412, 0x200013, 0x044cfc, 0x0140c5, 0x000073, 0x05940c, 0x0140c5, 0x00007a,
-  0x051409, 0x08f49c, 0x0e52c4, 0x060081, 0x000be6, 0x0bb424, 0x000218, 0x54f400, 0x00002e, 0x04ccfc,
-  0x56f000, 0x000647, 0x014180, 0x014385, 0x059403, 0x200013, 0x014380, 0x567000, 0x000647, 0x60f000,
-  0x000642, 0x54f000, 0x000645, 0x52f000, 0x000646, 0x50f000, 0x000644, 0x000004, 0x000000, 0x000000,
-  0x000000, 0x000000,
-];
 /** The longest run of consecutive cycles in which the handler holds one of the banks a DMA needs:
  *  X:$100..$1ff (DMA0, the codec input), X:$400..$5ff (DMA1, the codec output), X:$600..$6ff
  *  (DMA2's source X:$688), Y:$600..$7ff (DMA4, the DSP2 voice feed). */
@@ -386,18 +322,15 @@ test('recover: the long paths open the interrupt mask before their work; the hea
   assert.ok(c.unmaskedAt >= 0 && c.unmaskedAt <= 24, `heal path unmasks ${c.unmaskedAt} cycles in`);
 });
 
-test('recover: no DMA ever waits on the handler for more than one cycle; v3 and v4 hold DMA4 512 and DMA1 384', () => {
-  for (const [words, at, name] of [[CUR.words, CUR.at, 'current'], [V5W, V5W_AT, 'v5'], [V4W, V4_AT, 'v4'], [V3, V3_AT, 'v3']] as const) {
-    const c = cpu([...words], at);
-    c.X.set(0x647, 1);
-    c.trace = []; irq(c, at, 0x3c);                        // a missed frame
-    const miss = longestHold(c.trace);
-    c.X.set(0x647, 0);
-    c.trace = []; irq(c, at, 0x3c);                        // the heal
-    const heal = longestHold(c.trace);
-    if (name === 'current' || name === 'v5') { assert.ok(miss <= 1 && heal <= 1, `${name} holds a DMA bank ${miss} / ${heal} cycles`); }
-    else { assert.ok(miss >= 256, `${name} holds a DMA bank ${miss} cycles running on a missed frame`); }
-  }
+test('recover: no DMA ever waits on the handler for more than one cycle', () => {
+  const c = cpu([...CUR.words], CUR.at);
+  c.X.set(0x647, 1);
+  c.trace = []; irq(c, CUR.at, 0x3c);                      // a missed frame
+  const miss = longestHold(c.trace);
+  c.X.set(0x647, 0);
+  c.trace = []; irq(c, CUR.at, 0x3c);                      // the heal
+  const heal = longestHold(c.trace);
+  assert.ok(miss <= 1 && heal <= 1, `the handler holds a DMA bank ${miss} / ${heal} cycles`);
 });
 
 test('recover: the resync idles DMA4 (DE off, DTD4 polled) before it hands the stack P:$2e', () => {
@@ -408,15 +341,6 @@ test('recover: the resync idles DMA4 (DE off, DTD4 polled) before it hands the s
   assert.equal(c.dcr4, 0x8e52c4, 'DMA4 untouched while not resyncing');
   assert.equal(irq(c, CUR.at, 0x75), 0x2e);
   assert.equal(c.dcr4, 0x0e52c4, 'DE cleared, every other DCR4 bit as P:$270 armed it');
-});
-
-test('recover v3 resyncs on the first missed frame, whatever DSP2 is doing', () => {
-  const w = v3Words();
-  assert.equal(w.length, 81, 'the 81 words at P:$baf');
-  const c = cpu(w, V3_AT);
-  c.X.set(0x647, 1);
-  c.ddr4 = 0x6e0;
-  assert.equal(irq(c, V3_AT, 0x75), 0x2e);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -460,7 +384,7 @@ interface LinkResult {
  */
 function link(handlerWords: number[] | null, at: number, opts: {
   seconds: number; episodes?: Episode[]; races?: Race[]; baseRender?: number;
-  /** a v3-style re-arm, forced: at the first moment after `at` when DSP1 waits and DSP2 has put exactly
+  /** a re-arm off the block boundary, forced: at the first moment after `at` when DSP1 waits and DSP2 has put exactly
    *  `words` words of its current block on the wire, run P:$270 and go on from P:$294 */
   rebase?: { at: number; words: number }[];
 }): LinkResult {
@@ -571,7 +495,7 @@ function link(handlerWords: number[] | null, at: number, opts: {
         x647++;                                                          // no handler: nothing acts
       }
     }
-    // ---- a forced v3-style re-arm
+    // ---- a forced re-arm off the block boundary
     for (const rb of rebase) {
       if (!rb.done && t >= rb.at && pendingArm < 0 && pendingToggle < 0 && lastSent >= 0 && (lastSent + 1) % 512 === rb.words) {
         rb.done = true;
@@ -658,18 +582,8 @@ test('link model: a clean run stays in lock, and the firmware only ever re-arms 
   }
 });
 
-test('link model: v3 re-arms DMA4 in the middle of a late DSP2 block, and the slots come out spliced', () => {
-  let midBlock = 0, spliced = 0;
-  for (const ep of overloads) {
-    const r = link(V3, V3_AT, { seconds: 0.9, episodes: ep });
-    const mid = r.rearms.filter((a) => a.from === 'restart' && a.sent !== 0);
-    midBlock += mid.length;
-    spliced += offsets(r).filter((p) => !p.aligned).length;
-    if (process.env.RECOVER_DEBUG) console.log('v3', r.resyncs.length, mid.map((a) => a.sent));
-  }
-  assert.ok(midBlock >= 3, `${midBlock} re-arms part-way into DSP2's block`);
-  assert.ok(spliced > 0, 'passes whose sixteen slots straddle two tracks');
-  // and the same splice, forced at one chosen word of DSP2's block, one boot at a time
+test('link model: a DMA4 re-arm part-way into a late DSP2 block splices every slot by that many words', () => {
+  // why the resync waits for a silent link (RESYNC_SILENT): forced at one chosen word of DSP2's block
   for (const words of [5, 40, 100, 300, 450]) {
     const r = link(CUR.words, CUR.at, { seconds: 0.4, rebase: [{ at: 0.2 * SEC, words }] });
     const after = offsets(r).filter((p) => p.t > r.resyncs[0]);
@@ -713,384 +627,56 @@ test('link model: lost words deadlock the base; the handler resyncs only with DS
   assert.ok(o.length > 100 && o.every((p) => p.aligned && p.s === 0));
 });
 
-test('link model: v4 loses DSP2 words to its own feed clear on a missed frame, and resyncs to recover; the current handler (like v5) loses none', () => {
-  let lost4 = 0, resync4 = 0;
+test('link model: under overload the handler never loses a DSP2 word and never resyncs', () => {
   for (const ep of overloads) {
-    const r4 = link(V4W, V4_AT, { seconds: 0.9, episodes: ep });
-    lost4 += r4.lost; resync4 += r4.resyncs.length;
-    const r5 = link(CUR.words, CUR.at, { seconds: 0.9, episodes: ep });
-    assert.equal(r5.lost, 0, 'no word of DSP2 is ever lost to the handler');
-    assert.equal(r5.resyncs.length, 0);
-    assert.ok(offsets(r5).every((p) => p.aligned && p.s === 0));
-  }
-  assert.ok(lost4 > 0 && resync4 > 0, `v4: ${lost4} words lost, ${resync4} resyncs`);
-});
-
-// ---------------------------------------------------------------------------------------------
-// 3. the codec link (--dsp1-realign)
-
-/** DSP cycles per ESSI1 time slot: two slots a 2,304-cycle frame. */
-const SLOT = FRAME / 2;
-/** A DMA request is a level (a channel armed with a word waiting in RX1 takes it at once, as the
- *  emulator models it) or an edge (only words that arrive while it is armed count). The realign must
- *  work under both, since the manual does not settle it. */
-type Sem = 'level' | 'edge';
-
-class Codec {
-  t = 0; next = SLOT; slot: number;
-  rdf = false; rfs = false; roe = false;
-  de0 = false; die0 = false; ddr0 = 0x100; dco0 = 0x7f; left0 = 0;
-  de1 = false; die1 = false; dsr1 = 0x400; ddr1 = 0xffffaa; dco1 = 0x3c1fc2;
-  dcoh = 0; dcom = 0; dcohInit = 0; dcomInit = 0;
-  /** DMA0's block end (the handler is due), DMA1's (its fast interrupt is due), and when */
-  irq0 = false; irq0At = 0; irq1 = false; irq1At = 0;
-  /** extra cycles before the next DMA1 fast interrupt is taken (a late re-arm) */
-  lateFast = 0;
-  /** requests still to be lost to both channels at once (a controller stalled a whole slot) */
-  lostBoth = 0;
-  /** an address or count written while its channel was armed (the manual forbids it) */
-  violations: string[] = [];
-  writes: string[] = [];
-  /** at every DMA0 block end: DSR1 and the slot of the word it ended on */
-  ends: { t: number; dsr1: number; rfs: boolean }[] = [];
-  constructor(public sem: Sem, firstSlot: number) { this.slot = firstSlot; }
-  read(a: number, c: Cpu): number | undefined {
-    switch (a) {
-      case R.SSISR1: return (this.rdf ? 0x80 : 0) | (this.roe ? 0x20 : 0) | (this.rfs ? 0x08 : 0);
-      case R.RX1: this.rdf = false; this.roe = false; return 0;
-      case R.DDR0: return this.ddr0;
-      case R.DSR1: return this.dsr1;
-      case R.DDR1: return this.ddr1;
-      case R.DCR1: return (this.de1 ? 0x800000 : 0) | (this.die1 ? 0x400000 : 0) | 0x106510;
-      case 0xfffff4: return (this.de0 ? 0 : 1) | (this.de1 ? 0 : 2) | 0x2c | (c.dcr4 & 0x800000 ? 0 : 0x10);
-      default: return undefined;
-    }
-  }
-  write(a: number, v: number): boolean {
-    const arm = (was: boolean, now: boolean): boolean => !was && now;
-    this.writes.push(`${a.toString(16)}=${v.toString(16)}`);
-    switch (a) {
-      case R.DCR0: {
-        const was = this.de0;
-        this.de0 = !!(v & 0x800000); this.die0 = !!(v & 0x400000);
-        if (arm(was, this.de0)) { this.left0 = (this.dco0 & 0xfff) + 1; if (this.sem === 'level' && this.rdf) this.take0(); }
-        return true;
-      }
-      case R.DCR1: {
-        const was = this.de1;
-        this.de1 = !!(v & 0x800000); this.die1 = !!(v & 0x400000);
-        if (arm(was, this.de1)) {
-          this.dcomInit = (this.dco1 >> 6) & 0xfff; this.dcohInit = (this.dco1 >> 18) & 0x3f;
-          this.dcom = this.dcomInit; this.dcoh = this.dcohInit;
-          if (this.sem === 'level' && this.rdf) this.line1();
-        }
-        return true;
-      }
-      case R.DDR0: case R.DCO0: case 0xffffef:
-        if (this.de0) this.violations.push(`${a.toString(16)} written with DMA0 armed`);
-        if (a === R.DDR0) this.ddr0 = v; else if (a === R.DCO0) this.dco0 = v;
-        return true;
-      case R.DSR1: case R.DDR1: case R.DCO1:
-        if (this.de1) this.violations.push(`${a.toString(16)} written with DMA1 armed`);
-        if (a === R.DSR1) this.dsr1 = v; else if (a === R.DDR1) this.ddr1 = v; else this.dco1 = v;
-        return true;
-      default: return false;
-    }
-  }
-  /** DMA0: one word from RX1 (2D, DOR3 = -127), DE cleared at the block end, the interrupt raised */
-  take0(): void {
-    this.ddr0 = this.left0 > 1 ? this.ddr0 + 1 : this.ddr0 - 127;
-    this.rdf = false;
-    if (--this.left0 === 0) {
-      this.de0 = false;
-      this.ends.push({ t: this.t, dsr1: this.dsr1, rfs: this.rfs });
-      if (this.die0) { this.irq0 = true; this.irq0At = this.t; }
-    }
-  }
-  /** DMA1: one line of three words to TX12..TX10 (3D: +1, +1, then DOR0 = 1, DOR1 = -383 at a pass end) */
-  line1(): void {
-    this.dsr1 += 2;
-    if (this.dcom === 0) {
-      this.dcom = this.dcomInit; this.dsr1 -= 383;
-      if (this.dcoh === 0) {
-        this.dcoh = this.dcohInit; this.de1 = false;
-        if (this.die1) { this.irq1 = true; this.irq1At = this.t + 12 + this.lateFast; this.lateFast = 0; }
-      } else this.dcoh--;
-    } else { this.dcom--; this.dsr1 += 1; }
-  }
-  arrive(): void {
-    this.rfs = this.slot === 0; this.slot ^= 1;
-    if (this.rdf) this.roe = true;
-    this.rdf = true;
-    if (this.lostBoth > 0) { this.lostBoth--; return; }
-    if (this.de1) this.line1();                  // the request reaches both; DMA1 does not read RX1
-    if (this.de0) this.take0();
-  }
-  /** time passes; DMA1's fast interrupt (IPL 0, two words at P:$1a) runs as soon as it may */
-  advance(n: number, c: Cpu | null): void {
-    for (let k = 0; k < n; k++) {
-      this.t++;
-      if (this.t >= this.next) { this.arrive(); this.next += SLOT; }
-      if (this.irq1 && this.t >= this.irq1At && !(c && c.masked)) { this.irq1 = false; this.write(R.DCR1, R.DCR1_ARMED); }
-    }
-  }
-}
-
-interface CodecRun {
-  codec: Codec; c: Cpu;
-  /** per DMA0 block end: DMA1's lead over DMA0 in lines (0 in step; 128 - k: k behind), and the slot */
-  ends: { off: number; rfs: boolean }[];
-  realigns: number; periods: number;
-}
-
-/**
- * DSP1's codec link from power-on, `periods` DMA0 blocks long, with the handler `words` at `at` on
- * every DMA0 block end. The main loop is reduced to the one thing the handler reads of it -- X:$647
- * cleared by a finished pass -- and sits at P:$3c when interrupted.
- */
-function codecRun(words: number[], at: number, o: {
-  periods: number; realign?: boolean; sem?: Sem; firstSlot?: number;
-  /** the main loop does not finish a pass in DMA0 period p */
-  miss?: (p: number) => boolean;
-  /** DMA0's interrupt in period p taken this many cycles late (the handler, and so DMA0's re-arm) */
-  dma0Late?: Map<number, number>;
-  /** DMA1's first block end at or after period `from`: its fast interrupt this many cycles late */
-  dma1Late?: { from: number; cycles: number };
-  /** in period p, one request lost to both channels (the controller held a whole slot) */
-  lostBoth?: number[];
-  /** cycles from DMA0's block end to the handler's first instruction (default 16) */
-  entry?: (p: number) => number;
-}): CodecRun {
-  const codec = new Codec(o.sem ?? 'level', o.firstSlot ?? 0);
-  const c = cpu(words, at);
-  c.codec = codec; c.masked = false;
-  // power-on, P:$1000c2..$1000d4: DMA1 then DMA0, before ESSI1's first word
-  for (const [a, v] of [[R.DSR1, 0x400], [R.DDR1, 0xffffaa], [R.DCO1, 0x3c1fc2], [R.DCR1, R.DCR1_ARMED],
-                        [R.DDR0, 0x100], [R.DCO0, 0x7f], [R.DCR0, R.DCR0_ARMED]] as const) codec.write(a, v);
-  codec.writes = [];
-  let p = 0, realigns = 0, x647 = 0;
-  const hl = R.handler(at, 0, !!o.realign);
-  const guard = (o.periods + 4) * DMA0_PERIOD;
-  while (p < o.periods && codec.t < guard) {
-    if (o.dma1Late && p >= o.dma1Late.from && o.dma1Late.cycles) { codec.lateFast = o.dma1Late.cycles; o.dma1Late = { ...o.dma1Late, cycles: 0 }; }
-    if ((o.lostBoth ?? []).includes(p) && codec.ddr0 === 0x140) { codec.lostBoth = 1; o.lostBoth = o.lostBoth!.filter((x) => x !== p); }
-    const due = codec.irq0 && codec.t >= codec.irq0At + (o.entry?.(p) ?? 16) + (o.dma0Late?.get(p) ?? 0);
-    if (!due) { codec.advance(1, c); continue; }
-    codec.irq0 = false;
-    if (!(o.miss?.(p) ?? false)) x647 = 0;             // a pass finished in this period: P:$9a5
-    c.X.set(0x647, x647);
-    c.pcs = [];
-    const before = !process.env.RECOVER_DEBUG ? "" : `p${p} t${codec.t} ddr0 ${codec.ddr0.toString(16)} dsr1 ${codec.dsr1.toString(16)} rdf ${+codec.rdf} rfs ${+codec.rfs} de0 ${+codec.de0} x647 ${x647} next ${codec.next - codec.t}`;
-    irq(c, at, 0x3c);
-    x647 = c.X.get(0x647)!;
-    if (hl.rewrite && c.pcs.includes(hl.rewrite)) realigns++;
-    if (process.env.RECOVER_DEBUG && hl.rewrite && c.pcs.includes(hl.rewrite)) console.log(before, 'REALIGN', 'state', c.P.get(hl.rstate));
-    p++;
-  }
-  const ends = codec.ends.map((e) => ({ off: (((e.dsr1 - 0x400) / 3) % 128 + 128) % 128, rfs: e.rfs }));
-  return { codec, c, ends, realigns, periods: p };
-}
-
-/** DMA0 periods 30..33 missed (an overload), DMA1's 16-pass block ending inside it (period 31). */
-const OVERLOAD = (p: number): boolean => p >= 30 && p <= 33;
-const CV5 = { words: V5W, at: V5W_AT };
-const HL7 = R.handler(R.handlerAt(true), 0, true);
-const CV7 = { words: HL7.words, at: HL7.at };
-
-test('the "v5" variant is v5 word for word at v5\'s address; the default is v8', () => {
-  assert.equal(R.handlerAt(false, R.VARIANTS.v5), V5W_AT);
-  assert.deepEqual(R.recoverRecords(0, false, R.VARIANTS.v5)[0].words, V5W);
-  assert.deepEqual(R.recoverRecords(0)[0].words, R.handler(R.handlerAt(false, R.VARIANTS.v8), 0, false, R.VARIANTS.v8).words);
-});
-
-test('codec model: power-on puts DMA1 in step with DMA0 and every block on the same slot; a clean run stays there', () => {
-  for (const sem of ['level', 'edge'] as const) {
-    for (const first of [0, 1]) {
-      const r = codecRun(CV7.words, CV7.at, { periods: 80, sem, firstSlot: first, realign: true });
-      assert.ok(r.ends.length >= 80);
-      assert.ok(r.ends.every((e) => e.off === 0), 'DSR1 = $400 at every DMA0 block end');
-      assert.ok(r.ends.every((e) => e.rfs === r.ends[0].rfs), 'every block ends on the same slot');
-    }
-  }
-});
-
-test('--dsp1-realign is inert when no frame is missed: the same register writes as v5, the healthy path v5\'s', () => {
-  const r7 = codecRun(CV7.words, CV7.at, { periods: 80, realign: true });
-  const r5 = codecRun(CV5.words, CV5.at, { periods: 80 });
-  assert.deepEqual(r7.codec.writes, r5.codec.writes);
-  assert.deepEqual(r7.ends, r5.ends);
-  const once = (w: { words: number[]; at: number }): number[] => {
-    const c = cpu(w.words, w.at); c.X.set(0x647, 0); c.pcs = []; irq(c, w.at, 0x3c);
-    return c.pcs.map((pc) => pc - w.at);
-  };
-  assert.deepEqual(once(CV7), once(CV5), 'the same 14 instructions at the same offsets');
-});
-
-for (const sem of ['level', 'edge'] as const) {
-  test(`codec model (${sem} requests): DMA1 re-armed k slots late stays k lines behind under v5; --dsp1-realign puts it back on the heal`, () => {
-    for (const k of [1, 2, 5, 17, 40]) {
-      const late = { from: 30, cycles: k * SLOT + 200 };
-      const r5 = codecRun(CV5.words, CV5.at, { periods: 90, sem, miss: OVERLOAD, dma1Late: late });
-      const r7 = codecRun(CV7.words, CV7.at, { periods: 90, sem, miss: OVERLOAD, dma1Late: late, realign: true });
-      const lag = (128 - k) % 128;
-      assert.ok(r5.ends.slice(35).every((e) => e.off === lag), `v5 k=${k}: behind for good`);
-      assert.equal(r7.realigns, 1, `k=${k}: one realign`);
-      assert.ok(r7.ends.slice(36).every((e) => e.off === 0), `k=${k}: DSR1 $400 at every block end from the heal on`);
-      assert.ok(r7.ends.every((e) => e.rfs === r7.ends[0].rfs), 'DMA0 never touched: its slot never moves');
-      assert.equal(r7.c.P.get(HL7.rstate), 0, 'probation over: audio resumed');
-      assert.equal(r7.c.hcr, 0x0c);
-    }
-  });
-
-  test(`codec model (${sem} requests): DMA0 held off loses words; --dsp1-realign puts DMA1 back in step with it`, () => {
-    for (const k of [2, 3, 8]) {
-      const r7 = codecRun(CV7.words, CV7.at, { periods: 90, sem, miss: OVERLOAD, dma0Late: new Map([[31, k * SLOT + 200]]), realign: true });
-      assert.equal(r7.realigns, 1);
-      assert.ok(r7.ends.slice(40).every((e) => e.off === 0), `k=${k}`);
-    }
-  });
-}
-
-test('codec model: every realign is straight-line, a few dozen cycles, masked only for its rewrite, and leaves DMA1 armed', () => {
-  for (let j = 0; j < 30; j++) {
-    // entry latencies that put ESSI1 words right inside the check and the rewrite
-    const entry = (p: number): number => 4 + ((p * 37 + j * 29) % 1180);
-    const codec = new Codec('level', 0);
-    const r = codecRun(CV7.words, CV7.at, { periods: 70, miss: OVERLOAD, dma1Late: { from: 30, cycles: 5 * SLOT + 200 }, entry, realign: true });
-    void codec;
-    assert.deepEqual(r.codec.violations.filter((v) => !/DMA1 armed/.test(v)), []);
-    assert.ok(r.codec.de1 || r.codec.irq1, `pattern ${j}: DMA1 armed (or at its own block end, P:$1a's to re-arm)`);
-    assert.ok(r.ends.slice(-10).every((e) => e.off === 0), `pattern ${j}: in step by the end`);
-  }
-  // the rewrite, timed: from the mask going up to it coming down
-  const w = CV7.words, at = CV7.at;
-  const ori = w.indexOf(0x0003f8), andi = w.indexOf(0x00fcb8, ori);
-  assert.ok(ori > 0 && andi > ori && andi - ori <= 20, `the masked stretch is ${andi - ori} words with no branch back`);
-  for (let a = ori; a < andi; a++) {
-    const x = w[a];
-    const isBranch = (x & 0xff0000) === 0x050000 || (x & 0xff00f0) === 0x060080 || (x & 0xfff000) === 0x0d0000;
-    assert.ok(!isBranch, `no loop, no call, no DO at P:${(at + a).toString(16)}`);
-  }
-});
-
-test('give-up: a frame missed after a realign, before the audio is back, turns the realign off until power-off', () => {
-  // the overload goes on past the heal (periods 36..38 missed again), then DMA1 is knocked out once more
-  const miss = (p: number): boolean => OVERLOAD(p) || (p >= 36 && p <= 38) || (p >= 62 && p <= 64);
-  const r7 = codecRun(CV7.words, CV7.at, { periods: 100, miss, dma1Late: { from: 30, cycles: 5 * SLOT + 200 }, realign: true });
-  assert.equal(r7.c.P.get(HL7.rstate), R.REALIGN_GIVEN_UP);
-  assert.equal(r7.realigns, 1, 'no realign after the give-up');
-});
-
-test('codec model: an overload with nothing knocked out of step is never realigned, wherever the check lands against the words', () => {
-  for (let j = 0; j < 40; j++) {
-    const entry = (p: number): number => 4 + ((p * 131 + j * 197) % 1500);
-    const r = codecRun(CV7.words, CV7.at, { periods: 90, miss: (p) => (p >= 20 && p <= 22) || (p >= 50 && p <= 57), entry, realign: true });
-    assert.equal(r.realigns, 0, `jitter pattern ${j}`);
-    assert.ok(r.ends.every((e) => e.off === 0 && e.rfs === r.ends[0].rfs));
+    const r = link(CUR.words, CUR.at, { seconds: 0.9, episodes: ep });
+    assert.equal(r.lost, 0, 'no word of DSP2 is ever lost to the handler');
+    assert.equal(r.resyncs.length, 0);
+    assert.ok(offsets(r).every((p) => p.aligned && p.s === 0));
   }
 });
 
 // ---------------------------------------------------------------------------------------------
 // the stacked SR across a resync
 
-test('v5\'s resync hands the main loop its loop counter as SR (IPL 0 masked for good); v8 hands back the SR', () => {
-  const run5 = (words: number[], at: number): { back: number; sr: number } => {
-    const c = cpu(words, at);
+test('the resync hands the main loop back its own SR', () => {
+  const c = cpu(CUR.words, CUR.at);
+  c.X.set(0x647, 1); c.ddr4 = 0x6e0;
+  for (let k = 0; k < 3; k++) irq(c, CUR.at, 0x75);
+  assert.equal(irq(c, CUR.at, 0x75, false), 0x2e);       // the 4th missed frame: the resync
+  assert.equal(c.srOut, SR_MAIN, "the main loop's own SR, not the loop counter (LC is never pushed between the pop and the push)");
+});
+
+test('every path restores A, X0, R0, the stack and the SR', () => {
+  for (const pc of [0x3c, 0x75, 0x100]) {
+    const c = cpu(CUR.words, CUR.at);
+    irq(c, CUR.at, pc);                               // healthy
     c.X.set(0x647, 1); c.ddr4 = 0x6e0;
-    for (let k = 0; k < 3; k++) irq(c, at, 0x75);
-    const back = irq(c, at, 0x75, false);              // the 4th missed frame: the resync
-    return { back, sr: c.srOut };
-  };
-  const v5 = run5(V5W, V5W_AT);
-  assert.equal(v5.back, 0x2e);
-  assert.equal(v5.sr, LC_AT_RESET, "v5: the DO loop between `move ssh,a1` and `move a1,ssh` left LC in the SSL the rti restores");
-  assert.ok(v5.sr & 0x100, '... whose bit 8 is I0: DMA0 and DMA1 (IPL 0) never interrupt again -- silence, host commands (IPL 1) still served');
-  for (const name of ['v8', 'bis-A', 'bis-B'] as const) {
-    const hl = R.handler(R.handlerAt(false, R.VARIANTS[name]), 0, false, R.VARIANTS[name]);
-    const r = run5(hl.words, hl.at);
-    assert.equal(r.back, 0x2e, name);
-    assert.equal(r.sr, SR_MAIN, `${name}: the main loop's own SR`);
-  }
-  const hc = R.handler(R.handlerAt(false, R.VARIANTS['bis-C']), 0, false, R.VARIANTS['bis-C']);
-  assert.equal(run5(hc.words, hc.at).sr, LC_AT_RESET, 'bis-C keeps v5\'s idle loop: it must go silent too');
-});
-
-test('the variant "v5" is v5 word for word; every variant restores A, X0, R0, the stack and the SR on every path', () => {
-  assert.deepEqual(R.handler(V5W_AT, 0, false, R.VARIANTS.v5).words, V5W);
-  for (const name of ['v8', 'bis-A', 'bis-B']) {
-    const hl = R.handler(R.handlerAt(false, R.VARIANTS[name]), 0, false, R.VARIANTS[name]);
-    for (const pc of [0x3c, 0x75, 0x100]) {
-      const c = cpu(hl.words, hl.at);
-      irq(c, hl.at, pc);                              // healthy
-      c.X.set(0x647, 1); c.ddr4 = 0x6e0;
-      for (let k = 0; k < 6; k++) irq(c, hl.at, pc);   // misses, and the resync where the PC allows it
-      for (let k = 0; k < 9; k++) { c.X.set(0x647, 0); irq(c, hl.at, pc); }   // the heal and the hold
-      assert.equal(c.hcr, 0x0c, name);
-    }
+    for (let k = 0; k < 6; k++) irq(c, CUR.at, pc);    // misses, and the resync where the PC allows it
+    for (let k = 0; k < 9; k++) { c.X.set(0x647, 0); irq(c, CUR.at, pc); }   // the heal and the hold
+    assert.equal(c.hcr, 0x0c);
   }
 });
 
-test('cost in cycles per variant -- a healthy entry, a missed frame, the resync', () => {
-  const rows: string[] = [];
-  for (const name of ['v5', 'v8', 'bis-A', 'bis-B', 'bis-C']) {
-    const hl = R.handler(R.handlerAt(false, R.VARIANTS[name]), 0, false, R.VARIANTS[name]);
-    const c = cpu(hl.words, hl.at);
-    irq(c, hl.at, 0x3c); const healthy = c.lastCost!;
-    c.X.set(0x647, 1); irq(c, hl.at, 0x3c); const miss = c.lastCost!;
-    c.ddr4 = 0x6e0; irq(c, hl.at, 0x75); irq(c, hl.at, 0x75); irq(c, hl.at, 0x75, false); const resync = c.lastCost!;
-    rows.push(`${name}: healthy ${healthy}, missed frame ${miss}, resync ${resync}`);
-    assert.ok(healthy <= 30, `${name} healthy ${healthy}`);
-    assert.ok(miss < (R.VARIANTS[name].feed === 'none' ? 1000 : 2000), `${name} missed frame ${miss}: light (paced)`);
-  }
-  if (process.env.RECOVER_DEBUG) console.log(rows.join('\n'));
+test('cost in cycles: a healthy entry, a missed frame, the resync', () => {
+  const c = cpu(CUR.words, CUR.at);
+  irq(c, CUR.at, 0x3c); const healthy = c.lastCost!;
+  c.X.set(0x647, 1); irq(c, CUR.at, 0x3c); const miss = c.lastCost!;
+  c.ddr4 = 0x6e0; irq(c, CUR.at, 0x75); irq(c, CUR.at, 0x75); irq(c, CUR.at, 0x75, false); const resync = c.lastCost!;
+  if (process.env.RECOVER_DEBUG) console.log(`healthy ${healthy}, missed frame ${miss}, resync ${resync}`);
+  assert.ok(healthy <= 30, `healthy ${healthy}`);
+  assert.ok(miss < 1000, `missed frame ${miss}: light (paced)`);
 });
 
 // ---------------------------------------------------------------------------------------------
-// the stack gate, and --dsp1-diag
+// the stack gate
 
-test('stack gate: v5\'s words are rejected at the DO after the pop; v8, its variants, the realign and the diag pass', () => {
-  assert.deepEqual(R.stackGate(V5W, V5W_AT), [[0xbda, 0xbe3]]);
-  const hc = R.handler(R.handlerAt(false, R.VARIANTS['bis-C']), 0, false, R.VARIANTS['bis-C']);
-  assert.equal(R.stackGate(hc.words, hc.at).length, 1, 'bis-C keeps the `do`-loop idle: the gate refuses it');
-  for (const name of ['v8', 'bis-A', 'bis-B']) {
-    for (const realign of [false, true]) for (const diag of [false, true]) {
-      const hl = R.handler(R.handlerAt(realign, R.VARIANTS[name], diag), 0, realign, R.VARIANTS[name], diag);
-      assert.deepEqual(R.stackGate(hl.words, hl.at), [], `${name} realign ${realign} diag ${diag}`);
-    }
+test('stack gate: a DO between the pop and its push is refused; the plain and ordered handlers pass', () => {
+  // clr a; move ssh,a1; do #$100,<brkcs>; btst #4,DSTR; brkcs; move a1,ssh
+  const doIdle = [0x200013, 0x044cfc, 0x060081, 0x000105, 0x0bb424, 0x000218, 0x04ccfc];
+  assert.deepEqual(R.stackGate(doIdle, 0x100), [[0x101, 0x102]]);
+  for (const ordered of [false, true]) {
+    const hl = R.handler(R.handlerAt(ordered), 0, ordered);
+    assert.deepEqual(R.stackGate(hl.words, hl.at), [], `ordered ${ordered}`);
   }
-  // and the walk never reads an operand as an instruction: the v3 and v4 words walk to their ends
-  assert.deepEqual(R.stackGate(V3, V3_AT), []);
-  assert.deepEqual(R.stackGate(V4W, V4_AT), []);
-});
-
-test('--dsp1-diag: every DMA0 entry publishes DSR1, DDR0, SSISR1; misses and resyncs are counted; HV 6 answers any P word', () => {
-  const hl = R.handler(R.handlerAt(false, R.VARIANTS.v8, true), 0, false, R.VARIANTS.v8, true);
-  assert.ok(hl.words.length <= 234, `${hl.words.length} words: fits above the DSP1 drive`);
-  const c = cpu(hl.words, hl.at);
-  c.X.set(0xffffeb, 0x571); c.X.set(0xffffee, 0x100); c.X.set(0xffffa7, 0x48);
-  irq(c, hl.at, 0x3c);                                        // healthy: the words, no other effect
-  assert.deepEqual([hl.dDsr1, hl.dDdr0, hl.dSsisr].map((a) => c.P.get(a)), [0x571, 0x100, 0x48]);
-  assert.equal(c.X.get(0x647), 1);
-  c.X.set(0x647, 1); c.ddr4 = 0x6e0;
-  for (let k = 0; k < 4; k++) irq(c, hl.at, 0x75);             // four misses, the 4th resyncs
-  assert.equal(c.P.get(hl.dMiss), 4);
-  assert.equal(c.P.get(hl.dResync), 1);
-  assert.equal(c.P.get(hl.dRsDdr4), 0x6e0);
-  // the host command: TX already written (HRDF), the answer in HTX, r0 kept
-  const host = (addr: number, hrdf = true): number => {
-    c.X.set(0xffffc6, addr); c.X.set(0xffffc3, hrdf ? 1 : 0); c.r0 = 0x123;
-    c.sp = 1; c.stk[1] = { h: 0x3c, l: SR_MAIN };
-    run(c, hl.diag);
-    assert.equal(c.r0, 0x123, 'r0 restored');
-    assert.equal(c.sp, 0); assert.equal(c.srOut, SR_MAIN);
-    return c.X.get(0xffffc7)!;
-  };
-  assert.equal(host(hl.dDsr1), 0x571);
-  assert.equal(host(hl.dMiss), 4);
-  assert.equal(host(hl.dRsDdr4), 0x6e0);
-  c.P.set(0, 0x0af080);                                      // the reset vector's jmp
-  assert.equal(host(hl.dDsr1, false), 0x0af080, 'no word: it answers P:0 ($0af080) and never waits');
-  // the records: P:$0c = jsr <diag>, and nothing else of the base
-  const recs = R.recoverRecords(0, false, R.VARIANTS.v8, true);
-  assert.deepEqual(recs.find((r) => r.addr === R.DIAG_VECTOR)!.words, [0x0bf080, hl.diag]);
 });

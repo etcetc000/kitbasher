@@ -14,7 +14,7 @@ assigned machine ID; none replaces a stock machine.
 
 Model names say what engine they are: VAD (analog-style drum voices), FMS (FM),
 OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant) and
-NZE (noise). Models renamed on 2026-10-06 keep their former keys as aliases, so a
+NZE (noise). Renamed models keep their former keys as aliases, so a
 layout saved before the rename still loads and keeps every ID.
 
 ## Analog recreations

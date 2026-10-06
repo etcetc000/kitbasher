@@ -42,13 +42,6 @@
 //                        DMA register. One word of the base changes: the DMA0 vector's target
 //                        (engine/src/recover.ts). Off by default
 //   --no-dsp1-recover    turn it off: the base's own halting watchdog, unchanged
-//   --dsp1-recover-variant v8|v5|bis-A|bis-B|bis-C   handler variant for hardware bisection
-//                        (recover.ts VARIANTS); default v8
-//   --dsp1-diag          with --dsp1-recover and --cpu-indicator (diagnostic, off by default): DSP1's
-//                        codec and link state as hex digits over the transport icons on the pattern screen
-//   --dsp1-realign       with --dsp1-recover (experimental, off by default): on recovery, put DMA1 back
-//                        in step with DMA0 if a late event knocked it out; straight-line, never blocking,
-//                        and abandoned until the next power cycle if a frame is missed afterwards
 //   --cpu-indicator      with --dsp1-recover: while overruns continue, the transport icons are
 //                        replaced by an inverted "CPU!" box (a corner block on other screens),
 //                        held ~0.5 s after the last one; polled on Timer 1 and drawn through the
@@ -71,11 +64,6 @@
 //                        it and embeds it in the OS, so a patched OS can be re-patched with it
 //   --write-map <file>   write the layout this build has (the map merged with every placement)
 //   --read-map <file>    print the layout a patched OS carries (with --in only) and write it to --out
-//   --ram-probe <a>,<b>  emulator only: sentinel-fill ColdFire RAM after the RAM image up to <a> and
-//                        after the label segment up to <b> (hex), so a RAM probe can see what else
-//                        writes there. Never flash such an image
-//   --dsp2-probe         emulator only (with --families none): fill the base's free DSP2 regions with
-//                        5a5a5a for a DSP2 RAM probe. Never flash such an image
 //   --prepare-163        with --in <stock 1.63> --out <file>: make the prepared 1.63 base (once, offline;
 //                        engine/src/prepare.ts), and print its recipe
 //   --discover <file>    what discovery finds in a base, feature by feature (no build; --report writes it as JSON)
@@ -95,9 +83,8 @@ import { containerOf, encodeSyx } from './syx.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
-                          'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'dsp1-realign', 'no-dsp1-realign', 'dsp1-diag', 'cpu-indicator', 'no-cpu-indicator',
-                          'allow-id-move', 'prepare-163', 'dsp2-probe', 'ctr-control-all', 'no-stub-trim']);
-const OPTIONAL = new Set(['dsp2-probe']);
+                          'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
+                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -106,7 +93,6 @@ function args(argv: string[]): { a: Record<string, string>; many: Record<string,
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) throw new Error(`unexpected argument ${argv[i]}`);
     const k = argv[i].slice(2);
-    if (OPTIONAL.has(k) && argv[i + 1] && !argv[i + 1].startsWith('--')) { out[k] = argv[++i]; continue; }
     if (SWITCHES.has(k)) { out[k] = '1'; continue; }
     if (REPEATABLE.has(k)) (many[k] ??= []).push(argv[i + 1]);
     else out[k] = argv[i + 1];
@@ -172,9 +158,6 @@ async function main(): Promise<void> {
   const { output, report, gateReport } = await build(input, base, packs, core, {
     allowIdMove: !!a['allow-id-move'],
     ctrControlAll: !!a['ctr-control-all'] || !!a['clean-recovery'],
-    dsp2Probe: !a['dsp2-probe'] ? undefined : a['dsp2-probe'] === '1' ? true
-      : a['dsp2-probe'].split(',').map((r) => r.split(':').map((x) => parseInt(x, 16)) as [number, number]),
-    ramProbe: a['ram-probe'] ? { image: parseInt(a['ram-probe'].split(',')[0], 16), labels: parseInt(a['ram-probe'].split(',')[1], 16) } : undefined,
     layout: a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined,
     align: a['no-align'] ? false : a['cache-align'] ? true : undefined,
     menus: a['family-menus'] ? 'family' : undefined,
@@ -193,9 +176,6 @@ async function main(): Promise<void> {
       dynFlash: a['dyn-flash'] ? a['dyn-flash'].split(',') : undefined,
       dsp1IdSpace: a['dsp1-id-space'] ? Number(a['dsp1-id-space']) : undefined,
       dsp1Recover: a['no-dsp1-recover'] ? false : a['dsp1-recover'] ? true : undefined,
-      dsp1Realign: a['no-dsp1-realign'] ? false : a['dsp1-realign'] ? true : undefined,
-      dsp1RecoverVariant: a['dsp1-recover-variant'],
-      dsp1Diag: a['dsp1-diag'] ? true : undefined,
       cpuIndicator: a['no-cpu-indicator'] ? false : a['cpu-indicator'] ? true : undefined,
     },
   });

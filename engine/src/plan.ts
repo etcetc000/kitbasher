@@ -16,7 +16,7 @@ import type { Firmware } from './container.js';
 import { records } from './dsp.js';
 import { trimBank, type TrimEntry, type TrimOptions } from './e12.js';
 import { codeImages } from './bases.js';
-import { handler, handlerAt, VARIANTS } from './recover.js';
+import { handlerAt } from './recover.js';
 import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js';
 import { callCode, drivePairs, dsp1Transport, dynSegment, linkDrive, type DriveLink, type Dsp1Law, type DynMachine } from './features.js';
 import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recovery.js';
@@ -55,14 +55,6 @@ export interface Features {
    * program window the drive links its laws into, so the drive's limit drops by its size.
    */
   dsp1Recover?: boolean;
-  /** With dsp1Recover, off by default: put DMA1 back in step with DMA0 on the heal, straight-line and
-   *  never blocking, given up for the power cycle if a frame is missed on probation (recover.ts). */
-  dsp1Realign?: boolean;
-  /** --dsp1-recover-variant (for hardware diagnosis): recover.ts VARIANTS; default 'v8' */
-  dsp1RecoverVariant?: string;
-  /** --dsp1-diag (needs --dsp1-recover and --cpu-indicator; off by default): DSP1 publishes the codec and link
-   *  state and the indicator draws it on the pattern screen (recover.ts, indicator.ts) */
-  dsp1Diag?: boolean;
   /**
    * With dsp1Recover: while DSP1 keeps reporting overruns the transport icons are replaced by an
    * inverted "CPU!" box (a corner block on other screens), held ~0.5 s after the last one
@@ -259,7 +251,7 @@ export const IND_EXT_SPAN = 0xe14;
 
 export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Family[], sel: Selected[],
   opt: { dyn: boolean; dsp1: DriveLink | null; host: boolean; toFlash: Set<string>; dynFlash: Set<string>; idSpace: number; flashAt: number;
-         redrawValues: number; ind: Site | null; diagFirst?: number }): RamImage {
+         redrawValues: number; ind: Site | null }): RamImage {
   const O = base.os;
   const E = base.ext.base;
   let cb = fromBase64(core.knob_callback);
@@ -335,7 +327,7 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     const b = new Buf().push(dyn.blob);
     b.align(4, 0);
     const at = dyn.base + b.length;
-    const parts: Parts = { at, site: opt.ind, ...(opt.diagFirst ? { diag: { first: opt.diagFirst } } : {}) };
+    const parts: Parts = { at, site: opt.ind };
     const st = stub(parts);
     b.push(st.bytes);
     b.align(4, 0);
@@ -346,7 +338,7 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     // the main RAM image instead, the same boot copy, inside its hardware-proven range (IND_EXT_SPAN)
     ext.align(4, 0);
     const at = E + ext.length;
-    const parts: Parts = { at, site: opt.ind, ...(opt.diagFirst ? { diag: { first: opt.diagFirst } } : {}) };
+    const parts: Parts = { at, site: opt.ind };
     const st = stub(parts);
     ext.push(st.bytes);
     ext.align(4, 0);
@@ -445,7 +437,7 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
   let drive: DriveLink | null = null;
   const wanted = r.dsp1 ? [...new Set(sel.map((s) => s.m.dsp1_drive).filter((x): x is string => !!x))] : [];
   if (wanted.length) {
-    try { drive = linkDrive(core.dsp1, laws, wanted, f.dsp1Recover ? handlerAt(!!f.dsp1Realign, VARIANTS[f.dsp1RecoverVariant ?? 'v8'] ?? VARIANTS.v8, !!f.dsp1Diag) : undefined,
+    try { drive = linkDrive(core.dsp1, laws, wanted, f.dsp1Recover ? handlerAt(!!f.cleanRecovery) : undefined,
       base.features.dsp1Drive!.program); }
     catch (e) { problems.push(`the DSP1 drive: ${(e as Error).message}`); }
   }
@@ -456,18 +448,12 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
     else if (!base.features.lcdFlush) problems.push(`--cpu-indicator: not supported on ${base.name}: ${base.support.cpuIndicator?.why ?? 'the LCD flush was not found'}`);
     else ind = base.features.lcdFlush;
   }
-  if (f.dsp1Diag && (!f.dsp1Recover || !f.cpuIndicator)) problems.push('--dsp1-diag needs --dsp1-recover (the words) and --cpu-indicator (the screen)');
-  if (f.dsp1RecoverVariant !== undefined && !VARIANTS[f.dsp1RecoverVariant]) problems.push(`--dsp1-recover-variant: one of ${Object.keys(VARIANTS).join(', ')}`);
-  if (f.dsp1Realign && !f.dsp1Recover) problems.push('--dsp1-realign needs --dsp1-recover: it runs inside its handler');
   // --dsp1-recover: the base's DSP1/DSP2 code the handler is written against, word for word
   if (f.dsp1Recover && base.support.dsp1Recover && !base.support.dsp1Recover.ok) {
     problems.push(`--dsp1-recover: not supported on ${base.name}: ${base.support.dsp1Recover.why}`);
   }
-  {
-  }
   const make = (): RamImage => ramImage(base, main, core, fams, sel,
-    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind,
-      diagFirst: f.dsp1Diag && f.dsp1Recover ? (() => { const v = VARIANTS[f.dsp1RecoverVariant ?? 'v8'] ?? VARIANTS.v8; return handler(handlerAt(!!f.dsp1Realign, v, true), 0, !!f.dsp1Realign, v, true).dDsr1; })() : undefined });
+    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind });
   let ram = make();
   if (mode === 'auto' && canFlash && ram.bytes > ram.limit) {
     const rank = new Map(sel.map((s) => [s.m.name.trim(), s.m.flash_rank ?? null]));
