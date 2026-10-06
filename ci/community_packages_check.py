@@ -1,4 +1,4 @@
-"""Export every model in examples/community and examples/analog with the native assembler.
+"""Export every model in examples/community, examples/analog and examples/physical with the native assembler.
 
 Each directory listed in examples/<collection>/catalog.json is exported (the exporter checks
 eight relocation placements per code block), and the resulting pack must hold exactly the listed
@@ -14,16 +14,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'packs'))
 from assembly_export import export
 
+COLLECTIONS = ('community', 'analog', 'physical')
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--assembler', type=Path, required=True)
-    parser.add_argument('--collection', choices=('community', 'analog'), help='check one collection; default is both')
+    parser.add_argument('--collection', choices=COLLECTIONS, help='check one collection; default is all of them')
     args = parser.parse_args()
     results = []
     catalogs = [(name, json.loads((ROOT / 'examples' / name / 'catalog.json').read_text(encoding='utf-8')))
-                for name in ([args.collection] if args.collection else ['community', 'analog'])]
+                for name in ([args.collection] if args.collection else COLLECTIONS)]
     for collection, model in [(name, model) for name, catalog in catalogs for model in catalog['models']]:
         name = model['directory']
         if Path(name).name != name or name in ('.', '..'):

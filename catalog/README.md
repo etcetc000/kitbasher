@@ -18,6 +18,7 @@ the page. See [Model packs](../docs/MODEL-PACKS.md).
 | `np.json` | NZEPL | [`examples/noise-plethora`](../examples/noise-plethora/README.md) |
 | `community-*.json` | FMS4O, VOXFR, OSCSP, OSCAC, WAVSP | [`examples/community`](../examples/community/README.md) |
 | `analog-*.json` | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | [`examples/analog`](../examples/analog/README.md) |
+| `physical-ks.json` | PHYKS | [`examples/physical`](../examples/physical/README.md) |
 
 `uw/wave-single.syx` is the single wavetable WAVTB reads; `uw/wave-bank.syx` is
 the wave bank WAVCH and WAVMR read.

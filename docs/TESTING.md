@@ -23,8 +23,16 @@ the encoder first (see the [scaffold example](../examples/scaffold/README.md)) a
 set `assembler` in `.local/config.json` or `MD_ASSEMBLER`.
 
 `npm run test:community` uses the same encoder to export every model in
-`examples/community` and `examples/analog`, checking each at eight relocation
-placements. The packs and a `result.json` go to a new directory under `build/`.
+`examples/community`, `examples/analog` and `examples/physical`, checking each at
+eight relocation placements. The packs and a `result.json` go to a new directory
+under `build/`.
+
+`npm run test:ksstr` runs the bundled PHYKS pack on a DSP56300 instruction host
+(set `dspHost` or `MD_DSP_HOST`) and compares all 245,760 samples of its 47 cases
+with an independent integer model of the string; see the
+[PHYKS README](../examples/physical/ks/README.md#export-and-check). Its
+host-independent parts, the reference model and the slice-clear and ownership
+checks, run in `npm test` (`ci/ksstr_test.py`).
 
 ## Adding tests
 

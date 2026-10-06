@@ -19,7 +19,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 - Model source exporter for DSP2 assembly, with a scaffold example.
 - Model sources: seven analog drum and synth voices (VADBD, VADSD, VADRC, VADPC,
   VADHH, VADCY, VADSY), five community synth voices (OSCAC, FMS4O, OSCSP, VOXFR,
-  WAVSP) and a 30-program port of Befaco's Noise Plethora (NZEPL).
+  WAVSP), a 30-program port of Befaco's Noise Plethora (NZEPL) and a
+  Karplus–Strong string (PHYKS).
 - Ten browsing categories in the page (kicks; snares, rims and claps; hats and
   cymbals; toms and hand percussion; FM; synths; wavetables; vocal; physical
   modeling; effects), which also set the default machine-select menu categories.

@@ -43,6 +43,7 @@ export const catalog: Record<string, Entry> = {
   OSC8B: entry('Synths', 'A SID-style synth with pulse-width motion, waveform selection, sync and ring modulation.'),
   OSCPW: entry('Synths', 'A pulse synth with pulse-width control, unison spread and sub oscillators.'),
   NZEPL: entry('Hi-hats & cymbals', 'Thirty noise and drone programs after the Befaco Noise Plethora: clusters, cross-modulation, filtered noise, walks and grains.'),
+  PHYKS: entry('Physical modeling', 'A Karplus-Strong plucked or hammered string with damping, pick brightness and a decaying pitch bend.'),
   VOXVO: entry('Vocal', 'A vocal synth with two vowel controls, voice selection, formant and resonance.'),
 };
 export function describe(name: string): { category: string; description: string } {
