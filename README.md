@@ -18,7 +18,7 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
    OS file (`.syx` or `.bin`).
 3. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
-   synths, physical modeling, effects) and check the machines you want. Click a
+   synths, wavetables, vocal, physical modeling, effects) and check the machines you want. Click a
    model to see its screen and what every control does. The meters show how much
    DSP memory, menu space and firmware storage your selection uses; if it does
    not fit, the page trims the tails of the built-in E12 samples just enough to

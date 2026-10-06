@@ -5,7 +5,7 @@
 // pack directory); `seq` restores the family's own order of machines and shared tables, so the
 // pack a machine came in never changes the build.
 
-import { isCategory } from './sound_catalog.js';
+import { isPackCategory } from './sound_catalog.js';
 import type { AlignEntry } from './align.js';
 import { fromBase64, wordsLE } from './bytes.js';
 import type { DynCore, DynPlan, Dsp1Core, Dsp1Law } from './features.js';
@@ -107,7 +107,7 @@ export function checkPack(p: Pack | CorePack): void {
       const b = m.browse as Record<string, unknown>;
       const text = (v: unknown, max: number) => typeof v === 'string' && v.length <= max;
       if (!b || typeof b !== 'object' || Object.keys(b).some(k => !['category', 'description', 'help'].includes(k)) ||
-          (b.category !== undefined && !isCategory(b.category)) || (b.description !== undefined && !text(b.description, 400)) ||
+          (b.category !== undefined && !isPackCategory(b.category)) || (b.description !== undefined && !text(b.description, 400)) ||
           (b.help !== undefined && (typeof b.help !== 'object' || Object.values(b.help as object).some(h =>
             !Array.isArray(h) || h.length !== 2 || !text(h[0], 80) || !text(h[1], 400)))))
         throw new Error(`${m.name}: invalid browse data`);

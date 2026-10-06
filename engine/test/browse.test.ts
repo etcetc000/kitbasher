@@ -15,8 +15,9 @@ test('a pack\'s own browse data places a model the catalog does not know', () =>
 
 test('browse data wins over the catalog; an unknown category falls back to it', () => {
   assert.equal(menuCategory(model('NZEPL', { category: 'Effects' })), 'FX');
-  assert.equal(menuCategory(model('NZEPL', { category: 'Not a category' })), 'SYN');
-  assert.equal(describeModel(model('NZEPL', { help: {} })).category, 'Synths & textures');
+  assert.equal(menuCategory(model('NZEPL', { category: 'Not a category' })), 'HAT');
+  assert.equal(describeModel(model('ZZZZZ', { category: 'Synths & textures' })).category, 'Synths', 'a pack from before the split');
+  assert.equal(describeModel(model('NZEPL', { help: {} })).category, 'Hi-hats & cymbals');
 });
 
 test('checkPack refuses malformed browse data', () => {
@@ -24,4 +25,5 @@ test('checkPack refuses malformed browse data', () => {
     models: [{ key: 'TEST/0', name: 'TEST ', module: 'test', labels: [], defaults: [], browse }] }) as unknown as Pack;
   for (const bad of [{ category: 'Drums' }, { help: { PTCH: ['Pitch'] } }, { colour: 'red' }, { description: 'x'.repeat(401) }])
     assert.throws(() => checkPack(pack(bad)), /invalid browse data/, JSON.stringify(bad));
+  checkPack(pack({ category: 'Synths & textures' }));   // a pack from before the synth split still loads
 });

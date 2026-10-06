@@ -20,9 +20,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 - Model sources: seven analog drum and synth voices (VADBD, VADSD, VADRC, VADPC,
   VADHH, VADCY, VADSY), five community synth voices (OSCAC, FMS4O, OSCSP, VOXFR,
   WAVSP) and a 30-program port of Befaco's Noise Plethora (NZEPL).
-- Eight browsing categories in the page (kicks; snares, rims and claps; hats and
-  cymbals; toms and hand percussion; FM; synths and textures; physical modeling;
-  effects), which also set the default machine-select menu categories.
+- Ten browsing categories in the page (kicks; snares, rims and claps; hats and
+  cymbals; toms and hand percussion; FM; synths; wavetables; vocal; physical
+  modeling; effects), which also set the default machine-select menu categories.
 - Help text for every control of every model, shown as you hover or tap a knob.
 - Automatic E12 trim: when your selection does not fit, the page trims the E12
   sample tails just enough to make room, and leaves them alone when everything

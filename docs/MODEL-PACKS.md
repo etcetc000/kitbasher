@@ -53,7 +53,7 @@ checked and offered as downloads.
 
 ## Carrying browsing data in a pack
 
-The page sorts models into eight browsing categories and shows help for every
+The page sorts models into ten browsing categories and shows help for every
 control, from `engine/src/sound_catalog.ts` and `web/src/parameters.ts`. A model
 the page has never heard of lands in **Other models** with generic help. To make a
 pack describe itself on any copy of the page, add your model's entries to those
