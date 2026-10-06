@@ -267,6 +267,8 @@ local_102:
     move a,x:(r6+$e)
 local_11b:
     move y:(r6+$1),a
+    asr a
+    add #>$180000,a
     move y:(r6+$1c),x0
     add x0,a
     move y:(r6+$2a),x0
@@ -319,6 +321,8 @@ local_11b:
     mpy y0,x0,a
     move a,y:(r6+$d)
     move y:(r6+$1),a
+    asr a
+    add #>$180000,a
     move y:(r6+$1c),x0
     add x0,a
     clr b

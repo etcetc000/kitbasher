@@ -357,6 +357,8 @@ local_150:
     move y:(r0),x0
     move x0,y:(r6+$18)
     move y:(r6+$1),a
+    asr a
+    add #>$180000,a
     move y:(r6+$14),x0
     add x0,a
     move y:(r6+$3f),x0
@@ -608,6 +610,8 @@ local_26d:
     move x0,y:(r6+$3c)
 local_279:
     move y:(r6+$1),a
+    asr a
+    add #>$180000,a
     move y:(r6+$14),x0
     add x0,a
     move y:(r6+$3f),x0
@@ -849,6 +853,8 @@ local_374:
     move x0,y:(r6+$17)
 local_376:
     move y:(r6+$1),a
+    asr a
+    add #>$180000,a
     move y:(r6+$14),x0
     add x0,a
     move y:(r6+$17),x0
