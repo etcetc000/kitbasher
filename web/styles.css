@@ -1744,3 +1744,37 @@ body.wizard .lay-grid{grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr)}
   font-size: 15px;
   line-height: 1.35;
 }
+
+/* Dark theme, chosen with the header toggle and remembered in this browser (light is the default).
+   Black and white; only the screen previews keep their LCD colours. */
+.theme-toggle{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:3px;font:inherit;font-size:12px;cursor:pointer}
+:root[data-theme=dark]{color-scheme:dark}
+:root[data-theme=dark] body.bench{--bg:#0b0b0b;--panel:#161616;--ink:#ececec;--muted:#c2c2c2;--line:#323232;--accent:#f2f2f2;--chip:#222;--ok:#8fcf9f;--err:#ff8f80;--hi:#2a2a2a;--hover:#1e1e1e}
+:root[data-theme=dark] body.bench :is(h1,.page-head h1){color:var(--accent)}
+:root[data-theme=dark] body.bench .page-head{border-bottom-color:var(--accent)}
+:root[data-theme=dark] body.bench a{color:var(--accent)}
+:root[data-theme=dark] body.bench .wizard-steps button[aria-current=step],
+:root[data-theme=dark] body.bench :is(.wizard-actions .wizard-primary,button.wizard-primary,#build){background:var(--accent);border-color:var(--accent);color:#0b0b0b}
+:root[data-theme=dark] body.bench :is(.wizard-primary,#build):disabled{background:#2c2c2c;border-color:#2c2c2c;color:#7a7a7a}
+:root[data-theme=dark] body.bench :is(#drop,.lay-add){border-color:#444;background:var(--panel)}
+:root[data-theme=dark] body.bench :is(.machine,.stat,.inspector,.lay-cat,.lay-cat header,.icon,.lay-actions button,.lay-actions label.btn,.lay-ids .cell[data-state=free]){background:var(--panel);color:var(--ink);border-color:var(--line)}
+:root[data-theme=dark] body.bench .machine{border-bottom-color:var(--line)}
+:root[data-theme=dark] body.bench :is(.machine:hover,.machine-info:hover){background:var(--hover)}
+:root[data-theme=dark] body.bench .machine[data-inspected]{background:var(--hi)}
+:root[data-theme=dark] body.bench .screen{background:#101010}
+:root[data-theme=dark] body.bench #room{border-top-color:var(--line)}
+:root[data-theme=dark] body.bench .bar{background:#2a2a2a}
+:root[data-theme=dark] body.bench .meter[data-state=pending] .bar{background:repeating-linear-gradient(135deg,#2a2a2a 0 5px,#1c1c1c 5px 10px)}
+:root[data-theme=dark] body.bench .lay-cat[data-over]{box-shadow:0 0 0 2px var(--accent)}
+:root[data-theme=dark] body.bench :is(.lay-fp[data-custom],.lay-ids .cell[data-state=ours]){background:#2e2e2e}
+:root[data-theme=dark] body.bench .lay-ids .cell[data-state=ours][data-moved]{background:#3c3c3c}
+:root[data-theme=dark] body.bench .lay-ids .cell[data-state=dead]{background:repeating-linear-gradient(135deg,#1c1c1c 0 3px,#262626 3px 6px);color:#666}
+:root[data-theme=dark] body.bench :is(input,select,textarea){background:#0f0f0f;color:var(--ink);border-color:#444}
+:root[data-theme=dark] body.bench :is(.icon,.lay-actions button):disabled{color:#5a5a5a}
+:root[data-theme=dark] body.bench .lcd-glass{background:#ee7036}
+:root[data-theme=dark] body.bench .wizard-steps button[aria-current=step]{color:#0b0b0b;font-weight:600}
+:root[data-theme=dark] body.bench .machine > input{border:1.5px solid #8c8c8c;background:#0f0f0f}
+:root[data-theme=dark] body.bench .machine:hover > input:not(:checked){border-color:#d0d0d0}
+:root[data-theme=dark] body.bench .machine > input:checked{background:var(--ink);border-color:var(--ink)}
+:root[data-theme=dark] body.bench .machine > input:checked:after{border-color:#0b0b0b}
+.theme-toggle svg{width:14px;height:14px;display:block}
