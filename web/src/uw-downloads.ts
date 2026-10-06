@@ -1,7 +1,7 @@
 import type { Pack, PackModel } from '../../engine/src/packs.js';
 
 interface Asset {
-  file: string; name: string; module: string; firmware_commit: string;
+  file: string; name: string; module: string; firmware_commit?: string;
   sha256: string; bytes: number; displayed_slot: number;
 }
 let catalog: Promise<Asset[]> | null = null;
@@ -31,7 +31,8 @@ function download(a: Asset): Promise<string> {
   return verified.get(key)!;
 }
 
-/** Links only assets pinned to the selected model's source revision and declared need. */
+/** Links the sample asset each selected model declares it needs. An asset that names a
+ *  firmware_commit only matches a pack exported from that commit. */
 export function uwDownloads(models: PackModel[], packs: Pack[]): HTMLElement {
   const host = document.createElement('div');
   host.id = 'uw-downloads';
@@ -46,10 +47,11 @@ export function uwDownloads(models: PackModel[], packs: Pack[]): HTMLElement {
     host.append(row);
     void (async () => {
       try {
-        const source = packs.find(p => p.models.some(m => m.key === model.key))?.source.commit;
-        // Older packs have no install filename. The source/module/name entry in the asset
-        // catalog (web/uw-assets.json) supplies it; a sample name alone is not enough to match.
-        const a = (await assets()).find(a => (!file || a.file === file) && a.name === need.name && a.module === model.module && a.firmware_commit === source);
+        const source = packs.find(p => p.models.some(m => m.key === model.key))?.source?.commit;
+        // A need without an install filename is matched by model module and sample name; the
+        // asset's sha256 is verified before anything is offered.
+        const a = (await assets()).find(a => (!file || a.file === file) && a.name === need.name && a.module === model.module
+          && (!a.firmware_commit || !source || a.firmware_commit === source));
         if (!a) throw new Error(`No matching ${file ?? need.name} download is configured for this model version. Use the matching model release.`);
         const url = await download(a);
         const link = document.createElement('a');

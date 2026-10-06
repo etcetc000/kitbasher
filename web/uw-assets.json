@@ -5,7 +5,6 @@
       "file": "wave-single.syx",
       "name": "DWAV",
       "module": "WAV/TB",
-      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
       "sha256": "5c22e5e31f14dbd080d55b4971300de0f098af9a051f2e71707f118d4880097c",
       "bytes": 52104,
       "displayed_slot": 47
@@ -14,7 +13,6 @@
       "file": "wave-bank.syx",
       "name": "DPRO",
       "module": "WAV/CH",
-      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
       "sha256": "c74b32a68efc08ec2dbba092cfe479a420da3d6354b524e7def301c521071096",
       "bytes": 417102,
       "displayed_slot": 41
@@ -23,7 +21,6 @@
       "file": "wave-bank.syx",
       "name": "DPRO",
       "module": "WAV/MR",
-      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
       "sha256": "c74b32a68efc08ec2dbba092cfe479a420da3d6354b524e7def301c521071096",
       "bytes": 417102,
       "displayed_slot": 41
