@@ -5,6 +5,7 @@
 - [Model packs](MODEL-PACKS.md): loading packs in the browser and the CLI, bundling them, and the memory a model can declare
 - [Architecture](ARCHITECTURE.md): how a build works, the checks it runs, and where the code lives
 - [Testing](TESTING.md): the check suite and how to add tests
+- [Firmware safety](FIRMWARE-SAFETY.md): the rules that keep a patched build from crashing or freezing the Machinedrum, and the release and hardware burst-test checklist
 - [Writing a model](../examples/scaffold/README.md): the scaffold example
 - [Model manifest schema](model-manifest.schema.json)
 

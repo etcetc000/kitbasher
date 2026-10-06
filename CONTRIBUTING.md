@@ -124,7 +124,9 @@ expensive model cheap.
 ## Hardware safety
 
 Changes to DSP code, the boot chain or flash layout reach real instruments.
-For those changes:
+Read [docs/FIRMWARE-SAFETY.md](docs/FIRMWARE-SAFETY.md) first: it lists every
+rule learned from a crashed or frozen unit, the gate that enforces each, and the
+hardware burst test. For those changes:
 
 - Describe how you tested: emulator runs, sound comparisons, worst-case timing
   (all tracks playing, repeated triggers, overload and recovery), and hardware.
