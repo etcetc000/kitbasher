@@ -75,7 +75,7 @@
   "provenance": [
     {
       "origin": "Community EFM-4OP v80 optimized renderer",
-      "license": "GPL-2.0-or-later",
+      "license": "GPL-3.0-or-later",
       "reference": "Original Machinedrum voice by Nick Montgomery (EFM-4OP v80), ported to an md-model/1 add-on"
     }
   ]

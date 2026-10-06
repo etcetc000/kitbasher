@@ -78,7 +78,7 @@
   "provenance": [
     {
       "origin": "synthetic test fixture",
-      "license": "GPL-2.0-or-later",
+      "license": "GPL-3.0-or-later",
       "reference": "No model code or tables"
     }
   ]

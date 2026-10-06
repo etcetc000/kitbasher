@@ -75,7 +75,7 @@
   "provenance": [
     {
       "origin": "Community P-I MG v73 formant oscillator",
-      "license": "GPL-2.0-or-later",
+      "license": "GPL-3.0-or-later",
       "reference": "Original Machinedrum voice by Nick Montgomery (P-I MG v73), ported to an md-model/1 add-on"
     }
   ]

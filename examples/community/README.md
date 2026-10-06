@@ -36,4 +36,4 @@ at eight relocation placements and confirms each pack holds exactly its model.
 ## License
 
 Written by Nick Montgomery and published here with his permission under the
-GNU General Public License, version 2 or later, like the rest of Kitbasher.
+GNU General Public License, version 3 or later, like the rest of Kitbasher.

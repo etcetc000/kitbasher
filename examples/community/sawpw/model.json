@@ -75,7 +75,7 @@
   "provenance": [
     {
       "origin": "Community saw/pulse v22 core",
-      "license": "GPL-2.0-or-later",
+      "license": "GPL-3.0-or-later",
       "reference": "Original Machinedrum voice by Nick Montgomery (E12-JU v22), ported to an md-model/1 add-on"
     }
   ]
