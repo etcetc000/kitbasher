@@ -27,15 +27,6 @@
       "sha256": "c74b32a68efc08ec2dbba092cfe479a420da3d6354b524e7def301c521071096",
       "bytes": 417102,
       "displayed_slot": 41
-    },
-    {
-      "file": "mm-bbox.syx",
-      "name": "BBOX",
-      "module": "mm_bbox",
-      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
-      "sha256": "1128a1176d4877694ccc290371d271c069c14b3ecb3dfe0ad4103f46cc69f773",
-      "bytes": 400846,
-      "displayed_slot": 45
     }
   ]
 }

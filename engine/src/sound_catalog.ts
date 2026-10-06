@@ -41,7 +41,6 @@ export const catalog: Record<string, Entry> = {
   MMDEN: entry('Synths & textures', 'Four digital wave oscillators with chord intervals and an ensemble chorus.'),
   MMENS: entry('Synths & textures', 'Four chord oscillators with wave shape, pulse width and an ensemble chorus.'),
   MMSID: entry('Synths & textures', 'A SID-style synth with pulse-width motion, waveform selection, sync and ring modulation.'),
-  MMBOX: entry('Synths & textures', 'A drum sample bank with pitch, start position and timed retriggers.'),
   MMPLS: entry('Synths & textures', 'A pulse synth with pulse-width control, unison spread and sub oscillators.'),
   NOISE: entry('Synths & textures', 'Thirty noise and drone programs after the Befaco Noise Plethora: clusters, cross-modulation, filtered noise, walks and grains.'),
   MMVO6: entry('Synths & textures', 'A vocal synth with two vowel controls, voice selection, formant and resonance.'),

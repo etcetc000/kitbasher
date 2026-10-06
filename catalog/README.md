@@ -14,7 +14,7 @@ the page. See [Model packs](../docs/MODEL-PACKS.md).
 | Pack | Models |
 |---|---|
 | `core.json` | Shared runtime: knob callback, dynamic labels, DSP1 drive |
-| `mm.json` | FM ST, FM PA, FM DY, MMSAW, MMPLS, MMWAV, MMVO6, MMDEN, MMDDR, MMSID, MMENS, MMBOX |
+| `mm.json` | FM ST, FM PA, FM DY, MMSAW, MMPLS, MMWAV, MMVO6, MMDEN, MMDDR, MMSID, MMENS |
 | `np.json` | NOISE |
 | `community-*.json` | FM4OP, FORMT, SAWPW, ACID, SPECT |
 | `analog-*.json` | AN BD, AN SD, AN RC, AN PC, AN HH, AN CY, AN SY |
