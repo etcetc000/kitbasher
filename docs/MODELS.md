@@ -10,11 +10,12 @@ assigned machine ID; none replaces a stock machine.
 | Analog recreations | [`examples/analog`](../examples/analog/README.md) | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | GPL v3 or later |
 | Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP | GPL v3 or later |
 | Noise Plethora | [`examples/noise-plethora`](../examples/noise-plethora/README.md) | NZEPL (30 programs) | GPL-3.0-or-later; Teensy Audio parts MIT |
+| Physical models | [`examples/physical`](../examples/physical/README.md) | PHYKS | MIT |
 | Scaffold | [`examples/scaffold`](../examples/scaffold/README.md) | A silent starting point for your own model | GPL v3 or later |
 
 Model names say what engine they are: VAD (analog-style drum voices), FMS (FM),
-OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant) and
-NZE (noise). Renamed models keep their former keys as aliases, so a
+OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant),
+NZE (noise) and PHY (physical models). Renamed models keep their former keys as aliases, so a
 layout saved before the rename still loads and keeps every ID.
 
 ## Compiled models
@@ -60,6 +61,14 @@ program controls; a band-pass filter follows every program. Some programs are
 approximations made to fit the Machinedrum's time budget; the
 [README](../examples/noise-plethora/README.md) lists each one.
 
+## Physical models
+
+PHYKS is an original Karplus–Strong string: a noise or hammer excitation, shaped by
+PICK, recirculates through a damped delay line in the track's P-I slice. DEC,
+DAMP and a decaying pitch bend shape the string. Each trigger clears the slice in
+three chunks and stays silent for those 96 samples (about 2 ms). It has not been
+tested on hardware yet ([details](../examples/physical/ks/README.md)).
+
 ## Building packs from these sources
 
 Export any model directory with the native assembler (see the
@@ -69,7 +78,7 @@ Export any model directory with the native assembler (see the
 python packs/assembly_export.py examples/analog/bd --out my-packs/vad-bd --assembler /path/to/asm56.exe
 ```
 
-`npm run test:community` exports every community and analog model and checks
+`npm run test:community` exports every community, analog and physical model and checks
 each one at eight relocation placements. Put the resulting packs in
 [`catalog/`](../catalog/README.md) to bundle them into the site, or load them in
 the page.
@@ -98,6 +107,7 @@ compete for the same cache, and the whole OS adds its own work.
 | VOXFR | 121.6 |
 | WAVSP | 106.8 |
 | NZEPL | 125.4 (grainGlitchII, its costliest program) |
+| PHYKS | 120.2 (estimate) |
 
 When a kit asks for more than the DSP can give, overload recovery silences voices
 instead of letting the instrument stall. It does not make an expensive model

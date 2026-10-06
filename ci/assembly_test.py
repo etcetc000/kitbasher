@@ -62,6 +62,13 @@ class Assembly(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'P-I contract'):
                 exporter.export(root,root/'invalid')
 
+    def test_bundled_ksstr_pack_matches_a_fresh_export(self):
+        bundled=json.loads((ROOT/'catalog/physical-ks.json').read_text(encoding='utf-8'))
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh=exporter.export(ROOT/'examples/physical/ks',Path(tmp)/'out')
+        fresh.pop('source')
+        self.assertEqual(json.loads(json.dumps(fresh)),bundled)
+
     def test_compact_x_slots_and_explicit_long_forms(self):
         w,_=A.assemble('move x0,x:(r6+$28)\nmove x:(r6+$28),a\nmove a0,y:(r6+$19)\nmove x0,x:(r6+>$28)\nmove y:(r0+>$22),r2',0x110000)
         self.assertEqual(w,[0x02a684,0x02a69e,0x0266e8,0x0a7684,0x28,0x0b70d2,0x22])

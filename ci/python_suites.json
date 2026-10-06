@@ -1,6 +1,7 @@
 {
   "unit": [
     "assembly_source_test",
+    "ksstr_test",
     "live_reload_test",
     "local_catalog_test",
     "manifest_test",

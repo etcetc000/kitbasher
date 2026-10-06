@@ -6,8 +6,10 @@
 //   build       typecheck, then bundle the site into web/dist
 //   check       typecheck, unit suites and build: the full gate CI runs
 //   assembly    instruction-encoding tests; needs the native assembler
-//   community-check  export examples/community and examples/analog and compare each pack with
-//               the hash in its catalog.json; needs the native assembler
+//   community-check  export examples/community, examples/analog and examples/physical and check
+//               each pack holds exactly its model; needs the native assembler
+//   ksstr       run PHYKS from catalog/ on the DSP instruction host against its integer model;
+//               needs dspHost
 //   dev         build and serve the site on 127.0.0.1 with live reload: dev [PACK_DIR] [PORT]
 //
 // Child processes run with windowsHide so no console windows flash open on Windows.
@@ -95,7 +97,7 @@ try {
       inventory();
       pythonInventory();
       run(python(), ['-c', "import sys; sys.path.insert(0, 'build/manifest-deps'); import jsonschema; print('Python:', sys.version.split()[0]); print('jsonschema: available')"]);
-      for (const k of ['packDir', 'uwAssets', 'assembler'])
+      for (const k of ['packDir', 'uwAssets', 'assembler', 'dspHost'])
         console.log(`${k}: ${c[k] ? (existsSync(c[k]) ? c[k] : `${c[k]} (not found; optional)`) : 'not configured (optional)'}`);
       console.log('Ready for npm run check.');
       break;
@@ -110,12 +112,18 @@ try {
       run(python(), ['-B', 'ci/community_packages_check.py', '--assembler', c.assembler, '--out', out]);
       break;
     }
+    case 'ksstr': {
+      required(c, ['dspHost']);
+      const out = join(root, 'build', `ksstr-check-${Date.now()}`);
+      run(python(), ['-B', 'ci/ksstr_check.py', '--pack', 'catalog/physical-ks.json', '--host', c.dspHost, '--out', out]);
+      break;
+    }
     case 'assembly':
       required(c, ['assembler']);
       pythonTests('assembly');
       break;
     case 'dev': dev(process.argv.slice(3)); break;
-    default: throw new Error('Use doctor, typecheck, unit, build, check, assembly, community-check or dev');
+    default: throw new Error('Use doctor, typecheck, unit, build, check, assembly, community-check, ksstr or dev');
   }
   console.log(`\n${command}: PASS (${((performance.now() - started) / 1000).toFixed(1)} s)`);
 } catch (e) { console.error(`\n${command}: FAIL: ${e.message}`); process.exitCode = 1; }

@@ -17,6 +17,7 @@
     "test:assembly": "node ci/workflow.mjs assembly",
     "dev": "node ci/workflow.mjs dev",
     "test:community": "node ci/workflow.mjs community-check",
+    "test:ksstr": "node ci/workflow.mjs ksstr",
     "install-hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {

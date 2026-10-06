@@ -1,0 +1,91 @@
+{
+  "format": "md-model/1",
+  "key": "PHY/KS",
+  "aliases": [
+    "EX/KARPLUS"
+  ],
+  "version": "0.2.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "PHYKS",
+    "category": "PHY",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 90
+      },
+      {
+        "label": "DEC",
+        "default": 110
+      },
+      {
+        "label": "DAMP",
+        "default": 96
+      },
+      {
+        "label": "LEVL",
+        "default": 100
+      },
+      {
+        "label": "HAMR",
+        "default": 0
+      },
+      {
+        "label": "PICK",
+        "default": 127
+      },
+      {
+        "label": "BEND",
+        "default": 0
+      },
+      {
+        "label": "BDEC",
+        "default": 64
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    },
+    {
+      "kind": "pi",
+      "space": "XY",
+      "words": 1536,
+      "alignment": 512,
+      "lifetime": "track-assignment",
+      "init": "chunked-muted",
+      "release": "plain-audio"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 128,
+    "trigger_cycles": 100,
+    "init_cycles": 200
+  },
+  "provenance": [
+    {
+      "origin": "Original Karplus-Strong educational implementation",
+      "license": "MIT",
+      "reference": "README.md; formula-generated local tables (make_tables.py), no firmware-derived source or constants"
+    }
+  ]
+}

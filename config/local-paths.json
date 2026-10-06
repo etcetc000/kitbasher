@@ -2,5 +2,6 @@
   "python": { "env": "PYTHON" },
   "packDir": { "env": "MD_PACKS", "home": "Documents/kitbasher-packs" },
   "uwAssets": { "env": "MD_UW_ASSETS" },
-  "assembler": { "env": "MD_ASSEMBLER" }
+  "assembler": { "env": "MD_ASSEMBLER" },
+  "dspHost": { "env": "MD_DSP_HOST" }
 }
