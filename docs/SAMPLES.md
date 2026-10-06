@@ -66,6 +66,17 @@ is and its pad follows.
 - **Identity.** With no swaps, or with every sample swapped for its own stock data, the build
   is byte-for-byte the build without the Samples step, with trimming on or off.
 
+## The Samples step
+
+The 16 E12 machines are laid out as pads in Machinedrum order (BD SD HT LT CP RS CB CH /
+OH RC CC BR TA TR SH BC); the two-sample machines have a main and a layer half. Click a
+pad to select and play it. Drop one file on a pad to replace it. Drop several files or
+a folder on the grid to place them by name ([web/src/sample-match.ts](../web/src/sample-match.ts):
+kick or bd for BD, snare or sd for SD, open hat for OH and so on); a review bar lists
+what matched, and files that did not can be dragged onto a pad before **Apply**.
+Dropping a `.kitbasher.json` loads it as a project. With the keyboard, the arrow keys
+move between pads, Space plays, Enter opens the file picker and Delete reverts.
+
 ## Converting a file
 
 In the browser: decode (WAV or AIFF, or anything else the browser decodes), resample to 44.1 kHz,

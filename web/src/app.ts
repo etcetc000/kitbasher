@@ -617,7 +617,11 @@ async function main(): Promise<void> {
   $('samples-next').addEventListener('click', () => showStep(3));
   $('models-next').addEventListener('click', () => void onBuild('categories'));
   $('categories-next').addEventListener('click', () => showStep(5));
-  samples = new SamplesStep($('samples-panel'), () => { trims.clear(); refresh(); });
+  samples = new SamplesStep($('samples-panel'), {
+    onChange: () => { trims.clear(); refresh(); },
+    saveKit: () => void saveProject(),
+    loadKit: (f) => void onProjectFile(f),
+  });
   samples.render();
   const projectFile = $<HTMLInputElement>('project-file');
   projectFile.addEventListener('change', () => { if (projectFile.files?.[0]) void onProjectFile(projectFile.files[0]); projectFile.value = ''; });

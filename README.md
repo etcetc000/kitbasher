@@ -17,9 +17,10 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    file again restores your machine.
 2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
    OS file (`.syx` or `.bin`).
-3. **Swap samples (optional).** Replace any of the E12 machines' samples with
-   your own WAV or AIFF files. A new sample can be as long as the one it
-   replaces; a longer file is cut to fit. See [E12 samples](docs/SAMPLES.md).
+3. **Swap samples (optional).** The E12 machines appear as a grid of pads: click
+   one to hear it, drop a WAV or AIFF file on it to replace it, or drop several
+   files or a folder to place them by name. A new sample can be as long as the
+   one it replaces; a longer file is cut to fit. See [E12 samples](docs/SAMPLES.md).
 4. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
    synths, wavetables, vocal, physical modeling, effects) and check the machines you want. Click a
    model to see its screen and what every control does. The meters show how much
