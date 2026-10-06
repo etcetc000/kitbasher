@@ -52,10 +52,17 @@ their credits and licenses.
 
 ## Safety
 
-Flashing firmware always carries some risk. Kitbasher never rewrites the boot
-menu, so a failed or unwanted update is recovered by sending your original OS
-file the same way. Keep that file safe before you start. Every build is also
-checked before you can download it, including that nothing it adds touches
+**Use at your own risk.** Kitbasher is free software provided as is, without
+warranty of any kind (see sections 15 and 16 of the [GPL v3](COPYING)).
+Installing modified firmware can make your Machinedrum unusable. The authors and
+contributors accept no liability for damage, data loss or repair costs, however
+caused. If you are not comfortable recovering a Machinedrum from a failed update,
+do not install a patched OS.
+
+Flashing firmware always carries some risk. Kitbasher is designed not to touch
+the boot menu, so a failed or unwanted update can normally be recovered by sending
+your original OS file the same way. Keep that file safe before you start. Every
+build is also checked before you can download it, including that nothing it adds touches
 memory the Machinedrum has not set up yet during boot.
 
 Every rule that keeps a patched build from crashing or freezing the

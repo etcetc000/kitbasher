@@ -1,5 +1,11 @@
 # Firmware safety
 
+> **Use at your own risk.** Kitbasher is provided as is, without warranty of any
+> kind; see sections 15 and 16 of the [GPL v3](../COPYING). The rules below lower
+> the risk of a bad build; they do not remove it. Installing modified firmware can
+> make your Machinedrum unusable, and the authors and contributors accept no
+> liability for damage, data loss or repair costs.
+
 A patched OS runs on three processors: the ColdFire (MCF5206e) that runs the
 OS, DSP1 (the mixer) and DSP2 (the voices). Every rule below comes from a build
 that crashed, froze or corrupted a Machinedrum, most of them on a MKII +Drive UW.
