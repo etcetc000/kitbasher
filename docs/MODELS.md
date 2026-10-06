@@ -1,4 +1,4 @@
-# Models with source in this repository
+# Models
 
 These model families ship as editable source under [`examples/`](../examples/).
 Each directory is a complete `md-model/1` source: a manifest, DSP2 assembly and
@@ -16,6 +16,21 @@ Model names say what engine they are: VAD (analog-style drum voices), FMS (FM),
 OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant) and
 NZE (noise). Renamed models keep their former keys as aliases, so a
 layout saved before the rename still loads and keeps every ID.
+
+## Compiled models
+
+Two packs in [`catalog/`](../catalog/README.md) ship as compiled code only:
+
+| Pack | Contents |
+|---|---|
+| `synths.json` | FMS2O, FMS3O, FMSSW, OSCSW, OSCPW, OSCCH, OSC8B, WAVTB, WAVCH, WAVMR, VOXVO |
+| `core.json` | The shared runtime every build links: knob callback, dynamic labels, DSP1 drive curves |
+
+A compiled pack holds finished DSP56300 code, its tables, relocations and entry
+points. The engine links it exactly like a pack exported from `examples/`, so
+these models work in every build. Their source is not part of this repository,
+so they cannot be edited or rebuilt here. They are distributed as data alongside
+Kitbasher and are not covered by the GPL source offer for the application.
 
 ## Analog recreations
 

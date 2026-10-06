@@ -23,6 +23,9 @@ Kitbasher is distributed under the GNU General Public License v2; see
   original attribution and records the license as `NOASSERTION`, which grants
   none.
 
+The compiled packs `catalog/synths.json` and `catalog/core.json` are distributed
+as data without source; see [Compiled models](docs/MODELS.md#compiled-models).
+
 Machinedrum firmware is supplied by each user and is not part of this project.
 Model packs carry their own license and provenance records; see
 [docs/MODELS.md](docs/MODELS.md).
