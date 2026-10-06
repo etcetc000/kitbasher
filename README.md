@@ -58,6 +58,10 @@ file the same way. Keep that file safe before you start. Every build is also
 checked before you can download it, including that nothing it adds touches
 memory the Machinedrum has not set up yet during boot.
 
+Every rule that keeps a patched build from crashing or freezing the
+Machinedrum, and the hardware test to run before you share an image, is in
+[docs/FIRMWARE-SAFETY.md](docs/FIRMWARE-SAFETY.md).
+
 Saved kits refer to machines by ID. When you rebuild for existing kits, export
 your layout from the page and load it again so every machine keeps its ID.
 

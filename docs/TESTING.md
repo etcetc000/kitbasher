@@ -41,4 +41,5 @@ Synthetic tests cannot prove that new DSP code sounds right or fits its time
 budget. For DSP, recovery or flash-layout changes, also test sound against a
 reference, idle and fully loaded timing, repeated triggers, mixed-kit overload
 and recovery, and finally hardware. Keep failing results and the exact input
-hashes; do not widen tolerances to make a result pass.
+hashes; do not widen tolerances to make a result pass. The rules and the
+hardware burst test are in [Firmware safety](FIRMWARE-SAFETY.md).
