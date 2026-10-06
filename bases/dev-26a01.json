@@ -1,7 +1,7 @@
 {
  "format": "md-base/2",
  "id": "dev-26a01",
- "name": "M's DEV firmware (md-26A01-183521)",
+ "name": "Em's DEV firmware (md-26A01-183521)",
  "about": "Tag 'DEV '. A later DEV revision than md-26912-190450: DSP2's upload is unchanged, while the ColdFire slot, DSP1 and the add-on differ. Its add-on unpacks 21 scatter pieces and the base ends at flash 0xfec13, which leaves about 5 KB of flash for the patch. DSP1's own upload occupies P:0xa10..0xa3e, so the DSP1 drive dispatcher is placed after it, with 219 words available below the ordered-recovery handler.",
  "identify": {
   "tag": "DEV ",
