@@ -57,6 +57,8 @@ def main():
             ap.error('--reload rebuilds web/dist; it cannot be combined with --site')
         from live_reload import LiveReload
         live = LiveReload(ROOT, dist, args.node)
+    if args.uw_dir is None and (ROOT / 'catalog' / 'uw').is_dir():
+        args.uw_dir = ROOT / 'catalog' / 'uw'
     catalog = json.loads((dist / 'data' / 'uw-assets.json').read_text(encoding='utf-8'))
     routes = {}
     if args.pack_dir:
