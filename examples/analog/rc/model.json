@@ -1,0 +1,118 @@
+{
+  "format": "md-model/1",
+  "key": "AN/RC",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "AN RC",
+    "category": "AN",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 64
+      },
+      {
+        "label": "DEC",
+        "default": 52
+      },
+      {
+        "label": "MODE",
+        "default": 0
+      },
+      {
+        "label": "NOIS",
+        "default": 104
+      },
+      {
+        "label": "TONE",
+        "default": 64
+      },
+      {
+        "label": "SNAP",
+        "default": 48
+      },
+      {
+        "label": "DRIV",
+        "default": 0
+      },
+      {
+        "label": "BEND",
+        "default": 64
+      }
+    ],
+    "modes": [
+      {
+        "knob": 2,
+        "zones": [
+          {
+            "min": 0,
+            "max": 42,
+            "labels": {
+              "4": "SYM",
+              "5": "TICK",
+              "2": "RS H"
+            }
+          },
+          {
+            "min": 43,
+            "max": 85,
+            "labels": {
+              "4": "TUN2",
+              "5": "TICK",
+              "7": "SYM",
+              "2": "RS C"
+            }
+          },
+          {
+            "min": 86,
+            "max": 127,
+            "labels": {
+              "0": "TONE",
+              "1": "NDEC",
+              "3": "RATE",
+              "4": "NUM",
+              "5": "NLEV",
+              "6": "CDEC",
+              "7": "RAND",
+              "2": "CLAP"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 256,
+    "trigger_cycles": 1000,
+    "init_cycles": 1000
+  },
+  "provenance": [
+    {
+      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "license": "NOASSERTION",
+      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+    }
+  ]
+}

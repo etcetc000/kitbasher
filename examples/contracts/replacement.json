@@ -1,0 +1,85 @@
+{
+  "format": "md-model/1",
+  "key": "example/contract",
+  "version": "0.80.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "replace",
+    "id": 38,
+    "target": {
+      "family": "EFM",
+      "name": "EFMHH",
+      "abi": "md-stock-callback/1"
+    }
+  },
+  "panel": {
+    "name": "TEST ",
+    "category": "EFM",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 96
+      },
+      {
+        "label": "DEC",
+        "default": 32
+      },
+      {
+        "label": "TREM",
+        "default": 0
+      },
+      {
+        "label": "TFRQ",
+        "default": 0
+      },
+      {
+        "label": "MOD",
+        "default": 64
+      },
+      {
+        "label": "MFRQ",
+        "default": 64
+      },
+      {
+        "label": "MDEC",
+        "default": 64
+      },
+      {
+        "label": "FB",
+        "default": 127
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "provider": "legacy-stack",
+      "entry": "test_fixture.py",
+      "abi": "md-stock-callback/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 129.6,
+    "trigger_cycles": 460,
+    "init_cycles": 460
+  },
+  "provenance": [
+    {
+      "origin": "synthetic test fixture",
+      "license": "GPL-2.0-only",
+      "reference": "No model code or tables"
+    }
+  ]
+}

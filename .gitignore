@@ -1,0 +1,10 @@
+node_modules/
+engine/dist/
+web/dist/
+*.syx
+*.bin
+__pycache__/
+build/
+.local/
+.venv/
+!catalog/uw/*.syx

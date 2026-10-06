@@ -1,0 +1,27 @@
+{
+  "name": "kitbasher",
+  "private": true,
+  "license": "GPL-2.0-only",
+  "homepage": "https://kitbasher.xyz",
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "description": "Add new sound models to the OS of your Elektron Machinedrum, entirely in your browser",
+  "scripts": {
+    "doctor": "node ci/workflow.mjs doctor",
+    "typecheck": "node ci/workflow.mjs typecheck",
+    "build": "node ci/workflow.mjs build",
+    "test": "node ci/workflow.mjs unit",
+    "check": "node ci/workflow.mjs check",
+    "test:assembly": "node ci/workflow.mjs assembly",
+    "dev": "node ci/workflow.mjs dev",
+    "test:community": "node ci/workflow.mjs community-check",
+    "install-hooks": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "format": "md-model/1",
+  "key": "COMM/EFM4OP",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "FM4OP",
+    "category": "COM",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 60
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "ALGO",
+        "default": 0
+      },
+      {
+        "label": "RAT1",
+        "default": 24
+      },
+      {
+        "label": "RAT2",
+        "default": 24
+      },
+      {
+        "label": "LVL",
+        "default": 64
+      },
+      {
+        "label": "MENV",
+        "default": 48
+      },
+      {
+        "label": "FB",
+        "default": 32
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 129.6,
+    "trigger_cycles": 460,
+    "init_cycles": 460
+  },
+  "provenance": [
+    {
+      "origin": "Community EFM-4OP v80 optimized renderer",
+      "license": "NOASSERTION",
+      "reference": "Original Machinedrum voice by Nick Montgomery (EFM-4OP v80), ported to an md-model/1 add-on"
+    }
+  ]
+}

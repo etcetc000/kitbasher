@@ -1,0 +1,132 @@
+{
+  "format": "md-lineage/1",
+  "id": "lineage-163",
+  "about": "What every OS 1.63-derived build keeps, used by the engine to find things in a base's own code: signatures (engine/src/sig.ts syntax) with every address operand wildcarded or captured, data-structure shapes, and the constants of the fixes. No address here is used to patch: `anchors` are where stock 1.63 has each site, reported next to what discovery finds. engine/src/discover.ts reads this file.",
+  "identify": {
+    "about": "Structural checks that identify an OS 1.63-lineage build. The two hashes cover the bootstrap-rewrite routine and the boot-block copy it writes from: the engine does not patch a base that changed them.",
+    "cf_base": "0x200000",
+    "bootstrap_rewrite": { "at": "0x200040", "length": 512, "copy_operands": [364, 392],
+                           "sha256": "0554c0b238a6b1352f865f6080a43261839b8e3ccbe3f52748f67dd00dc41dcc",
+                           "about": "sha256 of the 512 bytes with every address operand zeroed (the two lea operands name the boot-block copy, which must hash as below)" },
+    "boot_block_copy": { "length": 14784, "sha256": "6ea21aa078c7a3f7630f158b3a115d1f62bb476fa16cac6a0ed4f5fc5ddb5748" },
+    "boot_block": { "sha256": "bbb8aac12f9f216a73fb70d7687112316f1522e01901c2379c502418f2393dc7", "guard_at": "0x3ffe", "guard": "224b",
+                    "about": "Flash images only (a .syx does not carry the boot block): the SPS-1UW boot block, and 0x3ffe = 0x224b, without which the OS rewrites the boot block at every boot." }
+  },
+  "signatures": {
+    "reset": "2e7c <stack> 207c <sram_src> 227c <sram_dst> 203c <sram_end> 9089 6706 12d8 5380 6efa 207c <bss> 203c <bss_end> 9088 e480 4298 5380 6efa 4ef9 <entry>",
+    "os_main": "4eb9 <init> 46fc2700 42b9 ........ 42b9 ........ 42b9 ........ 42b9 ........ 203c01000000 220f 2e40 4e7bf801",
+    "boot_addon": "4879 <addon_ram> 4879 <addon_flash> 4eb9000001c4 508f 4eb9 <addon_init> 4ef9 <os_main>",
+    "boot_hook": "4ef9 <os_main>",
+    "scatter": "41f9 <table> 70 <last:1> 2f00 2f08 2f280004 2f10 4eb801c4 508f",
+    "sbrk": "4ab9 <brk> 660c 203c <heap_start> 23c0 ........ 2039 ........ 2200 d2af0004 0c81 <ceiling> 6304 70ff 4e75",
+    "knob_turn": "4eb9 ........ 4eb9 ........ 4eb9 <page_draw> 4eb9 ........ 4eb9 <redraw> 4281 41f9 ........ 1030 1800 49c0 41f9",
+    "dsp1_sender_call": "4eb9 <host_write> 4292 4fef000c 2f03 4eb9 <sender> 588f",
+    "host_send": "@dsp1_entry 207c00500004 60084e75 @dsp2_entry 207c00600004 20af0004 @cvr 70891140fffd 202f00085380 4e71 @word2 2080 @tail 226f000c e2806402 20992099 53806af8 4e75",
+    "flash_alias": "303c <csar:2> 33c000300064 203c <csmr> 23c000300068",
+    "high_defaults": "4a02 6c10 203c <site> 4a01 6602 5b80 b086",
+    "defaults_low": "d1fc00700008 2146 01a2 <site> 6516",
+    "lev_bar": "2640 <low> <jmp2> 0680ffff <high> b480 6410",
+    "preview": "@site 20010280000000f07460b4806748143c0070b4806740143c0050b480673820010280000000fe0c80000000a067282439"
+  },
+  "anchors": {
+    "about": "Where stock 1.63 has each thing. Reported beside the discovered address ('at the 1.63 address' or 'moved'); never patched from.",
+    "os_main": "0x213a0c", "descriptor_table": "0x252092", "free_descriptor": "0x24ef54", "family_table": "0x252396",
+    "heap_ceiling": "0x2139f8", "page_draw": "0x229dd2", "redraw": "0x229b38", "sram_sender_call": "0x100056a",
+    "high_defaults": "0x2053b8", "defaults_low": "0x205396", "lev_bar_low": "0x228320", "lev_bar_high": "0x22832c",
+    "preview": "0x231f38", "flash_alias": "0x10000000", "dsp1_hook": "0x25e",
+    "host_send_dsp1": "0x100074c", "host_send_dsp2": "0x1000756"
+  },
+  "os": {
+    "descriptor": { "size": 86, "ids": 192, "about": "192 longword pointers, then a zero longword; a free ID points at GND's empty descriptor (the most common entry, ID byte 0). Found by that shape among the lea operands of the base's code." },
+    "dead_ids": { "from": "0x60", "to": "0x77", "why": "no parameter packet (0x262824): silent on every hit" },
+    "menu": {
+      "about": "The machine-select menu. A family record is 4 name bytes and a list pointer; the menu draws 3 of them, stops at a 0 byte, and a 0 first byte ends the table. 256 families, 256 machines per list. charset: the characters the font at 0x259954 has glyphs for (no lowercase but o and p, which are symbols).",
+      "name_bytes": 4, "name_shown": 3,
+      "charset": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -+/.!#$%&()*:;=?[]_",
+      "max_families": 256, "max_per_list": 256
+    },
+    "id_fixes": {
+      "high_defaults": { "ids": ["0xa9", "0xaf"], "old": "0xa8", "new": "0xaf" },
+      "ctr_mask": {
+        "ids": ["0x7c", "0x7f"], "old": "0xf8", "new": "0xfc",
+        "about": "Every andi.l #$f8,Dn whose Dn is then compared with 0x78, found by following the masked ID through the base's code (engine/src/scan.ts): 22 in X.13, 25 in DEV, 24 in stock 1.63. These are the complete site list.",
+        "defaults_low": { "old": "0x705fb086", "new": "0x707fb086" }
+      },
+      "lev_bar": {
+        "low": { "ids": ["0x5f", "0x5f"], "old": "0x705eb081", "new": "0x705fb081" },
+        "high": { "ids": ["0xa9", "0xaf"], "old": "0xff807428", "new": "0xff80742f" },
+        "ctr": { "ids": ["0x7c", "0x7f"], "old": ["0x705eb081", "0x6c1e2001"] }
+      },
+      "preview": {
+        "about": "The machine-select preview skips IDs by masks that also catch 0x58..0x5f and 0x7c..0x7f; the 48 bytes are rewritten to test the exact stock ranges (every branch keeps the routine's skip, nothing branches into the block).",
+        "ids": [["0x58", "0x5f"], ["0x7c", "0x7f"]],
+        "new": "20010680ffffffa0741bb48064487410d0827407b480643e20010280000000fe0c80000000a0672e4e714e714e712439"
+      }
+    }
+  },
+  "modelRuntimes": [
+    {
+      "id": "stock-163-prepared",
+      "abi": "md-voice/1",
+      "dsp2": "e1d845a772f87b04e1681130f3e3eab2db20dc4d047489375a3be93870c591bc",
+      "sram": "1610aaa23af4da050de182fd6890a20fe3c3f6e2fa762be1c7953fd94b6b3d14",
+      "extensions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "docs/BASES.md"
+    },
+    {
+      "id": "dev-26912",
+      "abi": "md-voice/1",
+      "dsp2": "e1d845a772f87b04e1681130f3e3eab2db20dc4d047489375a3be93870c591bc",
+      "sram": "8d4d9ded76d547d252a9cbdb2bcd0f032ebe9dcb18f34ae3e9974d1d74a57aec",
+      "extensions": "8d2819cfdf0d6c26da2fca530759f10f12dca78495f6b6d0b6f2df2f780c880a",
+      "evidence": "docs/BASES.md"
+    },
+    {
+      "id": "dev-26a01",
+      "abi": "md-voice/1",
+      "dsp2": "e1d845a772f87b04e1681130f3e3eab2db20dc4d047489375a3be93870c591bc",
+      "sram": "37aff7574ad780e4a51eafce61eb0091ddbfbfbfc19d66a1fc7803526bbcb1a1",
+      "extensions": "ee824ef4ca1db5c264c27222eca6351cc4792f4030d2c090391da68fad3bae29",
+      "evidence": "docs/BASES.md"
+    },
+    {
+      "id": "x13",
+      "abi": "md-voice/1",
+      "dsp2": "2d402a93404a27b3594c8da397f65420d1e21cb672bbeac74f697d24d779696b",
+      "sram": "d5762d042f49a78ebb9e4461d0fd99856e76fc8cbb51b4f4d6a6a39a636dd9ee",
+      "extensions": "93a40df865404f7c85e993547f5a12fd532b1b5aaf180026cecedc3fc8231ffd",
+      "evidence": "docs/BASES.md"
+    },
+    {
+      "id": "x14",
+      "abi": "md-voice/1",
+      "dsp2": "2d402a93404a27b3594c8da397f65420d1e21cb672bbeac74f697d24d779696b",
+      "sram": "fa4e7a7d74f4106a0eca0097c2b1b8cdc8e0ef6864b65f50307844e11c1ffa5c",
+      "extensions": "b6f9d2bdecceebe8d58e3a3252976c4a0b28c6eec6c7362858b01c9aba9ce030",
+      "evidence": "docs/BASES.md"
+    }
+  ],
+  "ram": {
+    "window": { "image": ["0x2bc000", "0x2bd000"], "labels": ["0x2be100", "0x2bef60"] },
+    "heap_peak": "0x2b8000",
+    "about": "The ColdFire RAM window patched images use, tested on a Machinedrum MKII +Drive UW. The range 0x2bd000..0x2bd100 is in use on that hardware (an image that uses it freezes at the boot logo) and the emulator does not model this, so the window stops below it. A base gets this window only where its own code and boot leave it free: above the heap's measured peak (0x2b8000 on X.13 and stock 1.63 in the emulator), below every piece of the base's code and every RAM address its code names. The heap ceiling is lowered to the window's base."
+  },
+  "dsp2": {
+    "about": "DSP2 addresses of the stock 1.63 upload, which every lineage base keeps (X.13 re-records it). Anchored and shape-verified in the base's upload: the E12 table as 21 (start, length, 0) entries in the bank record, the three dispatch tables as 193 words each with the silence stub on every free ID.",
+    "bank_record": "0x1028c0", "e12_table": "0x103d7b", "e12_count": 21, "bank_end": "0x135206",
+    "free_regions": [["0x13b601", "0x140000"], ["0x147600", "0x147e00"]],
+    "free_regions_about": "Measured in the emulator, not discoverable from ColdFire code: stock 1.63 itself writes P:$13b600 at boot, so the first region starts at 0x13b601 (X.13 and DEV place their own code there anyway). A RAM probe with a sentinel-filled image finds every other word of 0x13b601..0x140000 and 0x147600..0x147e00 untouched on 1.63 and DEV with every machine ID on 16 tracks.",
+    "workspace": { "base": "0x12d000", "slice": "0x800" },
+    "dispatch": { "init": "0x145af5", "trigger": "0x145bb6", "render": "0x145c77" },
+    "pi": {
+      "about": "The stock P-I machines and their per-track slices. The P-I IDs are the machines of the base's own menu family named `family`; each one's INIT is its dispatch word, which must be a routine in the upload (not the silence stub). The slice geometry is read out of those inits: `init_signature` (24-bit DSP words, <captures>) is `move #>PI_WS,a ; move y:track,x0 ; mpyi #>half,x0,b`, the slice being 2 * half words (the product's low word is 0x600 t for half 0x300), found within `window` words of the init's entry in at least one P-I init and the same in every one it is found in. Used only when a selected machine declares pi_clean (engine/src/pi_clean.ts).",
+      "family": "P-I",
+      "init_signature": "56f400 <pi_ws> 4cf000 <track> 0141c8 <half>",
+      "window": 40
+    }
+  },
+  "dsp1": {
+    "about": "The core pack's DSP1 drive is built for the stock DSP1 upload's per-track chain: the dead window (do #$20 over fifteen nops) at P:$25e, its return jmp at P:$26f, the dispatcher at P:$a08..$c00, which no upload record may touch.",
+    "window_words": 18
+  }
+}

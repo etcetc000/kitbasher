@@ -1,0 +1,71 @@
+{
+ "format": "md-base/2",
+ "id": "stock-163-prepared",
+ "name": "OS 1.63, prepared (stock 1.63 with a boot hook)",
+ "about": "Stock OS 1.63 with the one change the patcher needs (engine/src/prepare.ts). The reset code's jump at 0x20003a names a hook routine at flash 0xe96e0, right after the container, which is jmp $213a0c (the OS entry) and a nop. The ColdFire slot is re-packed with that operand changed (UCL NRV2B, 164,328 bytes, the stock slot length, so nothing after it moves) and its checksum rewritten. Everything else is byte-identical to stock 1.63: boot block, 0x3ffe, the bootstrap-rewrite routine and its boot-block copy, DSP2, DSP1 and both data slots. Because 1.63 does not change, the cache holds its addresses, each at its 1.63 location; discovery still runs on every build and must agree.",
+ "identify": {
+  "tag": "163 ",
+  "coldfire_sha256": "f24194c5bfd8d95ac049ba37014e079152b289252a9607f81d90d7a693bcc6d8",
+  "dsp2_sha256": "e1d845a772f87b04e1681130f3e3eab2db20dc4d047489375a3be93870c591bc",
+  "dsp1_sha256": "0fd8b64a4cef976c07f246ab543294c263b08f543ebff8f8415811d29e434c06",
+  "flash_sha256": "610c918c4adcecd1bc5642a2471615744131ff3583802b8ed0983cf47163bfa9"
+ },
+ "prepared": {
+  "from": "stock-163",
+  "recipe": {
+   "os_jump": "0x20003a: 0x213a0c -> 0xe96e0",
+   "hook": "0xe96e0: 4ef900213a0c 4e71",
+   "coldfire_packed": 164328,
+   "coldfire_slot": 164328,
+   "packer": "UCL 1.03 NRV2B, the shorter of levels 10 and 8"
+  },
+  "syx_sha256": "f4990d91f3d5624b7fedd1f529073807865e76f0487fda1f27cff0399c158004"
+ },
+ "qualification": {
+  "level": "emulator-gated",
+  "by": "Tested in the emulator only"
+ },
+ "options": {
+  "hostSend": {
+   "ok": false,
+   "why": "in the emulator the prepared 1.63 base goes silent with the reorder (DSP2 renders the silence stub on every track) and plays with the stock sender. The failing reference is the per-track send loop in the DSP interrupt's SRAM code (jsr at 0x100055c). DEV has the same loop and plays, but DEV feeds MIDI through its own per-block queue and 1.63 does not. The cause is not yet known, so the option stays off on this base."
+  }
+ },
+ "cache": {
+  "boot.routine": "0xe96e0",
+  "boot.jump_operand": "0xe96e2",
+  "os_main": "0x213a0c",
+  "flash.os_end": "0xe96e8",
+  "os.descriptor_table": "0x252092",
+  "os.free_descriptor": "0x24ef54",
+  "os.family_table": "0x252396",
+  "os.family_base_sites": "0x22c1a8,0x23065a",
+  "os.family_list_sites": "0x22c210,0x231a60,0x231aba,0x231b10,0x231f22,0x235368",
+  "os.heap_ceiling": "0x2139f8",
+  "os.heap_old": "0x300000",
+  "os.ctr_sites": "0x2055ec,0x207d9a,0x20ca08,0x20cb8c,0x2196a6,0x219a0e,0x21cc42,0x224a0c,0x226e62,0x226ec4,0x228486,0x229c60,0x229ce0,0x229fa2,0x22a040,0x22a312,0x22a3b0,0x22f18a,0x22f204,0x238be4,0x23ad36,0x23aeae,0x23b1f4,0x23c2e8",
+  "os.high_defaults": "0x2053b8",
+  "os.defaults_low": "0x205396",
+  "os.lev_bar": "0x228320,0x22832c,0x228344",
+  "os.preview": "0x231f38",
+  "dyn.redraw": "0x229b38",
+  "dyn.redraw_sites": "0x2254a2,0x225530",
+  "dyn.page_draw": "0x229dd2",
+  "dyn.page_sites": "0x217214,0x217be2,0x218130,0x218a78,0x219c18,0x219c58,0x21a012,0x21a074,0x21f3e8,0x21f9bc,0x21fa0e,0x22005a,0x2206a8,0x22072c,0x224736,0x225496,0x225734,0x2353c4,0x2354a0,0x23551e",
+  "dsp1.sender": "0x1000702",
+  "dsp1.sender_sites": "0x20ac5e,0x100056a",
+  "dsp1.host_write": "0x1000756",
+  "dsp1.hook": "0x25e",
+  "flash.alias": "0x10000000",
+  "dsp2.free_regions": "0x13b601,0x140000,0x147600,0x147e00",
+  "ram.window": "0x2bc000,0x2bd000,0x2be100,0x2bef60",
+  "os.ctr_control_all": "0x21994c,0x2299e4",
+  "os.ctr_loop_skip": "0x21cd24",
+  "lcd.flush_hook": "0x2128a4",
+  "lcd.flush": "0x2126b0",
+  "lcd.frames": "0x252e50,0x252e4c",
+  "host_send.dsp2": "0x1000756",
+  "host_send.dsp1": "0x100074c",
+  "host_send.sites": "0x20a8ee,0x20a922,0x20a9fa,0x20aa56,0x20abb4,0x20abde,0x20ac1e,0x20ac52,0x100055c"
+ }
+}

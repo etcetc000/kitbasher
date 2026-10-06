@@ -1,0 +1,777 @@
+{
+  "upstream_revision": "6dea19646f8acefa81cd12314fbb79c7776f1023",
+  "banks": {
+    "A": [
+      {
+        "program": "radioOhNo",
+        "gain": 1.0,
+        "source": "P_radioOhNo.hpp",
+        "source_sha256": "3cbc1f880444f717fc4843dea987bf91f95512fec9316ec37b34aa8fda4d79cc",
+        "primitives": {
+          "AudioSynthWaveformDc": [
+            "dc1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod2",
+            "waveformMod1",
+            "waveformMod3",
+            "waveformMod4"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "Rwalk_SineFMFlange",
+        "gain": 1.0,
+        "source": "P_Rwalk_SineFMFlange.hpp",
+        "source_sha256": "92172cb8ae1fc3174edaff9ab85d31b2a53d867981087a165e372e6a8e990df4",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform1",
+            "waveform2",
+            "waveform3",
+            "waveform4"
+          ],
+          "AudioSynthWaveformSineModulated": [
+            "sine_fm3",
+            "sine_fm2",
+            "sine_fm1",
+            "sine_fm4"
+          ],
+          "AudioEffectFlange": [
+            "flange1"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "xModRingSqr",
+        "gain": 1.0,
+        "source": "P_xModRingSqr.hpp",
+        "source_sha256": "61200113abed221f777cad261ac3c5094e338b4714cc301421c0f98688ef4eba",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod2",
+            "waveformMod1"
+          ],
+          "AudioEffectMultiply": [
+            "multiply1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "XModRingSine",
+        "gain": 1.0,
+        "source": "P_XModRingSine.hpp",
+        "source_sha256": "62ec7c4d775812fb5efe962ff2b4e90c3357461714dfb4807580bb18d326e843",
+        "primitives": {
+          "AudioSynthWaveformSineModulated": [
+            "sine_fm1",
+            "sine_fm2"
+          ],
+          "AudioEffectMultiply": [
+            "multiply1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "CrossModRing",
+        "gain": 1.0,
+        "source": "P_CrossModRing.hpp",
+        "source_sha256": "ee94460b0cd4ae7a0bf060899a90ee3cb5b1e8fa6a027d99deb0587e50bc9bcb",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod3",
+            "waveformMod1",
+            "waveformMod4",
+            "waveformMod2"
+          ],
+          "AudioEffectMultiply": [
+            "multiply2",
+            "multiply1",
+            "multiply3"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "resonoise",
+        "gain": 1.0,
+        "source": "P_resonoise.hpp",
+        "source_sha256": "6cd30ead6ded3bf9aaee6423e77ce90341fce2230370bec6d5f09c09ec8cb72b",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ],
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveformSineModulated": [
+            "sine_fm1"
+          ],
+          "AudioSynthWaveformDc": [
+            "dc1"
+          ],
+          "AudioEffectWaveFolder": [
+            "wavefolder1"
+          ],
+          "AudioFilterStateVariable": [
+            "filter1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "grainGlitch",
+        "gain": 1.0,
+        "source": "P_grainGlitch.hpp",
+        "source_sha256": "727741fe75e301e126cf761d45e9e64b9006a5dc004cf35226b9d87a8a273dbd",
+        "primitives": {
+          "AudioEffectGranular": [
+            "granular1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ],
+          "AudioEffectDigitalCombine": [
+            "combine1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "grainGlitchII",
+        "gain": 1.0,
+        "source": "P_grainGlitchII.hpp",
+        "source_sha256": "6bafc97aa74615c34e0784a3b9586ce64b92cdd8bf7686f62ed8f9eefe99ff15",
+        "primitives": {
+          "AudioEffectGranular": [
+            "granular1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "grainGlitchIII",
+        "gain": 1.0,
+        "source": "P_grainGlitchIII.hpp",
+        "source_sha256": "bff89905a13a527bf3be763f899e249fc6cd89f04b7a46c66d2d852712a1ac5d",
+        "primitives": {
+          "AudioEffectGranular": [
+            "granular1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "basurilla",
+        "gain": 1.0,
+        "source": "P_basurilla.hpp",
+        "source_sha256": "efe21624564d5ad4c3ec85ed655bbef6694fdfd382e33d4f84b7cc72079589e8",
+        "primitives": {
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveform": [
+            "waveform3",
+            "waveform2",
+            "waveform1"
+          ],
+          "AudioEffectMultiply": [
+            "multiply2",
+            "multiply1",
+            "multiply3"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": false
+      }
+    ],
+    "B": [
+      {
+        "program": "clusterSaw",
+        "gain": 1.0,
+        "source": "P_clusterSaw.hpp",
+        "source_sha256": "1f6cd2ebb8f7c6745b78bd8ee8be47df9ba5a5b4cd6d2265784b27cb33cd15b5",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer2",
+            "mixer1",
+            "mixer3",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "pwCluster",
+        "gain": 1.0,
+        "source": "P_pwCluster.hpp",
+        "source_sha256": "28c175fd20f35b93df13f17f5fbc907f0d61790e7729dd2a7248f12a3baf4240",
+        "primitives": {
+          "AudioSynthWaveformDc": [
+            "dc1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform6",
+            "waveform5",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer1",
+            "mixer2",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "crCluster2",
+        "gain": 1.0,
+        "source": "P_crCluster2.hpp",
+        "source_sha256": "d54f9a08c52127c98e8ff4968e81cfb65300adf56ad9a1c9bd13605ce3ad3858",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "modulator"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform6",
+            "waveform5",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "sineFMcluster",
+        "gain": 1.0,
+        "source": "P_sineFMcluster.hpp",
+        "source_sha256": "3a28a24009fb3b007d1f070ebc5b72d33f7a0efa860f98c6d811f97840e37a3f",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "modulator1",
+            "modulator3",
+            "modulator2",
+            "modulator5",
+            "modulator4",
+            "modulator6"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform1",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform6",
+            "waveform5"
+          ],
+          "AudioMixer4": [
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "TriFMcluster",
+        "gain": 1.0,
+        "source": "P_TriFMcluster.hpp",
+        "source_sha256": "9fc9e9e11c4664da5221165d9cc05cb9fef069975891a5f47ecef4c246317460",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "modulator1",
+            "modulator3",
+            "modulator2",
+            "modulator5",
+            "modulator4",
+            "modulator6"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform1",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform6",
+            "waveform5"
+          ],
+          "AudioMixer4": [
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "PrimeCluster",
+        "gain": 0.8,
+        "source": "P_PrimeCluster.hpp",
+        "source_sha256": "eb9c49c5e987dc201b50422b86a97123bd9f165bb6fc3b69aafc3aa97f2d9197",
+        "primitives": {
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer3",
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "PrimeCnoise",
+        "gain": 0.8,
+        "source": "P_PrimeCnoise.hpp",
+        "source_sha256": "4c26d1302a76e27a6bd898375d81e46605ec229e9ea1d08421700d028ec9799c",
+        "primitives": {
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer3",
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "FibonacciCluster",
+        "gain": 1.0,
+        "source": "P_FibonacciCluster.hpp",
+        "source_sha256": "92739f7cc2953111bfa73663c95ab709fdf70ae8656cdf9587242e43239a6896",
+        "primitives": {
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer3",
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "partialCluster",
+        "gain": 1.0,
+        "source": "P_partialCluster.hpp",
+        "source_sha256": "2864f36d832226b3b6c84584dae89235562bb4deb8ca6eaa7a200064714e8721",
+        "primitives": {
+          "AudioSynthNoiseWhite": [
+            "noise1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer3",
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "phasingCluster",
+        "gain": 1.0,
+        "source": "P_phasingCluster.hpp",
+        "source_sha256": "e9db331c6518db44508760cb3932b3578c2e15cb49fee50bebe8bd2b6bbb4193",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "modulator13",
+            "modulator14",
+            "modulator15",
+            "modulator2",
+            "modulator4",
+            "modulator1",
+            "modulator16",
+            "modulator12",
+            "modulator11",
+            "modulator3",
+            "modulator5",
+            "modulator6",
+            "modulator7",
+            "modulator10",
+            "modulator8",
+            "modulator9"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveform16",
+            "waveform14",
+            "waveform15",
+            "waveform13",
+            "waveform8",
+            "waveform6",
+            "waveform7",
+            "waveform12",
+            "waveform5",
+            "waveform10",
+            "waveform11",
+            "waveform9",
+            "waveform4",
+            "waveform2",
+            "waveform3",
+            "waveform1"
+          ],
+          "AudioMixer4": [
+            "mixer4",
+            "mixer3",
+            "mixer2",
+            "mixer1",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      }
+    ],
+    "C": [
+      {
+        "program": "BasuraTotal",
+        "gain": 1.0,
+        "source": "P_BasuraTotal.hpp",
+        "source_sha256": "df34e92ab57fe65f21f3ed234ffadf62bd33655d01b3dcd9d7eeec96bdee29e6",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ],
+          "AudioEffectFreeverb": [
+            "freeverb1"
+          ]
+        },
+        "remove_reverb": true
+      },
+      {
+        "program": "Atari",
+        "gain": 1.0,
+        "source": "P_Atari.hpp",
+        "source_sha256": "f29b5a0f01f2d734c734c9ba34251e39e9b8b42bd2654fac0870e9134bfd3490",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod1",
+            "waveformMod2"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "WalkingFilomena",
+        "gain": 1.0,
+        "source": "P_WalkingFilomena.hpp",
+        "source_sha256": "bf52f27acf43914183d571ea63eecc9ec9ec840a930360efcf926544a944adfc",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform12",
+            "waveform16",
+            "waveform11",
+            "waveform8",
+            "waveform15",
+            "waveform9",
+            "waveform10",
+            "waveform13",
+            "waveform7",
+            "waveform14",
+            "waveform4",
+            "waveform5",
+            "waveform6",
+            "waveform3",
+            "waveform1",
+            "waveform2"
+          ],
+          "AudioMixer4": [
+            "mixer2",
+            "mixer1",
+            "mixer3",
+            "mixer4",
+            "mixer5"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "S_H",
+        "gain": 1.0,
+        "source": "P_S_H.hpp",
+        "source_sha256": "2fa9d3fbe5be849df947d5858cfd96912f275331cf6729741f3467f6aca27171",
+        "primitives": {
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ],
+          "AudioEffectFreeverb": [
+            "freeverb1"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": true
+      },
+      {
+        "program": "arrayOnTheRocks",
+        "gain": 1.0,
+        "source": "P_arrayOnTheRocks.hpp",
+        "source_sha256": "b9df79cb7094ed2bc3fd176ca2927eaf6d8c2d782fbff4fdb1c666b366d7077d",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "existencelsPain",
+        "gain": 1.0,
+        "source": "P_existencelsPain.hpp",
+        "source_sha256": "8727fcab9047e562d982d1b5f3973a23822ef5d1c64da0b0a9ea58d50f342295",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1",
+            "waveformMod2",
+            "waveformMod4",
+            "waveformMod3"
+          ],
+          "AudioFilterStateVariable": [
+            "filter1",
+            "filter2",
+            "filter3",
+            "filter4"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "whoKnows",
+        "gain": 1.0,
+        "source": "P_whoKnows.hpp",
+        "source_sha256": "8a6d37eb953f821d2c40b0f2a7b9c9a35df48acf53043f7336e6ca59af65af40",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform1"
+          ],
+          "AudioSynthWaveformModulated": [
+            "waveformMod1",
+            "waveformMod2",
+            "waveformMod4",
+            "waveformMod3"
+          ],
+          "AudioFilterStateVariable": [
+            "filter1",
+            "filter2",
+            "filter3",
+            "filter4"
+          ],
+          "AudioMixer4": [
+            "mixer1"
+          ]
+        },
+        "remove_reverb": false
+      },
+      {
+        "program": "satanWorkout",
+        "gain": 1.0,
+        "source": "P_satanWorkout.hpp",
+        "source_sha256": "7a3c4ca997a2a958487aa2c350eee80cec3f113899948451e1e064789b32589c",
+        "primitives": {
+          "AudioSynthNoisePink": [
+            "pink1"
+          ],
+          "AudioSynthWaveformPWM": [
+            "pwm1"
+          ],
+          "AudioEffectFreeverb": [
+            "freeverb1"
+          ]
+        },
+        "remove_reverb": true
+      },
+      {
+        "program": "Rwalk_BitCrushPW",
+        "gain": 1.0,
+        "source": "P_Rwalk_BitCrushPW.hpp",
+        "source_sha256": "c9f63ecbce2af41739b5bc6218c76d7f4a2f148c13dbf327d5ddefcec11c152d",
+        "primitives": {
+          "AudioSynthWaveform": [
+            "waveform8",
+            "waveform9",
+            "waveform7",
+            "waveform4",
+            "waveform5",
+            "waveform6",
+            "waveform3",
+            "waveform1",
+            "waveform2"
+          ],
+          "AudioMixer4": [
+            "mixer2",
+            "mixer1",
+            "mixer3",
+            "mixer6",
+            "mixer5",
+            "mixer7"
+          ],
+          "AudioEffectBitcrusher": [
+            "bitcrusher1"
+          ],
+          "AudioEffectFreeverb": [
+            "freeverb1"
+          ]
+        },
+        "remove_reverb": true
+      },
+      {
+        "program": "Rwalk_LFree",
+        "gain": 1.0,
+        "source": "P_Rwalk_LFree.hpp",
+        "source_sha256": "c1fe42192d3a1a0a6946f485a6e14bfb9efe95b54ada3a35dd9deb30845ca38a",
+        "primitives": {
+          "AudioMixer4": [
+            "mixer5"
+          ],
+          "AudioSynthWaveformPWM": [
+            "pwm2",
+            "pwm1",
+            "pwm3",
+            "pwm4"
+          ],
+          "AudioEffectFreeverb": [
+            "freeverb1"
+          ]
+        },
+        "remove_reverb": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed by `npm run install-hooks` (git config core.hooksPath .githooks).
+# Firmware is never committed: refuses SysEx files, firmware images and ROM-sized binaries.
+exec node ci/pre_commit.mjs

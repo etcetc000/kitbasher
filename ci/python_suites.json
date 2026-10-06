@@ -1,0 +1,12 @@
+{
+  "unit": [
+    "assembly_source_test",
+    "live_reload_test",
+    "local_catalog_test",
+    "manifest_test",
+    "uw_asset_test"
+  ],
+  "assembly": [
+    "assembly_test"
+  ]
+}

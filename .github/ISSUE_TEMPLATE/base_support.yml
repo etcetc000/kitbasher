@@ -1,0 +1,37 @@
+name: Base support request
+description: Ask for Kitbasher to support another Machinedrum OS build
+labels: [base-support]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kitbasher patches OS builds derived from OS 1.63. Please do not attach the firmware itself;
+        the hashes and discovery report below are enough to start.
+  - type: input
+    id: name
+    attributes:
+      label: OS build
+      description: Its name and version, and where it is published.
+    validations:
+      required: true
+  - type: input
+    id: hash
+    attributes:
+      label: SHA-256 of the OS file
+    validations:
+      required: true
+  - type: textarea
+    id: discovery
+    attributes:
+      label: Discovery report
+      description: "Output of `node engine/dist/src/cli.js --discover my-os.syx`, or the error the page shows when you load it."
+      render: text
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: For example MKII +Drive UW. Say if you can test images on it.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else

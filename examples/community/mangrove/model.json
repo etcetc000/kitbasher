@@ -1,0 +1,79 @@
+{
+  "format": "md-model/1",
+  "key": "COMM/PIMG",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "FORMT",
+    "category": "COM",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 48
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "FRMT",
+        "default": 64
+      },
+      {
+        "label": "BRRL",
+        "default": 0
+      },
+      {
+        "label": "AIR",
+        "default": 32
+      },
+      {
+        "label": "SQR",
+        "default": 0
+      },
+      {
+        "label": "FMFB",
+        "default": 0
+      },
+      {
+        "label": "",
+        "default": 0
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 200,
+    "trigger_cycles": 32,
+    "init_cycles": 128
+  },
+  "provenance": [
+    {
+      "origin": "Community P-I MG v73 formant oscillator",
+      "license": "NOASSERTION",
+      "reference": "Original Machinedrum voice by Nick Montgomery (P-I MG v73), ported to an md-model/1 add-on"
+    }
+  ]
+}

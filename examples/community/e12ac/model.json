@@ -1,0 +1,79 @@
+{
+  "format": "md-model/1",
+  "key": "COMM/E12AC",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "ACID ",
+    "category": "COM",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 48
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "CUT",
+        "default": 64
+      },
+      {
+        "label": "RES",
+        "default": 32
+      },
+      {
+        "label": "ENV",
+        "default": 48
+      },
+      {
+        "label": "FDEC",
+        "default": 64
+      },
+      {
+        "label": "RAND",
+        "default": 0
+      },
+      {
+        "label": "SLID",
+        "default": 64
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 200,
+    "trigger_cycles": 100,
+    "init_cycles": 180
+  },
+  "provenance": [
+    {
+      "origin": "Community E12-AC v40 core",
+      "license": "NOASSERTION",
+      "reference": "Original Machinedrum voice by Nick Montgomery (E12-AC v40), ported to an md-model/1 add-on"
+    }
+  ]
+}

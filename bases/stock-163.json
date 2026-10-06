@@ -1,0 +1,15 @@
+{
+ "format": "md-base/2",
+ "id": "stock-163",
+ "name": "OS 1.63 (stock)",
+ "about": "Elektron's final OS for the SPS-1UW. It has no boot hook: the reset code jumps straight to the OS, so there is nothing to chain the patcher's boot routine onto. The patcher converts it once into the prepared 1.63 base (stock-163-prepared.json, made by engine/src/prepare.ts) and patches that instead. The web page does this automatically.",
+ "identify": {
+  "tag": "163 ",
+  "coldfire_sha256": "95d74ace951af86777d1deeb2b6c993213344d7d8ae64a985c5df36f3b499e12",
+  "dsp2_sha256": "e1d845a772f87b04e1681130f3e3eab2db20dc4d047489375a3be93870c591bc",
+  "dsp1_sha256": "0fd8b64a4cef976c07f246ab543294c263b08f543ebff8f8415811d29e434c06",
+  "flash_sha256": "68542e30917b9918ccaee2b2237df62c8a00479938680b85aca93ce4fbca44c8"
+ },
+ "refuse": "use the prepared 1.63 base: stock 1.63 has no boot hook. Make it once with `node engine/dist/src/cli.js --prepare-163 --in <stock 1.63 .bin or .syx> --out os163-prepared.syx` and patch that (docs/BASES.md).",
+ "qualification": { "level": "discovered", "by": "Stock OS; patched through the prepared 1.63 base" }
+}

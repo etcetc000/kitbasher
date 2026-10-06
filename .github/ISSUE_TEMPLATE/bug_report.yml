@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in Kitbasher does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please never attach firmware files (.syx or .bin) to an issue.
+        The SHA-256 of a file identifies it without sharing it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Browser (kitbasher.xyz)
+        - Browser (local build)
+        - Command line
+    validations:
+      required: true
+  - type: dropdown
+    id: base
+    attributes:
+      label: OS base
+      options:
+        - OS 1.63
+        - OS X.13
+        - OS X.14
+        - OS DEV
+        - Other or unsure
+    validations:
+      required: true
+  - type: input
+    id: hash
+    attributes:
+      label: SHA-256 of the OS file you loaded
+      description: "For example: `sha256sum my-os.syx` or `Get-FileHash my-os.syx`."
+  - type: input
+    id: models
+    attributes:
+      label: Models selected
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Did this happen on the instrument?
+      options:
+        - "No, only in the browser or CLI"
+        - "Yes, after flashing the update"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Messages, build report or screenshots
+      description: Error text from the page or CLI, the build report (`--report`), browser and OS version.

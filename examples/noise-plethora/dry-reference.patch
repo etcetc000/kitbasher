@@ -1,0 +1,293 @@
+--- a/P_BasuraTotal.hpp
++++ b/P_BasuraTotal.hpp
+@@ -3,6 +3,8 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD dry reference adaptation, 2026-10-01: internal Freeverb removed.
++// Original generator routing/controls retained except documented reverb controls.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+@@ -11,9 +13,7 @@
+ 
+ public:
+ 
+-  BasuraTotal()
+-    : patchCord1(waveformMod1, freeverb1)
+-  {}
++  BasuraTotal() = default;
+ 
+   ~BasuraTotal() override {}
+ 
+@@ -21,7 +21,6 @@
+   BasuraTotal& operator=(const BasuraTotal&) = delete;
+ 
+   void init() override {
+-    freeverb1.roomsize(0);
+     lastClick = micros();
+     waveformMod1.begin(1, 500, WAVEFORM_SINE);
+   }
+@@ -37,11 +36,10 @@
+       lastClick = micros();
+       waveformMod1.begin(1, 500, WAVEFORM_SQUARE);
+       waveformMod1.frequency(generateNoise() * (200 + (pitch1 * 5000))) ;
+-      freeverb1.roomsize(1);
+     }
+   }
+ 
+-  AudioStream& getStream() override { return freeverb1; }
++  AudioStream& getStream() override { return waveformMod1; }
+   unsigned char getPort() override { return 0; }
+ 
+ private:
+@@ -66,8 +64,6 @@
+   }
+ 
+   AudioSynthWaveformModulated waveformMod1;   //xy=216.88888549804688,217.9999988898635
+-  AudioEffectFreeverb         freeverb1;      //xy=374.8888854980469,153.88888549804688
+-  AudioConnection             patchCord1;
+   unsigned long               lastClick;
+ };
+ 
+--- a/P_S_H.hpp
++++ b/P_S_H.hpp
+@@ -3,6 +3,8 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD dry reference adaptation, 2026-10-01: internal Freeverb removed.
++// Original generator routing/controls retained except documented reverb controls.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+@@ -11,11 +13,7 @@
+ 
+ public:
+ 
+-  S_H()
+-    : patchCord1(waveformMod1, 0, mixer1, 0)
+-    , patchCord2(waveformMod1, freeverb1)
+-    , patchCord3(freeverb1, 0, mixer1, 1)
+-    { }
++  S_H() = default;
+ 
+   ~S_H() override {}
+ 
+@@ -26,29 +24,19 @@
+     waveformMod1.begin(1, 200, WAVEFORM_SAMPLE_HOLD);
+     waveformMod1.frequencyModulation(10);
+ 
+-    freeverb1.damping(1);
+-    freeverb1.roomsize(0.5);
+ 
+-    mixer1.gain(0, 1);
+-    mixer1.gain(1, 0);
+   }
+ 
+   void process(float k1, float k2) override {
++    (void)k2; // Reverb mix removed; X remains the sample-and-hold rate.
+     waveformMod1.frequency(5000 * k1 + 15);
+-    mixer1.gain(0, 1 - k2);
+-    mixer1.gain(1, k2 * 4);
+   }
+ 
+-  AudioStream& getStream() override { return mixer1; }
++  AudioStream& getStream() override { return waveformMod1; }
+   unsigned char getPort() override { return 0; }
+ 
+ private:
+   AudioSynthWaveformModulated waveformMod1;   //xy=517.5666656494141,413.99998474121094
+-  AudioEffectFreeverb      freeverb1;      //xy=711.5666656494141,465.99998474121094
+-  AudioMixer4              mixer1;         //xy=868.5666656494141,399.99998474121094
+-  AudioConnection          patchCord1;
+-  AudioConnection          patchCord2;
+-  AudioConnection          patchCord3;
+ 
+ };
+ 
+--- a/P_satanWorkout.hpp
++++ b/P_satanWorkout.hpp
+@@ -3,6 +3,8 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD dry reference adaptation, 2026-10-01: internal Freeverb removed.
++// Original generator routing/controls retained except documented reverb controls.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+@@ -13,7 +15,6 @@
+ 
+   satanWorkout()
+   : patchCord1(pink1, pwm1)
+-  , patchCord2(pwm1, freeverb1)
+   { }
+ 
+   ~satanWorkout() override {}
+@@ -26,24 +27,21 @@
+ 
+     pink1.amplitude(1);
+     pwm1.amplitude(1);
+-    freeverb1.damping(-5);
+ 
+   }
+ 
+   void process(float k1, float k2) override {
+ 
++    (void)k2; // Reverb size removed.
+     float knob_1 = k1;
+-    float knob_2 = k2;
+ 
+     float pitch1 = pow(knob_1, 2);
+-    // float pitch2 = pow(knob_2, 2);
+ 
+     pwm1.frequency(8+pitch1*6000);
+ 
+-    freeverb1.roomsize(0.001+knob_2*4);
+   }
+ 
+-  AudioStream& getStream() override { return freeverb1; }
++  AudioStream& getStream() override { return pwm1; }
+   unsigned char getPort() override { return 0; }
+ 
+ private:
+@@ -51,9 +49,7 @@
+   // GUItool: begin automatically generated code
+   AudioSynthNoisePink      pink1;          //xy=927.6667137145996,1712.0000095367432
+   AudioSynthWaveformPWM    pwm1;           //xy=1065.6666564941406,1795.666675567627
+-  AudioEffectFreeverb      freeverb1;      //xy=1152.6666564941406,1739.6666746139526
+   AudioConnection          patchCord1;
+-  AudioConnection          patchCord2;
+ 
+ 
+ };
+--- a/P_Rwalk_BitCrushPW.hpp
++++ b/P_Rwalk_BitCrushPW.hpp
+@@ -3,6 +3,8 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD dry reference adaptation, 2026-10-01: internal Freeverb removed.
++// Original generator routing/controls retained except documented reverb controls.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+@@ -24,10 +26,9 @@
+     , patchCord17(mixer2, 0, mixer5, 2)
+     , patchCord18(mixer1, 0, mixer5, 1)
+     , patchCord19(mixer3, 0, mixer6, 1)
+-    , patchCord21(mixer6, freeverb1)
+     , patchCord22(mixer5, bitcrusher1)
+     , patchCord23(bitcrusher1, 0, mixer7, 1)
+-    , patchCord24(freeverb1, 0, mixer7, 2)
++    , patchCord24(mixer6, 0, mixer7, 2)
+ 
+     { }
+     ~Rwalk_BitCrushPW() override {}
+@@ -101,8 +102,8 @@
+ 
+     void process(float k1, float k2) override {
+ 
++      (void)k2; // Reverb size removed; retain the ninth oscillator dry.
+       float knob_1 = k1;
+-      float knob_2 = k2;
+ 
+       float dL;
+ 
+@@ -115,8 +116,6 @@
+ 
+       bitcrusher1.bits(1);
+ 
+-      fv = knob_2;
+-      freeverb1.roomsize(fv);
+ 
+         // loop to "walk" randomly
+       for(int i=0; i<9; i++)
+@@ -198,7 +197,6 @@
+     AudioMixer4              mixer5; //xy=961.75,589.75
+     //AudioOutputI2S           i2s1;           //xy=1227.75,604.75
+     AudioEffectBitcrusher    bitcrusher1;    //xy=1439,393
+-    AudioEffectFreeverb      freeverb1;      //xy=923.5,281.5
+     AudioMixer4              mixer7;         //xy=1650,448
+ 
+     AudioConnection          patchCord4;
+@@ -213,7 +211,6 @@
+     AudioConnection          patchCord17;
+     AudioConnection          patchCord18;
+     AudioConnection          patchCord19;
+-    AudioConnection          patchCord21;
+     AudioConnection          patchCord22;
+     AudioConnection          patchCord23;
+     AudioConnection          patchCord24;
+@@ -221,7 +218,7 @@
+ 
+     int L, i, t;
+     float theta, posx, posy, xn, yin;
+-    float v_0, v_var, bc_01, fv;//pw = pulse width
++    float v_0, v_var, bc_01;//pw = pulse width
+     float x[9], y[9], vx[9], vy[9]; // number depends on waveforms declared
+ 
+ };
+--- a/P_Rwalk_LFree.hpp
++++ b/P_Rwalk_LFree.hpp
+@@ -3,6 +3,8 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD dry reference adaptation, 2026-10-01: internal Freeverb removed.
++// Original generator routing/controls retained except documented reverb controls.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+@@ -16,7 +18,6 @@
+     , patchCord2(pwm1, 0, mixer5, 0)
+     , patchCord3(pwm3, 0, mixer5, 2)
+     , patchCord4(pwm4, 0, mixer5, 3)
+-    , patchCord5(mixer5, freeverb1)
+     { }
+ 
+     ~Rwalk_LFree() override {}
+@@ -64,16 +65,14 @@
+     void process(float k1, float k2) override {
+ 
+ 
++        (void)k2; // Reverb size removed.
+         float knob_1 = k1;
+-        float knob_2 = k2;
+-        float dL, fv;
++        float dL;
+ 
+         dL =  knob_1*L + 50;
+ 
+         v_var = v_0;
+ 
+-        fv = knob_2;
+-        freeverb1.roomsize(fv);
+ 
+           // loop to "walk" randomly
+         for(int i=0; i<4; i++)
+@@ -111,7 +110,7 @@
+       pwm4.frequency(x[3]);
+     }
+ 
+-    AudioStream& getStream() override { return freeverb1; }
++    AudioStream& getStream() override { return mixer5; }
+     unsigned char getPort() override { return 0; }
+ 
+   private:
+@@ -125,14 +124,12 @@
+     AudioSynthWaveformPWM    pwm3;           //xy=593.5,331.5
+     AudioSynthWaveformPWM    pwm4;           //xy=596.5,375.5
+ 
+-    AudioEffectFreeverb      freeverb1;
+ 
+     //AudioOutputI2S           i2s1;           //xy=1227.75,604.75
+     AudioConnection          patchCord1;
+     AudioConnection          patchCord2;
+     AudioConnection          patchCord3;
+     AudioConnection          patchCord4;
+-    AudioConnection          patchCord5;
+ 
+     int L, i, t;
+     float theta, posx, posy, xn, yin;

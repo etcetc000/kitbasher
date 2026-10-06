@@ -1,0 +1,85 @@
+import type { PackModel } from '../../engine/src/packs.js';
+
+type Help = [name: string, description: string];
+// Plain-language guide to each knob label, shown as tooltips on the screen preview.
+// `overrides` holds per-model entries where the same panel abbreviation means something else.
+const common: Record<string, Help> = {
+ PTCH:['Pitch','Sets the tuning of the sound.'], DEC:['Decay','Controls how long the sound rings after a hit.'],
+ BEND:['Pitch bend','Adds a rising or falling pitch sweep to each hit; centred for no sweep.'],
+ TONE:['Tone','Shapes the balance of low and high frequencies.'], NOIS:['Noise balance','Blends noise with the pitched body of the sound.'],
+ DRIV:['Drive','Adds saturation and a harder, more distorted edge.'], DIST:['Distortion','Adds distortion to change the texture of the sound.'],
+ LPF:['Low-pass filter','Reduces high frequencies for a darker sound.'], HPF:['High-pass filter','Removes low frequencies for a thinner sound.'],
+ RES:['Resonance','Emphasises the resonant frequencies for a sharper, ringing tone.'],
+ PENV:['Pitch envelope time','Sets how quickly the initial pitch movement settles.'], BODY:['Body','Shapes the oscillator blend, ringing and initial pitch kick.'],
+ MDEC:['Modulation decay','Sets how quickly the modulation fades after a hit.'], MOD:['Modulation amount','Sets the strength of modulation; its effect depends on the selected voice.'],
+ SHAP:['Wave shape','Changes the oscillator shape and its harmonic character.'], TIME:['Attack / hold','Shapes the start of the envelope, from an immediate hit to a held or softened attack.'],
+ COLR:['Colour','Changes the tonal colour of the sound.'], SWPT:['Sweep time','Sets how quickly the kick pitch sweep settles.'], SWEP:['Sweep depth','Sets the amount of the initial pitch sweep.'],
+ CLIK:['Click','Shapes the short transient at the start of each hit.'], BAND:['Resonator bands','Moves through different resonator band tunings.'],
+ SNAP:['Snap','Shapes the short, sharp part of the hit.'], PW:['Pulse width','Changes the pulse waveform from narrow to wide.'],
+ SRC:['Noise source','Blends crackle, noise and modulated noise, with linked resonance.'], SPLT:['Burst split','Changes the timing of the two bursts, reaching a reverse-clap shape at the end.'],
+ AMNT:['Partial count','Sets how many resonant components make up the clap.'], SPRD:['Spread','Spreads the components of the sound apart.'],
+ TUNE:['Tuning','Adjusts the tuning within the sound.'], BRST:['Burst length','Sets the length of the initial burst.'], FOLD:['Wavefolding','Folds the waveform to add sharper, richer harmonics.'], RING:['Ring time','Changes how long the resonators ring.'],
+ SET:['Partial set','Morphs between different sets of metallic overtones.'], FM:['Frequency modulation','Adds frequency modulation for brighter, more complex overtones.'],
+ MFRQ:['Modulator frequency','Sets the frequency of the oscillator that modulates the tone.'], MODE:['Synthesis mode','Chooses the voice or synthesis variant. The other controls may change with the mode.'],
+ SAW:['Saw oscillator pitch','Tunes the saw oscillator that colours the ring-modulated tone.'], MORF:['Model morph','Moves between different sound shapes.'], MRPH:['Partial morph','Morphs the tuning, level and decay of the body overtones.'],
+ PING:['Resonator excitation','Shapes the impulse that sets the resonators ringing.'], STRK:['Strike position','Changes where the membrane is struck, along with strike strength and tension.'],
+ MIX:['Mix','Balances the sound components.'], BAL:['Balance','Changes the balance between the sound layers.'],
+ '1FRQ':['Operator 1 frequency','Tunes the first FM operator relative to the base pitch.'], '2FRQ':['Operator 2 frequency','Tunes the second FM operator relative to the base pitch.'], '3FRQ':['Operator 3 frequency','Tunes the third FM operator relative to the base pitch.'],
+ '1ENV':['Operator 1 envelope','Shapes how the first operator evolves over the hit.'], '2ENV':['Operator 2 envelope','Shapes how the second operator evolves over the hit.'], '3ENV':['Operator 3 envelope','Shapes how the third operator evolves over the hit.'],
+ '1FB':['Operator 1 feedback','Feeds the first operator back into itself for richer harmonics.'], '2FB':['Operator 2 feedback','Feeds the second operator back into itself for richer harmonics.'],
+ '1VOL':['Operator 1 level','Sets the contribution of the first operator.'], '2VOL':['Operator 2 level','Sets the contribution of the second operator.'], '1FEN':['Operator 1 frequency envelope','Shapes the frequency movement of the first operator.'],
+ UNIL:['Unison level','Blends in the detuned oscillator voices.'], UNIW:['Unison width','Sets how far the unison voices are detuned.'], UNIX:['Extra unison level','Blends in the second pair of unison voices.'],
+ SUBX:['Sub-square level','Adds an octave-down square component to the saw waveform.'], SUB1:['First sub-oscillator','Sets the level of the first lower-octave oscillator.'], SUB2:['Second sub-oscillator','Sets the level of the second lower-octave oscillator.'],
+ PWAD:['Pulse-width adjustment','Changes the pulse-width relationship of the oscillator voices.'], WAVE:['Waveform','Selects the waveform used by the oscillator.'], WP:['Wave position','Moves the reading window through the wave.'], WPM:['Wave-position movement','Adds movement to the wave-reading position.'], SYNC:['Oscillator sync','Controls oscillator synchronisation for a different harmonic character.'], SFRQ:['Sync frequency','Sets the frequency of the synchronising oscillator.'],
+ VOC1:['First vowel formant','Tunes the first vocal resonance to shape the vowel.'], VOC2:['Second vowel formant','Tunes the second vocal resonance to shape the vowel.'], VOIC:['Voice','Selects the voice used to generate the sound.'], FRMT:['Formant shift','Moves the vocal resonances together without changing the note.'],
+ ALGO:['Algorithm','Selects the synthesis structure used to generate the sound.'], RAT:['Frequency ratio','Sets the relationship between carrier and modulator frequencies.'], FB:['Feedback','Feeds the signal back into itself for a more intense harmonic texture.'], REL1:['Operator 1 release','Sets how quickly the first operator fades.'],
+ TIMB:['Timbre','Changes the harmonic character within the selected synthesis mode.'], GRIT:['Grit','Adds a rougher texture to the sound.'], CLIP:['Clipping','Controls the clipping stage that shapes the output.'],
+ TYPE:['Resonator type','Chooses a string, beam, marimba, drumhead, membrane or plate.'], STIF:['Mallet stiffness','Changes the brightness of the strike, from a soft mallet to a hard impact.'], POS:['Strike position','Moves the strike from the edge towards the centre of the object.'], INHR:['Inharmonicity','Shifts the overtones away from the natural spacing of the selected object.'],
+ PAR1:['Voice parameter 1','Adjusts the first voice-specific sound control. Its function changes with the selected mode.'], PAR2:['Voice parameter 2','Adjusts the second voice-specific sound control. Its function changes with the selected mode.'],
+ ATK:['Attack','Sets how gradually the sound reaches its initial level.'], VEL:['Velocity','Sets the strength of the hit in the voice engine.'],
+ RATE:['Grain rate','Sets the repetition rate of the grain train relative to pitch.'], DENS:['Grain density','Changes how often grains occur, from sparse events to a continuous train.'], RAND:['Random detuning','Adds random pitch variation to each grain.'], GRPT:['Grain pitch','Tunes the oscillator inside each grain, shifting the spectral peak without changing the grain rate.'],
+ MENV:['Modulation envelope','Shapes how the modulation changes over each hit.'], WARP:['Tonal warp','Bends the spacing of the resonant partials.'], FORM:['Spectral form','Applies a comb-shaped level pattern across the partials.'], EXCI:['Exciter balance','Blends the initial impulse with grain noise that excites the resonators.'],
+ MODL:['Tone model','Selects the synthesis model used for the tone.'], SLOT:['Tone model','Selects a variant within this synthesis family.'], SPCT:['Spectrum','Changes the spacing or distribution of the overtones.'], TENV:['Timbre envelope','Shapes the brightness and how it evolves after a hit.'],
+ FILT:['Filter','Changes the filtering of the noise voice.'], ARTE:['Articulation','Changes the character of the noise envelope.'], FENV:['Filter envelope','Shapes how the filter moves over the hit.'],
+ TRAN:['Transient','Shapes the initial attack of the kick.'], HOLD:['Hold time','Sets how long the envelope holds before decaying.'], COL:['Colour','Changes the tone colour within the selected hi-hat mode.'], TDEC:['Tone decay','Sets how quickly the tonal part of the hi-hat fades.'],
+ DET:['Detuning','Offsets the oscillator tuning to create beating and a wider sound.'], DEC2:['Second decay','Sets the decay of the second sound component.'],
+ STIM:['Sweep time','Sets how quickly the pitch sweep at the start of the kick settles.'],
+ OSC5:['Oscillator 5 tuning','In the lab hi-hat mode, tunes the fifth of its six square oscillators. The other modes do not use it.'],
+ CUT:['Filter cutoff','Sets the cutoff frequency of the resonant filter.'], ENV:['Filter envelope amount','Sets how far the filter envelope opens the cutoff on each note.'],
+ FDEC:['Filter envelope decay','Sets how quickly the filter envelope closes after each note.'],
+ SLID:['Slide / scale','At the centre there is no glide. Turning away from the centre adds glide between notes, and the lower half also keeps the random intervals on a minor-pentatonic scale.'],
+ PWM:['Pulse-width modulation','Sets the depth of pulse-width modulation on the pulse oscillator.'], SUB:['Sub oscillator','Sets the level of the sub oscillator below the main pitch.'],
+ CHOR:['Detune','Detunes the second oscillator pair against the first for a wider, chorus-like sound.'],
+ ARRY:['Spectral array','Selects one of 128 spectral arrays, each a different set of harmonic levels.'], TILT:['Spectral tilt','Tilts the harmonic levels towards the lower or the upper harmonics.'],
+ PART:['Partials','Sets how many of the 24 harmonics sound.'], FOCS:['Focus','Concentrates the spectrum around a region of harmonics.'],
+ SCAN:['Scan rate','Sets how fast the oscillator moves between its two spectral banks.'],
+ RAT1:['Ratio 1','Selects the first operator frequency ratio of the chosen algorithm, from sixteen ratios.'], RAT2:['Ratio 2','Selects the second operator frequency ratio of the chosen algorithm, from sixteen ratios.'],
+ LVL:['Modulation level','Sets how strongly the modulating operators drive the carriers: higher values give brighter, more complex overtones.'],
+ BRRL:['Barrel','Applies barrel waveshaping to the formant oscillator for a fuller, rounder tone.'], AIR:['Air','Adds saturation for a breathier, more open sound.'],
+ SQR:['Square sub','Blends in a square-wave sub oscillator.'], FMFB:['Feedback FM','Feeds the oscillator back into its own frequency, in eight steps, for rougher overtones.'],
+ CONS:['Consonant','Selects one of 21 consonant programs at the start of each note. At 0 the vowel plays alone.'],
+ CLEN:['Consonant length','Sets how long the consonant lasts before the vowel. 64 is the Monomachine default.'],
+ CVOL:['Consonant level','Sets the level of the consonant against the vowel. 64 is the Monomachine default.'],
+ BPF:['Band-pass frequency','Sets the centre frequency of the band-pass, from 30 Hz to 7.3 kHz. It has no effect while BPQ is at 0.'],
+ BPQ:['Band-pass width','At 0 the filter is fully open. Turning it up narrows the band around BPF and lowers everything outside it, down to about -30 dB.'],
+ NBAL:['Neighbour balance','Blends the previous track with the track before it as the effect input.'], TON:['Noise tone','Tunes the noise filter; in ping mode, tunes the resonator.'], NLEV:['Noise level','Sets the noise contribution. Has no effect in tom ping mode.'], NDEC:['Noise decay / snap','Shapes the noise tail or snap, depending on the tom mode.'],
+};
+const overrides: Record<string, Record<string, Help>> = {
+ NOISE:{FREQ:['Program control X','The first control of the selected program, usually its base frequency. Its name changes with MODE.'],SPRD:['Program control Y','The second control of the selected program. Its name and function change with MODE.']},
+ ACID:{RAND:['Random intervals','Sets how often, and how far, the next note jumps to a random interval.']},
+ FORMT:{FRMT:['Formant','Sets the formant ratio of the oscillator, folding up by octaves as it rises.']},
+ 'AN CY':{COL:['Colour','Changes the tone colour within the selected cymbal or cowbell mode.'],TDEC:['Tone decay','Sets how quickly the tonal part of the cymbal or cowbell fades.']},
+ MMDDR:{NOTE:['Note','Sets the pitch of both oscillators.'],WAV1:['First wave','Selects the first oscillator wave from the DPRO bank.'],WAV2:['Second wave','Selects the second oscillator wave from the DPRO bank.'],MIX:['Oscillator mix','Balances the two oscillators with a smoothed transition.'],TIME:['Wave crossfade time','Sets how long a change of wave takes to fade from the previous wave.'],BR1:['First bit reduction','Changes the amplitude quantization of the first oscillator.'],BR2:['Second bit reduction','Changes the amplitude quantization of the second oscillator.']},
+ MMDEN:{PCH2:['Second oscillator interval','Tunes the second oscillator relative to the main pitch.'],PCH3:['Third oscillator interval','Tunes the third oscillator relative to the main pitch.'],PCH4:['Fourth oscillator interval','Tunes the fourth oscillator relative to the main pitch.'],WAVE:['Wave selection','Selects a wave from the DPRO bank.'],CHRL:['Chorus level','Blends the ensemble chorus into the sound.'],CHRW:['Chorus width','Sets the width of the chorus modulation.']},
+ MMENS:{PCH2:['Second oscillator interval','Tunes the second oscillator relative to the main pitch.'],PCH3:['Third oscillator interval','Tunes the third oscillator relative to the main pitch.'],PCH4:['Fourth oscillator interval','Tunes the fourth oscillator relative to the main pitch.'],CHRL:['Chorus level','Blends the ensemble chorus into the sound.']},
+ MMSID:{NOTE:['Note','Sets the oscillator pitch.'],PWAD:['Pulse-width movement','Sets the amount of pulse-width movement after a hit.'],PWRS:['Pulse-width rate','Sets how quickly pulse width moves.'],MOD:['Modulation mode','Selects the sync and ring-modulation behavior.'],MFRQ:['Modulator frequency','Tunes the modulation oscillator; 127 makes it follow the note.']},
+ MMBOX:{NOTE:['Sample / note','Selects a drum sample and its coarse pitch.'],PTCH:['Sample pitch','Changes playback pitch.'],STRT:['Sample start','Sets the playback start position, applied on the next hit.'],RTRG:['Retrigger count','Sets the repeat count, applied on the next hit.'],RTIM:['Retrigger time','Sets the interval between sample retriggers.']},
+ MMVO6:{VOIC:['Voicing / breath','Blends pitched vocal pulses with breath noise.']},
+};
+export function parameterHelp(model: PackModel): {label: string; name: string; description: string}[] {
+ return model.labels.flatMap(label => {
+  if (!label || label === '--') return [];
+  const help = model.browse?.help?.[label] ?? overrides[model.name.trim()]?.[label] ?? common[label];
+  return [{label, name: help?.[0] ?? label, description: help?.[1] ?? 'Control documentation is not yet available for this model.'}];
+ });
+}

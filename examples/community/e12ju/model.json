@@ -1,0 +1,79 @@
+{
+  "format": "md-model/1",
+  "key": "COMM/E12JU",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "SAWPW",
+    "category": "COM",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 48
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "TONE",
+        "default": 64
+      },
+      {
+        "label": "PWM",
+        "default": 48
+      },
+      {
+        "label": "SUB",
+        "default": 32
+      },
+      {
+        "label": "CHOR",
+        "default": 24
+      },
+      {
+        "label": "",
+        "default": 0
+      },
+      {
+        "label": "",
+        "default": 0
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 250,
+    "trigger_cycles": 64,
+    "init_cycles": 180
+  },
+  "provenance": [
+    {
+      "origin": "Community E12-JU v22 core",
+      "license": "NOASSERTION",
+      "reference": "Original Machinedrum voice by Nick Montgomery (E12-JU v22), ported to an md-model/1 add-on"
+    }
+  ]
+}

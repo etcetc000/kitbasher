@@ -1,0 +1,91 @@
+# Kitbasher
+
+Kitbasher adds new sound models to your Elektron Machinedrum's OS. Pick the
+machines you want, and it builds an OS update that keeps every stock machine and
+adds yours alongside them.
+
+It works on stock OS 1.63, X.13, X.14 and DEV, and runs entirely in your browser at
+**[kitbasher.xyz](https://kitbasher.xyz)**. Your firmware never leaves your
+computer: nothing is uploaded, and there is no server-side build.
+
+Kitbasher is a community project. It is not affiliated with or endorsed by Elektron.
+
+## Using it
+
+1. **Back up.** Keep the OS file you have installed now, and save your kits and
+   patterns (GLOBAL › SYSEX SEND › ALL into a SysEx recorder). Sending that OS
+   file again restores your machine.
+2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
+   OS file (`.syx` or `.bin`). Stock 1.63 is prepared for patching automatically.
+3. **Pick models.** Browse by category (kicks, snares, hats, percussion, FM,
+   synths, physical modeling, effects) and check the machines you want. Click a
+   model to see its screen and what every control does. The meters show how much
+   DSP memory, menu space and firmware storage your selection uses; if it does
+   not fit, the page trims the tails of the built-in E12 samples just enough to
+   make room, or you can keep them and choose fewer models.
+4. **Arrange and download.** Keep the default menu categories or rearrange them,
+   then download the new `.syx` file.
+5. **Send it.** Hold FUNCTION while powering on, choose [5 LT] MIDI UPGRADE, and
+   send the file from a SysEx tool with a 20 ms gap between messages.
+
+Some models use a sample in UW memory; the page lists those and offers the
+sample files with instructions.
+
+## Supported bases
+
+| Base | Support |
+|---|---|
+| OS 1.63 (stock) | Prepared automatically with a small boot hook, then patched; tested in the emulator |
+| OS X.13 | Patched directly; tested on hardware |
+| OS X.14 | Patched directly; tested in the emulator |
+| OS DEV (md-26912-190450) | Patched directly; tested on hardware |
+| OS DEV (md-26A01-183521) | Patched directly; tested in the emulator |
+
+Details per base are in [docs/BASES.md](docs/BASES.md).
+
+## Models
+
+Sources for three model families live in [`examples/`](examples/): seven analog
+drum and synth recreations, five community synth voices, and a 30-program port
+of Befaco's Noise Plethora. [docs/MODELS.md](docs/MODELS.md) describes them, with
+their credits and licenses.
+
+## Safety
+
+Flashing firmware always carries some risk. Kitbasher never rewrites the boot
+menu, so a failed or unwanted update is recovered by sending your original OS
+file the same way. Keep that file safe before you start. Every build is also
+checked before you can download it, including that nothing it adds touches
+memory the Machinedrum has not set up yet during boot.
+
+Saved kits refer to machines by ID. When you rebuild for existing kits, export
+your layout from the page and load it again so every machine keeps its ID.
+
+## Development
+
+You need Node 22+ and Python 3.11+.
+
+```text
+npm ci
+npm run doctor
+npm run check
+npm run dev
+```
+
+`npm run dev` serves the page at `http://127.0.0.1:8767` and rebuilds it as you
+edit. The command-line patcher shares the browser's engine:
+
+```text
+node engine/dist/src/cli.js --in my-os.syx --out patched.syx --clean-recovery
+```
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and
+[the documentation index](docs/README.md) for how it all fits together. To
+write your own model, start with the [scaffold example](examples/scaffold/README.md).
+
+## License
+
+Kitbasher is free software under the GNU General Public License v2; see
+[COPYING](COPYING). Bundled third-party code is listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Some model sources in
+`examples/` carry their own licenses; see [docs/MODELS.md](docs/MODELS.md).

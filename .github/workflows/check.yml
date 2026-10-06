@@ -1,0 +1,33 @@
+name: Check
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      # Name the interpreter explicitly so the checks never depend on what `python` resolves to.
+      - run: python -c "import os,sys; open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8').write('PYTHON=' + sys.executable + '\n')"
+      - run: npm ci
+      - run: python -m pip install --target build/manifest-deps -r requirements-dev.txt
+      - run: npm run doctor
+      - run: npm run check

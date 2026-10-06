@@ -1,0 +1,102 @@
+--- a/P_grainGlitch.hpp
++++ b/P_grainGlitch.hpp
+@@ -3,10 +3,12 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD compact-grain adaptation, 2026-10-01: shorter grains at full sample rate.
++// All three buffers retained. Only grain/freeze durations are scaled.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+-#define GRANULAR_MEMORY_SIZE 12800  // enough for 290 ms at 44.1 kHz
++#define GRANULAR_MEMORY_SIZE 1536  // MD: three grains, up to 511 samples each
+ 
+ class grainGlitch : public Plugin {
+ 
+@@ -34,7 +36,7 @@
+      // the Granular effect requires memory to operate
+       granular1.begin(granularMemory, GRANULAR_MEMORY_SIZE);
+ 
+-        float msec = 150.0;
++        float msec = 150.0 * (511.0 / 4266.0);
+         granular1.beginFreeze(msec);
+ 
+   }
+@@ -47,7 +49,7 @@
+ 
+     waveformMod1.frequencyModulation(knob_2*2);
+ 
+-    float msec2 = 25.0 + (knob_2 * 75.0);
++    float msec2 = (25.0 + (knob_2 * 75.0)) * (511.0 / 4266.0);
+ 
+     granular1.beginPitchShift(msec2);
+     waveformMod1.frequency(pitch1*5000+500);
+--- a/P_grainGlitchII.hpp
++++ b/P_grainGlitchII.hpp
+@@ -3,10 +3,12 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD compact-grain adaptation, 2026-10-01: shorter grains at full sample rate.
++// All three buffers retained. Only grain/freeze durations are scaled.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+-#define GRANULAR_MEMORY_SIZE 12800  // enough for 290 ms at 44.1 kHz
++#define GRANULAR_MEMORY_SIZE 1536  // MD: three grains, up to 511 samples each
+ 
+ class grainGlitchII : public Plugin {
+ 
+@@ -25,7 +27,7 @@
+ 
+   void init() override {
+ 
+-   float msec = 150.0;
++   float msec = 150.0 * (511.0 / 4266.0);
+    waveformMod1.begin(1, 1000, WAVEFORM_SQUARE);
+    amp1.gain(32000);
+     // the Granular effect requires memory to operate
+@@ -38,7 +40,7 @@
+     float knob_2 = k2;
+ 
+     float pitch1 = pow(knob_1, 2);
+-    float msec2 = 25.0 + (knob_2 * 75.0);
++    float msec2 = (25.0 + (knob_2 * 75.0)) * (511.0 / 4266.0);
+     float ratio;
+ 
+     waveformMod1.frequencyModulation(knob_2*2);
+--- a/P_grainGlitchIII.hpp
++++ b/P_grainGlitchIII.hpp
+@@ -3,10 +3,12 @@
+ // Open-source software
+ // Licensed under GPL-3.0-or-later
+ 
++// MD compact-grain adaptation, 2026-10-01: shorter grains at full sample rate.
++// All three buffers retained. Only grain/freeze durations are scaled.
+ #pragma once
+ 
+ #include "Plugin.hpp"
+-#define GRANULAR_MEMORY_SIZE 12800
++#define GRANULAR_MEMORY_SIZE 1536  // MD: three grains, up to 511 samples each
+ 
+ class grainGlitchIII : public Plugin {
+ 
+@@ -23,7 +25,7 @@
+   grainGlitchIII& operator=(const grainGlitchIII&) = delete;
+ 
+   void init() override {
+-    float msec = 150.0;
++    float msec = 150.0 * (511.0 / 4266.0);
+ 
+     waveformMod1.begin(1, 1000, WAVEFORM_SAWTOOTH);
+    // the Granular effect requires memory to operate
+@@ -38,7 +40,7 @@
+ 
+     float pitch1 = pow(knob_1, 2);
+     // float pitch2 = pow(knob_2, 2);
+-    float msec2 = 25.0 + (knob_2 * 55.0);
++    float msec2 = (25.0 + (knob_2 * 55.0)) * (511.0 / 4266.0);
+     float ratio;
+ 
+ 

@@ -1,0 +1,41 @@
+{
+  "format": "md-uw-downloads/1",
+  "assets": [
+    {
+      "file": "mm-dprowave.syx",
+      "name": "DWAV",
+      "module": "mm_wav",
+      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
+      "sha256": "5c22e5e31f14dbd080d55b4971300de0f098af9a051f2e71707f118d4880097c",
+      "bytes": 52104,
+      "displayed_slot": 47
+    },
+    {
+      "file": "mm-digipro-mips.syx",
+      "name": "DPRO",
+      "module": "mm_dens",
+      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
+      "sha256": "c74b32a68efc08ec2dbba092cfe479a420da3d6354b524e7def301c521071096",
+      "bytes": 417102,
+      "displayed_slot": 41
+    },
+    {
+      "file": "mm-digipro-mips.syx",
+      "name": "DPRO",
+      "module": "mm_ddrw",
+      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
+      "sha256": "c74b32a68efc08ec2dbba092cfe479a420da3d6354b524e7def301c521071096",
+      "bytes": 417102,
+      "displayed_slot": 41
+    },
+    {
+      "file": "mm-bbox.syx",
+      "name": "BBOX",
+      "module": "mm_bbox",
+      "firmware_commit": "0af7db57d55d618579aaf292ab6f477a51b8d3c0",
+      "sha256": "1128a1176d4877694ccc290371d271c069c14b3ecb3dfe0ad4103f46cc69f773",
+      "bytes": 400846,
+      "displayed_slot": 45
+    }
+  ]
+}

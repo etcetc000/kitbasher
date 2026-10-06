@@ -1,0 +1,572 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "md-model/1 source manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "key",
+    "version",
+    "kit_abi",
+    "injection",
+    "panel",
+    "components",
+    "memory",
+    "samples",
+    "budget",
+    "provenance"
+  ],
+  "properties": {
+    "format": {
+      "const": "md-model/1"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "kit_abi": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "injection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "add",
+            "replace"
+          ]
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 191
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "name",
+            "abi"
+          ],
+          "properties": {
+            "family": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "category",
+        "knobs",
+        "modes"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 5,
+          "pattern": "^[ -~]{5}$"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3,
+          "pattern": "^[A-Z0-9 +/.!-]+$"
+        },
+        "knobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "default"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "maxLength": 4,
+                "pattern": "^[ -~]*$"
+              },
+              "default": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              }
+            }
+          },
+          "minItems": 8,
+          "maxItems": 8
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "knob",
+              "zones"
+            ],
+            "properties": {
+              "knob": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "zones": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "min",
+                    "max",
+                    "labels"
+                  ],
+                  "properties": {
+                    "min": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "max": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "labels": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "propertyNames": {
+                        "pattern": "^[0-7]$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 4,
+                        "pattern": "^[ -~]*$"
+                      }
+                    }
+                  }
+                },
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "dsp2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "abi"
+          ],
+          "properties": {
+            "provider": {
+              "enum": [
+                "python",
+                "legacy-stack"
+              ]
+            },
+            "entry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi": {
+              "enum": [
+                "md-voice/1",
+                "md-stock-callback/1"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.asm$"
+            },
+            "tables": {
+              "description": "Immutable DSP tables. The linker may store byte-identical assembly tables once across independent packages. Writable state belongs in a declared memory allocation, never in these tables.",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.asm$"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "source"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "provider"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "entry"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "provider",
+                "entry"
+              ],
+              "not": {
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          ]
+        },
+        "dsp1_drive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "law",
+            "abi"
+          ],
+          "properties": {
+            "law": {
+              "type": "string",
+              "minLength": 1
+            },
+            "entry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi": {
+              "const": "md-track-drive/1"
+            },
+            "source": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+\\.asm$"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "source"
+              ],
+              "not": {
+                "required": [
+                  "entry"
+                ]
+              }
+            },
+            {
+              "required": [
+                "entry"
+              ],
+              "not": {
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          ]
+        },
+        "coldfire": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entry",
+            "abi",
+            "isa"
+          ],
+          "properties": {
+            "entry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "abi": {
+              "type": "string",
+              "minLength": 1
+            },
+            "isa": {
+              "const": "ISA_A"
+            }
+          }
+        }
+      },
+      "minProperties": 1
+    },
+    "memory": {
+      "description": "One 64-word voice allocation, optionally with either one P-I slice or one per-track scratch allocation (kind private: up to 2048 words, model initialization, successor-init release). See docs/MODEL-PACKS.md.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "space",
+          "words",
+          "alignment",
+          "lifetime",
+          "init",
+          "release"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "voice",
+              "pi",
+              "private"
+            ]
+          },
+          "space": {
+            "enum": [
+              "X",
+              "Y",
+              "XY"
+            ]
+          },
+          "words": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "alignment": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lifetime": {
+            "enum": [
+              "track-assignment",
+              "trigger"
+            ]
+          },
+          "init": {
+            "enum": [
+              "model",
+              "chunked",
+              "chunked-muted"
+            ]
+          },
+          "release": {
+            "enum": [
+              "successor-init",
+              "plain-audio",
+              "clean-before-stock-pi"
+            ]
+          },
+          "dirty_span": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "offset",
+              "words"
+            ],
+            "properties": {
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "words": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "samples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "tag",
+          "version",
+          "minimum_words",
+          "required",
+          "without"
+        ],
+        "properties": {
+          "kind": {
+            "const": "uw-sample"
+          },
+          "tag": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 4
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minimum_words": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "without": {
+            "type": "string",
+            "minLength": 1
+          },
+          "install": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "transport",
+              "file"
+            ],
+            "properties": {
+              "transport": {
+                "const": "sds-handshake"
+              },
+              "file": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*\\.syx$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "render_cps",
+        "trigger_cycles",
+        "init_cycles"
+      ],
+      "properties": {
+        "render_cps": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trigger_cycles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "init_cycles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dsp1_cps": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "origin",
+          "license",
+          "reference"
+        ],
+        "properties": {
+          "origin": {
+            "type": "string",
+            "minLength": 1
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reference": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "minItems": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "injection": {
+            "properties": {
+              "mode": {
+                "const": "replace"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "injection": {
+            "required": [
+              "target",
+              "id"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "injection": {
+            "not": {
+              "required": [
+                "target"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "components": {
+            "required": [
+              "dsp1_drive"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "budget": {
+            "required": [
+              "dsp1_cps"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

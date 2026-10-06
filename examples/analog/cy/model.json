@@ -1,0 +1,129 @@
+{
+  "format": "md-model/1",
+  "key": "AN/CY",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "AN CY",
+    "category": "AN",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 64
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "MODE",
+        "default": 0
+      },
+      {
+        "label": "TONE",
+        "default": 64
+      },
+      {
+        "label": "COL",
+        "default": 64
+      },
+      {
+        "label": "TDEC",
+        "default": 120
+      },
+      {
+        "label": "",
+        "default": 64
+      },
+      {
+        "label": "BEND",
+        "default": 64
+      }
+    ],
+    "modes": [
+      {
+        "knob": 2,
+        "zones": [
+          {
+            "min": 0,
+            "max": 25,
+            "labels": {
+              "2": "CYCL"
+            }
+          },
+          {
+            "min": 26,
+            "max": 51,
+            "labels": {
+              "2": "CYMT"
+            }
+          },
+          {
+            "min": 52,
+            "max": 76,
+            "labels": {
+              "3": "TYPE",
+              "2": "RIDE"
+            }
+          },
+          {
+            "min": 77,
+            "max": 102,
+            "labels": {
+              "3": "DET",
+              "2": "CBCL"
+            }
+          },
+          {
+            "min": 103,
+            "max": 127,
+            "labels": {
+              "3": "DET",
+              "2": "CBMT"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    },
+    "dsp1_drive": {
+      "source": "dsp1-drive.asm",
+      "law": "an_cubicd",
+      "abi": "md-track-drive/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 256,
+    "trigger_cycles": 1000,
+    "init_cycles": 1000,
+    "dsp1_cps": 20
+  },
+  "provenance": [
+    {
+      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "license": "NOASSERTION",
+      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+    }
+  ]
+}

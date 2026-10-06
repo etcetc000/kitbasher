@@ -1,0 +1,78 @@
+{
+  "format": "md-model/1",
+  "key": "example/scaffold",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "EXAMP",
+    "category": "EX",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 96
+      },
+      {
+        "label": "DEC",
+        "default": 32
+      },
+      {
+        "label": "TREM",
+        "default": 0
+      },
+      {
+        "label": "TFRQ",
+        "default": 0
+      },
+      {
+        "label": "MOD",
+        "default": 64
+      },
+      {
+        "label": "MFRQ",
+        "default": 64
+      },
+      {
+        "label": "MDEC",
+        "default": 64
+      },
+      {
+        "label": "FB",
+        "default": 127
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 129.6,
+    "trigger_cycles": 460,
+    "init_cycles": 460
+  },
+  "provenance": [
+    {
+      "origin": "Kitbasher contributor scaffold",
+      "license": "GPL-2.0-only",
+      "reference": "Original silent ABI example"
+    }
+  ]
+}

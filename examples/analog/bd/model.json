@@ -1,0 +1,159 @@
+{
+  "format": "md-model/1",
+  "key": "AN/BD",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "AN BD",
+    "category": "AN",
+    "knobs": [
+      {
+        "label": "PTCH",
+        "default": 61
+      },
+      {
+        "label": "DEC",
+        "default": 48
+      },
+      {
+        "label": "MODE",
+        "default": 0
+      },
+      {
+        "label": "WAVE",
+        "default": 0
+      },
+      {
+        "label": "TRAN",
+        "default": 64
+      },
+      {
+        "label": "HOLD",
+        "default": 33
+      },
+      {
+        "label": "STIM",
+        "default": 80
+      },
+      {
+        "label": "BEND",
+        "default": 65
+      }
+    ],
+    "modes": [
+      {
+        "knob": 2,
+        "zones": [
+          {
+            "min": 0,
+            "max": 18,
+            "labels": {
+              "4": "TICK",
+              "6": "STIM",
+              "7": "SNAP",
+              "2": "HARD"
+            }
+          },
+          {
+            "min": 19,
+            "max": 36,
+            "labels": {
+              "6": "STIM",
+              "2": "CLAS"
+            }
+          },
+          {
+            "min": 37,
+            "max": 54,
+            "labels": {
+              "3": "FM T",
+              "4": "FM A",
+              "5": "FM D",
+              "6": "STIM",
+              "2": "FM"
+            }
+          },
+          {
+            "min": 55,
+            "max": 73,
+            "labels": {
+              "3": "TYPE",
+              "4": "TICK",
+              "5": "MOD",
+              "6": "RTIO",
+              "2": "PLST"
+            }
+          },
+          {
+            "min": 74,
+            "max": 91,
+            "labels": {
+              "3": "DUST",
+              "4": "CLIK",
+              "6": "STIM",
+              "2": "SILK"
+            }
+          },
+          {
+            "min": 92,
+            "max": 109,
+            "labels": {
+              "4": "TICK",
+              "6": "STIM",
+              "2": "SHRP"
+            }
+          },
+          {
+            "min": 110,
+            "max": 127,
+            "labels": {
+              "4": "IMP",
+              "6": "STIM",
+              "2": "ACOU"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    },
+    "dsp1_drive": {
+      "source": "dsp1-drive.asm",
+      "law": "an_cubicd",
+      "abi": "md-track-drive/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 256,
+    "trigger_cycles": 1000,
+    "init_cycles": 1000,
+    "dsp1_cps": 20
+  },
+  "provenance": [
+    {
+      "origin": "Original digital recreation of Syntakt and Analog Rytm analog voice designs",
+      "license": "NOASSERTION",
+      "reference": "Analog Rytm and Syntakt manuals; parameter ranges and defaults informed by device metadata"
+    }
+  ]
+}

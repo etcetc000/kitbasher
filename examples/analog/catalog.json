@@ -1,0 +1,32 @@
+{
+  "models": [
+    {
+      "directory": "bd",
+      "key": "AN/BD"
+    },
+    {
+      "directory": "sd",
+      "key": "AN/SD"
+    },
+    {
+      "directory": "rc",
+      "key": "AN/RC"
+    },
+    {
+      "directory": "pc",
+      "key": "AN/PC"
+    },
+    {
+      "directory": "hh",
+      "key": "AN/HH"
+    },
+    {
+      "directory": "cy",
+      "key": "AN/CY"
+    },
+    {
+      "directory": "sy",
+      "key": "AN/SY"
+    }
+  ]
+}

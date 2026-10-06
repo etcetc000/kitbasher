@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "directory": "e12ac",
+      "key": "COMM/E12AC"
+    },
+    {
+      "directory": "efm4op",
+      "key": "COMM/EFM4OP"
+    },
+    {
+      "directory": "e12ju",
+      "key": "COMM/E12JU"
+    },
+    {
+      "directory": "mangrove",
+      "key": "COMM/PIMG"
+    },
+    {
+      "directory": "e12sp",
+      "key": "COMM/E12SP"
+    }
+  ]
+}
