@@ -37,37 +37,66 @@ export function uwDownloads(models: PackModel[], packs: Pack[]): HTMLElement {
   const host = document.createElement('div');
   host.id = 'uw-downloads';
   const seen = new Set<string>();
+  const wanted: { model: PackModel; need: NonNullable<PackModel['needs']>[number] }[] = [];
   for (const model of models) for (const need of model.needs ?? []) {
-    const file = need.install?.file;
     const identity = `${model.module}:${need.name}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    const row = document.createElement('p');
-    row.textContent = `Preparing ${need.name} download…`;
-    host.append(row);
-    void (async () => {
-      try {
+    wanted.push({ model, need });
+  }
+  if (!wanted.length) return host;
+  const pending = document.createElement('p');
+  pending.textContent = 'Preparing sample downloads…';
+  host.append(pending);
+  void (async () => {
+    // Several models can read the same sample file (WAVCH and WAVMR share the wave bank):
+    // offer each file once and name every model that uses it.
+    const byFile = new Map<string, { asset: Asset; users: string[] }>();
+    const problems: string[] = [];
+    try {
+      const list = await assets();
+      for (const { model, need } of wanted) {
+        const file = need.install?.file;
         const source = packs.find(p => p.models.some(m => m.key === model.key))?.source?.commit;
         // A need without an install filename is matched by model module and sample name; the
         // asset's sha256 is verified before anything is offered.
-        const a = (await assets()).find(a => (!file || a.file === file) && a.name === need.name && a.module === model.module
+        const a = list.find(a => (!file || a.file === file) && a.name === need.name && a.module === model.module
           && (!a.firmware_commit || !source || a.firmware_commit === source));
-        if (!a) throw new Error(`No matching ${file ?? need.name} download is configured for this model version. Use the matching model release.`);
-        const url = await download(a);
+        if (!a) { problems.push(`No matching ${file ?? need.name} download is configured for ${model.name.trim()}. Use the matching model release.`); continue; }
+        const key = `${a.file}:${a.sha256}`;
+        const entry = byFile.get(key) ?? { asset: a, users: [] };
+        entry.users.push(model.name.trim());
+        byFile.set(key, entry);
+      }
+    } catch (error) {
+      problems.push((error as Error).message);
+    }
+    const rows: HTMLElement[] = [];
+    for (const { asset: a, users } of byFile.values()) {
+      const row = document.createElement('p');
+      rows.push(row);
+      try {
         const link = document.createElement('a');
         link.className = 'uw-download';
-        link.href = url;
+        link.href = await download(a);
         link.download = a.file;
         link.textContent = `Download ${a.name} sample SysEx`;
         const note = document.createElement('span');
         note.className = 'fine';
-        note.textContent = ` ${a.file} · UW slot ${a.displayed_slot}. Loading it replaces any sample in that slot.`;
+        note.textContent = ` ${a.file} · UW slot ${a.displayed_slot} · used by ${users.join(' and ')}. Loading it replaces any sample in that slot.`;
         row.replaceChildren(link, document.createElement('br'), note);
       } catch (error) {
         row.textContent = (error as Error).message;
         row.setAttribute('role', 'status');
       }
-    })();
-  }
+    }
+    for (const text of problems) {
+      const row = document.createElement('p');
+      row.textContent = text;
+      row.setAttribute('role', 'status');
+      rows.push(row);
+    }
+    pending.replaceWith(...rows);
+  })();
   return host;
 }
