@@ -5,8 +5,25 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ## Unreleased
 
+### Changed
+
+- One pitch law for every pitched public model: PTCH raw = 2 × (MIDI − 24), so raw
+  0 is MIDI 24 (C0) and raw 127 is MIDI 87.5, in quarter-tone steps with every even
+  value a semitone; MIDI 60 is named C3. OSCAC, WAVSP, FMS4O, VADBD, VADSD, VADRC,
+  VADPC and VADSY moved to it (major version 2.0.0, new PTCH defaults that play the
+  old default note), VADHH and VADCY move half a semitone a step about raw 64, and
+  OSCSP, VOXFR and PHYKS already used it. **No backward compatibility:** saved kits
+  and pattern P-locks on these machines play different notes, and nothing converts
+  them.
+- PHYKS (1.0.0) reads its string through a fractional, interpolated delay, so every
+  note is in tune to a tenth of a cent instead of up to 40 cents out at
+  the top; it costs about 8 cycles a sample.
+
 ### Added
 
+- Pitch metadata: `panel.pitch` in the model manifest and `pitch` on pack models
+  (knob, law, steps, base note, range, per-mode overrides), with `rawToNote` /
+  `noteToRaw` in `engine/src/pitch.ts`.
 - Browser and command-line patcher that adds sound models to Machinedrum OS 1.63,
   X.13, X.14 and Em's DEV firmware, keeping every stock machine.
 - Support for OS X.14 and for Em's DEV firmware md-26A01-183521, both tested in the

@@ -67,6 +67,39 @@ node packs/annotate_browse.mjs my-pack.json --out annotated/
 Each model in the copy carries a `browse` record: its category, description and
 help per control. Packs without it keep working as before.
 
+## Declaring what the pitch knob means
+
+A manifest can say how its pitch knob maps to notes, in `panel.pitch`; the
+exporter copies it onto the pack model (`pitch`), so compiled packs carry it too.
+Every bundled synth, FM, wavetable, vocal and physical model declares one.
+
+```json
+"pitch": { "knob": 0, "law": "quarter", "steps": 2, "base_note": 24, "table": "pitch" }
+```
+
+| Field | Meaning |
+|---|---|
+| `knob` | The 0-based knob that carries pitch (`null` only with law `none`) |
+| `law` | `quarter`, `chromatic`, `continuous`, `relative` or `none` |
+| `steps` | Raw steps per semitone: 2 for `quarter`, 1 for `chromatic` |
+| `base_note` | MIDI note at raw 0 |
+| `range` | `[lo, hi]` raws where the law holds; outside them the end note is held |
+| `center` | `relative` only: the raw that plays the mode's own voicing |
+| `mode_knob`, `by_mode` | Per-stop overrides of the MODE knob: `{zone, base_note, law, range, center}` |
+| `cents_per_step`, `tolerance_cents`, `table` | A uniform continuous law; the checkers' bound; the table the knob reads |
+
+Every absolute-pitch model uses one law, **quarter**: raw = 2 × (MIDI − 24). Raw 0
+is MIDI 24 (32.70 Hz), every even value is a semitone, every odd value the quarter
+tone between, and raw 127 is MIDI 87.5. Notes are named as on the Machinedrum's
+own MIDI machine, MIDI 60 = C3, so raw 0 is C0 and raw 72 is C3. Models whose modes
+sit at different pitches keep each mode's base in `by_mode`; hats, cymbals and
+cowbells are `relative`, two raws per semitone about raw 64.
+
+`engine/src/pitch.ts` holds the one mapping (`rawToNote`, `noteToRaw`, `noteName`)
+and checks the object against the panel: the knob must be captioned `PTCH`,
+`NOTE` or `OSC1`, and a mode that relabels it to anything else must say
+`law: "none"`.
+
 ## Renaming a model
 
 A model's key (`VAD/BD`, `OSC/SW`, ...) is how a saved layout, a `--model`
