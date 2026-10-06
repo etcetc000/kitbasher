@@ -11,7 +11,7 @@
 
 import { PAD } from '../../engine/src/e12.js';
 import { type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
-import { convertFile, play, stopPlaying, SAMPLE_RATE, type ConvertOptions } from './convert.js';
+import { bufferFor, convertFile, play, primeAudio, stopPlaying, warmAudio, SAMPLE_RATE, type ConvertOptions } from './convert.js';
 import { AUDIO_EXT, matchFiles, type Match } from './sample-match.js';
 
 const el = (tag: string, props: Record<string, string> = {}, ...kids: (Node | string)[]): HTMLElement => {
@@ -73,6 +73,8 @@ export class SamplesStep {
     this.ui = root.querySelector<HTMLElement>('#sample-ui')!;
     // the waveforms take their colours from the theme: redraw when it changes
     new MutationObserver(() => { if (this.bank) this.render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    // resume the shared audio context on the first gesture anywhere, ahead of the first pad press
+    for (const k of ['pointerdown', 'keydown']) document.addEventListener(k, primeAudio, { capture: true, passive: true });
   }
 
   /** The edits the engine plans and builds with. */
@@ -86,6 +88,7 @@ export class SamplesStep {
     stopPlaying();
     this.playingEntry = null;
     this.bank = bank;
+    if (bank) warmAudio();
     this.state = emptyState();
     this.review = null;
     this.selected = null;
@@ -142,9 +145,9 @@ export class SamplesStep {
       swap ? `${secs(swap.length)} of ${secs(e.samples)}` : secs(e.samples)];
     const others = e.machines.filter((x) => x.id !== t.m.id).map((x) => x.name);
     if (others.length) bits.push(`shared with ${others.join(', ')}`);
-    if (this.paddedFor(e) !== null) bits.push(`padded with silence to sample ${this.paddedFor(e)}`);
-    if (this.cut(t.entry)) bits.push('cut to the stock length');
-    if (this.state.noTrim.has(t.entry)) bits.push("don't trim");
+    if (this.paddedFor(e) !== null) bits.push(`padded with silence to sample ${this.paddedFor(e)}'s length`);
+    else if (this.cut(t.entry)) bits.push('cut to stock length');
+    if (this.state.noTrim.has(t.entry)) bits.push("won't be trimmed");
     if (this.playingEntry === t.entry) bits.push('playing');
     return bits.join(', ');
   }
@@ -160,8 +163,39 @@ export class SamplesStep {
     if (!this.selected || !targets.some((t) => t.m.id === this.selected!.m.id && t.entry === this.selected!.entry)) this.selected = targets[0];
     this.ui.append(this.meterEl(), this.toolbarEl(), this.messageEl());
     if (this.review) this.ui.append(this.reviewEl());
-    this.ui.append(this.gridEl(targets), this.legendEl(), this.detailEl(this.selected));
+    this.ui.append(this.gridEl(targets), this.detailEl(this.selected));
     if (focusKey) this.ui.querySelector<HTMLElement>(`.pad-target[data-key="${focusKey}"]`)?.focus();
+    this.prebuild(targets);
+  }
+
+  /** Build every pad's AudioBuffer while the page is idle, so a press never waits for one. */
+  private prebuild(targets: Target[]): void {
+    const todo = targets.map((t) => this.state.swaps.get(t.entry) ?? this.bank!.entries[t.entry].data);
+    const idle = (f: () => void): void => { if ('requestIdleCallback' in window) requestIdleCallback(f); else setTimeout(f, 0); };
+    const step = (): void => {
+      const d = todo.shift();
+      if (!d) return;
+      try { bufferFor(d); } catch { return; }
+      idle(step);
+    };
+    idle(step);
+  }
+
+  /** Selection and playing state on the pads and the detail strip, without rebuilding the grid. */
+  private marks(): void {
+    if (!this.bank) return;
+    const targets = this.targets();
+    for (const btn of Array.from(this.ui.querySelectorAll<HTMLElement>('.pad-target'))) {
+      const t = targets.find((x) => `${x.m.id}-${x.entry}` === btn.dataset.key);
+      if (!t) continue;
+      const sel = this.selected?.m.id === t.m.id && this.selected.entry === t.entry;
+      btn.setAttribute('tabindex', sel ? '0' : '-1');
+      btn.toggleAttribute('data-playing', this.playingEntry === t.entry);
+      if (sel) btn.setAttribute('aria-current', 'true'); else btn.removeAttribute('aria-current');
+      btn.setAttribute('aria-label', this.describe(t));
+    }
+    const old = this.ui.querySelector('.pad-detail');
+    if (old && this.selected) old.replaceWith(this.detailEl(this.selected));
   }
 
   private messageEl(): HTMLElement {
@@ -254,7 +288,11 @@ export class SamplesStep {
       canvas,
       el('span', { class: 'pad-len' }, secs(data.length)),
       el('span', { class: 'pad-bar', 'aria-hidden': 'true' }, fill));
-    btn.addEventListener('click', () => this.activate(t));
+    // a mouse or pen press sounds on pointerdown; a touch sounds on the tap (so scrolling the grid
+    // stays silent); a click with no pointer (Space, or a screen reader) plays too
+    let touch = false;
+    btn.addEventListener('pointerdown', (ev) => { touch = ev.pointerType === 'touch'; if (!touch && ev.button === 0) this.activate(t); });
+    btn.addEventListener('click', (ev) => { if (ev.detail === 0 || touch) this.activate(t); touch = false; });
     btn.addEventListener('keydown', (ev) => this.onKey(ev, t));
     btn.addEventListener('dragover', (ev) => {
       const types = ev.dataTransfer?.types ?? [];
@@ -281,38 +319,17 @@ export class SamplesStep {
     const e = this.bank!.entries[t.entry];
     const out: HTMLElement[] = [];
     const badge = (kind: string, icon: string, text: string): HTMLElement => {
-      const b = el('span', { class: 'pad-badge', 'data-kind': kind, title: text });
-      b.append(svg(icon), el('span', { class: 'sr-only' }, text));
+      const b = el('span', { class: 'pad-badge', 'data-kind': kind, title: text, role: 'img', 'aria-label': text });
+      b.append(svg(icon));
       return b;
     };
     const others = e.machines.filter((x) => x.id !== t.m.id).map((x) => x.name);
     if (others.length) out.push(badge('shared', ICON.link, `Shared with ${others.join(', ')}`));
     const pad = this.paddedFor(e);
-    if (pad !== null) out.push(badge('warn', ICON.warn, `Padded with silence to sample ${pad}'s length`));
-    else if (this.cut(t.entry)) out.push(badge('warn', ICON.warn, 'Cut to the stock length'));
-    if (this.state.noTrim.has(t.entry)) out.push(badge('lock', ICON.lock, "Don't trim"));
+    if (pad !== null) out.push(badge('warn', ICON.warn, `Padded with silence (to sample ${pad}'s length)`));
+    else if (this.cut(t.entry)) out.push(badge('warn', ICON.warn, 'Cut to stock length'));
+    if (this.state.noTrim.has(t.entry)) out.push(badge('lock', ICON.lock, "Won't be trimmed"));
     return out;
-  }
-
-  private legendEl(): HTMLElement {
-    const item = (kind: string, icon: string, text: string): HTMLElement => {
-      const s = el('span', { class: 'pad-badge', 'data-kind': kind });
-      s.append(svg(icon));
-      return el('li', {}, s, text);
-    };
-    return el('ul', { class: 'pad-legend', 'aria-label': 'Legend' },
-      el('li', {}, el('span', { class: 'pad-swatch', 'data-state': 'stock' }), 'Stock sample'),
-      el('li', {}, el('span', { class: 'pad-swatch', 'data-state': 'mine' }), 'Your sample'),
-      item('shared', ICON.link, `Shared sample${this.sharedNote()}`),
-      item('warn', ICON.warn, 'Padded or cut'),
-      item('lock', ICON.lock, "Don't trim"),
-      el('li', { class: 'pad-hint' }, 'Drop one file on a pad to replace it, or several files or a folder on the grid to match them by name.'));
-  }
-
-  /** " (12: SD and RS)": the samples more than one machine plays */
-  private sharedNote(): string {
-    const shared = this.bank!.entries.filter((e) => e.machines.length > 1);
-    return shared.length ? ` (${shared.map((e) => `${e.entry}: ${e.machines.map(codeOf).join(' and ')}`).join('; ')})` : '';
   }
 
   private detailEl(t: Target): HTMLElement {
@@ -386,25 +403,27 @@ export class SamplesStep {
 
   // ---- actions
 
+  /** A pad pressed: play it (or stop it, pressed again while playing), then show it selected. */
   private activate(t: Target): void {
     const same = this.selected?.m.id === t.m.id && this.selected.entry === t.entry;
+    if (same && this.playingEntry === t.entry) { stopPlaying(); this.playingEntry = null; }
+    else this.startPlay(t);
     this.selected = t;
-    if (same && this.playingEntry === t.entry) { stopPlaying(); this.playingEntry = null; this.render(); return; }
-    this.startPlay(t);
+    requestAnimationFrame(() => this.marks());
   }
 
   private togglePlay(t: Target): void {
-    if (this.playingEntry === t.entry) { stopPlaying(); this.playingEntry = null; this.render(); return; }
-    this.startPlay(t);
+    if (this.playingEntry === t.entry) { stopPlaying(); this.playingEntry = null; } else this.startPlay(t);
+    this.marks();
   }
 
+  /** Sound first: nothing else happens between the press and the start. */
   private startPlay(t: Target): void {
     const data = this.state.swaps.get(t.entry) ?? this.bank!.entries[t.entry].data;
     this.playingEntry = t.entry;
     try {
-      play(data, () => { if (this.playingEntry === t.entry) { this.playingEntry = null; this.render(); } });
+      play(data, () => { if (this.playingEntry === t.entry) { this.playingEntry = null; this.marks(); } });
     } catch { this.playingEntry = null; }
-    this.render();
   }
 
   private onKey(ev: KeyboardEvent, t: Target): void {

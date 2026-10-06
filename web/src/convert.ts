@@ -116,26 +116,60 @@ export async function convertFile(file: File, cap: number, opt: ConvertOptions):
   return r;
 }
 
-/** Play 12-bit data through the speakers; returns a function that stops it. */
-let playing: { ctx: AudioContext; src: AudioBufferSourceNode } | null = null;
-export function play(data: Int16Array, onEnd?: () => void): () => void {
-  stopPlaying();
-  const ctx = new AudioContext();
-  const buf = ctx.createBuffer(1, Math.max(1, data.length), SAMPLE_RATE);
-  const ch = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) ch[i] = data[i] / 2048;
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  src.onended = () => { if (playing?.src === src) { playing = null; void ctx.close(); } onEnd?.(); };
-  src.start();
-  playing = { ctx, src };
-  return stopPlaying;
+// ---- playback: one shared AudioContext and one voice, so a pad sounds the moment it is pressed.
+// The context is created when the Samples step first has a bank (warmAudio: opening the audio
+// device is the slow part) and resumed on the first user gesture (primeAudio). Buffers are built
+// once per sample and kept while that sample's data lives (a swap is new data, so a new buffer).
+
+let shared: AudioContext | null = null;
+const buffers = new WeakMap<Int16Array, AudioBuffer>();
+let voice: { src: AudioBufferSourceNode } | null = null;
+
+function context(): AudioContext {
+  if (!shared) shared = new AudioContext({ latencyHint: 'interactive' });
+  return shared;
 }
+
+/** Open the audio device ahead of the first press (it stays suspended until a gesture). */
+export function warmAudio(): void {
+  try { context(); } catch { /* no Web Audio: play() reports it */ }
+}
+
+/** Resume the context from inside a user gesture, so the next press starts at once. */
+export function primeAudio(): void {
+  if (shared?.state === 'suspended') void shared.resume();
+}
+
+/** The sample as an AudioBuffer, built once (no context needed to build one). */
+export function bufferFor(data: Int16Array): AudioBuffer {
+  let b = buffers.get(data);
+  if (!b) {
+    b = new AudioBuffer({ length: Math.max(1, data.length), numberOfChannels: 1, sampleRate: SAMPLE_RATE });
+    const ch = b.getChannelData(0);
+    for (let i = 0; i < data.length; i++) ch[i] = data[i] / 2048;
+    buffers.set(data, b);
+  }
+  return b;
+}
+
+/** Play 12-bit data, stopping whatever was playing; `onEnd` runs when it finishes on its own. */
+export function play(data: Int16Array, onEnd?: () => void): void {
+  const c = context();
+  if (c.state !== 'running') void c.resume();
+  stopPlaying();
+  const src = c.createBufferSource();
+  src.buffer = bufferFor(data);
+  src.connect(c.destination);
+  const v = { src };
+  src.onended = () => { if (voice === v) { voice = null; onEnd?.(); } };
+  src.start();
+  voice = v;
+}
+
 export function stopPlaying(): void {
-  if (!playing) return;
-  const p = playing;
-  playing = null;
-  try { p.src.stop(); } catch { /* already stopped */ }
-  void p.ctx.close();
+  if (!voice) return;
+  const v = voice;
+  voice = null;
+  try { v.src.stop(); } catch { /* already stopped */ }
+  v.src.disconnect();
 }
