@@ -7,10 +7,10 @@ assigned machine ID; none replaces a stock machine.
 
 | Family | Directory | Machines | License |
 |---|---|---|---|
-| Analog recreations | [`examples/analog`](../examples/analog/README.md) | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | GPL v2, with Kitbasher |
-| Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP | No license stated by the original sources |
+| Analog recreations | [`examples/analog`](../examples/analog/README.md) | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | GPL v2 or later |
+| Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP | GPL v2 or later |
 | Noise Plethora | [`examples/noise-plethora`](../examples/noise-plethora/README.md) | NZEPL (30 programs) | GPL-3.0-or-later; Teensy Audio parts MIT |
-| Scaffold | [`examples/scaffold`](../examples/scaffold/README.md) | A silent starting point for your own model | GPL v2, with Kitbasher |
+| Scaffold | [`examples/scaffold`](../examples/scaffold/README.md) | A silent starting point for your own model | GPL v2 or later |
 
 Model names say what engine they are: VAD (analog-style drum voices), FMS (FM),
 OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant) and
@@ -47,8 +47,7 @@ ported here as independent add-ons: an acid bass, four-operator FM, a saw/pulse
 synth, a formant oscillator and a spectral-array scanner. Their controls follow
 the original voices but form a new control layout, so kits made for the original
 replacement machines do not carry over. Each directory's README lists its control
-ranges. The original sources state no license, so the manifests record
-`NOASSERTION`; that records the absence of a license and grants none.
+ranges. They are published here with the author's permission under GPL v2 or later.
 
 ## Noise Plethora
 

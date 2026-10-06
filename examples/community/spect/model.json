@@ -84,12 +84,12 @@
   "provenance": [
     {
       "origin": "Community Spectra v79 synthesis and update core",
-      "license": "NOASSERTION",
+      "license": "GPL-2.0-or-later",
       "reference": "Original Machinedrum voice by Nick Montgomery (E12-SP v79), ported to an md-model/1 add-on"
     },
     {
       "origin": "Original two 64x24 spectral banks and note table",
-      "license": "NOASSERTION",
+      "license": "GPL-2.0-or-later",
       "reference": "Taken unchanged from the original E12-SP voice; the note table is repeated across four octaves"
     }
   ]

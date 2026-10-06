@@ -75,7 +75,7 @@
   "provenance": [
     {
       "origin": "Community acid bass v40 core",
-      "license": "NOASSERTION",
+      "license": "GPL-2.0-or-later",
       "reference": "Original Machinedrum voice by Nick Montgomery (E12-AC v40), ported to an md-model/1 add-on"
     }
   ]

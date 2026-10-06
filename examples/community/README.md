@@ -35,6 +35,5 @@ at eight relocation placements and confirms each pack holds exactly its model.
 
 ## License
 
-The original sources state no license. The manifests therefore record
-`NOASSERTION` with the original attribution; that records the absence of a
-license and grants none.
+Written by Nick Montgomery and published here with his permission under the
+GNU General Public License, version 2 or later, like the rest of Kitbasher.

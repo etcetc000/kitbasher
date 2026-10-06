@@ -1,9 +1,9 @@
 # Third-party notices
 
-Kitbasher is distributed under the GNU General Public License v2; see
-[COPYING](COPYING). It includes or uses the following third-party work.
+Kitbasher is distributed under the GNU General Public License, version 2 or
+later; see [COPYING](COPYING). It includes or uses the following third-party work.
 
-- **UCL** by Markus F. X. J. Oberhumer, GPL v2. The source and its notices are in
+- **UCL** by Markus F. X. J. Oberhumer, GPL v2 or later. The source and its notices are in
   `engine/wasm/ucl/`; the WebAssembly build recipe is `engine/wasm/build.sh`.
 - **dsp56300** instruction encoder (optional, for exporting models from assembly
   source). Its sources are not included here; keep their license and attribution
@@ -18,10 +18,8 @@ Kitbasher is distributed under the GNU General Public License v2; see
   [TEENSY-NOTICE.txt](examples/noise-plethora/TEENSY-NOTICE.txt); the FM
   approximation is credited upstream to Laurent de Soras. A pack or OS image that
   includes this model is distributed under GPL v3 or later.
-- **Community voices** (`examples/community/`) were originally written by Nick
-  Montgomery. Their original sources state no license; each manifest keeps the
-  original attribution and records the license as `NOASSERTION`, which grants
-  none.
+- **Community voices** (`examples/community/`) were written by Nick Montgomery
+  and are published here with his permission under GPL v2 or later.
 
 The compiled packs `catalog/synths.json` and `catalog/core.json` are distributed
 as data without source; see [Compiled models](docs/MODELS.md#compiled-models).

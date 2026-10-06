@@ -85,7 +85,8 @@ write your own model, start with the [scaffold example](examples/scaffold/README
 
 ## License
 
-Kitbasher is free software under the GNU General Public License v2; see
-[COPYING](COPYING). Bundled third-party code is listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Some model sources in
-`examples/` carry their own licenses; see [docs/MODELS.md](docs/MODELS.md).
+Kitbasher is free software under the GNU General Public License, version 2 or
+(at your option) any later version; see [COPYING](COPYING). Bundled third-party code is listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Model sources in
+`examples/` are GPL v2 or later, except Noise Plethora (GPL v3 or later), so an
+OS image that includes NZEPL is distributed under GPL v3 or later. See [docs/MODELS.md](docs/MODELS.md).

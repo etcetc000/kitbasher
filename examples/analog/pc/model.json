@@ -124,7 +124,7 @@
   "provenance": [
     {
       "origin": "Original digital drum voices",
-      "license": "NOASSERTION",
+      "license": "GPL-2.0-or-later",
       "reference": "Original DSP code and mathematically generated tables; no recovered engine code"
     }
   ]
