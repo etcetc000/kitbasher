@@ -20,6 +20,7 @@ import {
 } from '../../engine/src/layout.js';
 import type { Plan } from '../../engine/src/plan.js';
 import { drawMenuLcd } from './lcd.js';
+import { describeModel } from './catalog.js';
 
 const CSS = `
 .layout-panel{margin-top:20px;padding:16px 20px}
@@ -59,7 +60,7 @@ const CSS = `
 .lay-cat li .grip{cursor:grab;color:#9aa5ac;user-select:none}
 .lay-cat li .mname{font-family:var(--mono);font-weight:600;white-space:pre}
 .lay-cat li>span:nth-child(2){white-space:nowrap}
-.lay-cat li select{font:inherit;font-size:11px;max-width:100%}
+.lay-cat li .blurb{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lay-cat li .moved{color:#1e3f8a;font-size:10px}
 .icon{border:1px solid var(--line);background:#fff;border-radius:3px;font-size:11px;line-height:1;padding:3px 5px;cursor:pointer}
 .lay-cat li.lay-empty{display:block;color:var(--muted);font-size:11px;padding:4px 8px}
@@ -99,6 +100,7 @@ export class LayoutEditor {
   private plan: Plan | null = null;
   private eff: Layout | null = null;
   private names = new Map<string, string>();
+  private blurbs = new Map<string, string>();
   private preferred = new Map<string, number>();
   private readonly root: HTMLElement;
   private drag: string | null = null;
@@ -144,6 +146,7 @@ export class LayoutEditor {
     }
     this.root.hidden = false;
     this.names = new Map(p.sel.map((s) => [s.m.key, s.m.name.trim()]));
+    this.blurbs = new Map(p.sel.map((s) => [s.m.key, describeModel(s.m).description]));
     this.preferred = new Map(p.sel.map((s) => [s.m.key, s.preferred]));
     this.eff = p.layout ?? defaultLayout(this.base, p.menus, (k) => placed.get(k)!);
     this.draw();
@@ -418,9 +421,7 @@ export class LayoutEditor {
 
   private row(l: Layout, k: string, c: string, i: number, keys: string[]): HTMLElement {
     const nm = this.names.get(k)!;
-    const catSel = el('select', { 'aria-label': `Category of ${nm}`, 'data-key': k, class: 'lay-cat-sel' }) as HTMLSelectElement;
-    for (const x of l.categories) { const o = el('option', { value: x }, x) as HTMLOptionElement; o.selected = x === c; catSel.append(o); }
-    catSel.addEventListener('change', () => this.place(k, catSel.value, null));
+    const blurb = this.blurbs.get(k) ?? '';
     const up = el('button', { type: 'button', class: 'icon', 'aria-label': `Move ${nm} up` }, '↑');
     const down = el('button', { type: 'button', class: 'icon', 'aria-label': `Move ${nm} down` }, '↓');
     if (i === 0) up.setAttribute('disabled', '');
@@ -430,7 +431,7 @@ export class LayoutEditor {
     const li = el('li', { draggable: 'true', 'data-key': k },
       el('span', { class: 'grip', 'aria-hidden': 'true' }, '⋮⋮'),
       el('span', {}, el('span', { class: 'mname' }, nm)),
-      catSel, up, down);
+      el('span', { class: 'blurb', title: blurb }, blurb), up, down);
     li.addEventListener('dragstart', (e) => { this.start(e, k); li.setAttribute('data-drag', ''); });
     li.addEventListener('dragend', () => { li.removeAttribute('data-drag'); this.drag = null; });
     li.addEventListener('dragover', (e) => { if (this.drag && this.drag !== k) { e.preventDefault(); e.stopPropagation(); li.setAttribute('data-over', ''); } });
