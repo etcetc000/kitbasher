@@ -20,7 +20,8 @@
     "ordered_recovery",
     "clean_recovery",
     "stub_trim_unit",
-    "samples_unit"
+    "samples_unit",
+    "pitch"
   ],
   "legacy": [],
   "alignment": []

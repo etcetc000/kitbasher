@@ -5,7 +5,7 @@ oscillator and a detuned second oscillator pair.
 
 | Control | Range |
 |---|---|
-| PTCH | 32.7 Hz to about 1.28 kHz, with fractional interpolation |
+| PTCH | Raw = 2 × (MIDI − 24): MIDI 24 (C0, 32.7 Hz) at 0 to 87.5 (1.28 kHz) at 127, in quarter-tone steps; even values are semitones (72 = C3), with fractional interpolation |
 | DEC | Amp decay, 10 ms to 10 s |
 | TONE | Filter coefficient, from near zero to near one |
 | PWM | Pulse width, 0 to 127 |

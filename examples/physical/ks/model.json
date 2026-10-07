@@ -4,7 +4,7 @@
   "aliases": [
     "EX/KARPLUS"
   ],
-  "version": "0.2.0",
+  "version": "1.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
@@ -46,7 +46,14 @@
         "default": 64
       }
     ],
-    "modes": []
+    "modes": [],
+    "pitch": {
+      "knob": 0,
+      "law": "quarter",
+      "steps": 2,
+      "base_note": 24,
+      "table": "period"
+    }
   },
   "components": {
     "dsp2": {
@@ -77,7 +84,7 @@
   ],
   "samples": [],
   "budget": {
-    "render_cps": 128,
+    "render_cps": 129,
     "trigger_cycles": 100,
     "init_cycles": 200
   },

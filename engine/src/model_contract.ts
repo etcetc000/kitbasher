@@ -3,6 +3,7 @@
 import type { PackModel } from './packs.js';
 import { fromBase64 } from './bytes.js';
 import { checkDynamicPlans, type ModelPanel } from './model_panel.js';
+import { checkPitch } from './pitch.js';
 
 export interface ModelContract {
   format: 'md-model/1'; key: string; aliases?: string[]; version: string; kit_abi: number;
@@ -32,6 +33,9 @@ export function checkModelContract(m: PackModel, category: string): void {
   if (c.panel.knobs.length !== 8 || c.panel.knobs.some((k, i) => k.label !== m.labels[i] || k.default !== m.defaults[i]))
     throw new Error(`${m.key}: manifest panel differs from exported descriptor`);
   checkDynamicPlans(c.panel, m.dyn_labels);
+  if (JSON.stringify(c.panel.pitch ?? null) !== JSON.stringify(m.pitch ?? null))
+    throw new Error(`${m.key}: manifest pitch differs from exported descriptor`);
+  if (c.panel.pitch !== undefined) checkPitch(c.panel.pitch, c.panel, m.key);
   if (c.components.dsp2.abi !== 'md-voice/1' || (assembly
       ? Object.keys(c.components).some(k => k !== 'dsp2' && k !== 'dsp1_drive') || !!c.components.dsp2.provider
       : Object.keys(c.components).join(',') !== 'dsp2' || c.components.dsp2.provider !== 'python'))

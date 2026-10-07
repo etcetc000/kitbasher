@@ -7,7 +7,7 @@ ColdFire code or shared routines, and it calls no external code.
 
 | Control | Behavior |
 |---|---|
-| PTCH | MIDI 24..87.5 in half-semitone steps; integer delay length |
+| PTCH | raw = 2 × (MIDI − 24): MIDI 24..87.5 in quarter-tone steps (even values are semitones, 72 = C3); fractional delay |
 | DEC | String feedback: 0.90..0.9999, with a square-root control curve |
 | DAMP | Feedback-loop averaging: increasing it attenuates high harmonics |
 | LEVL | Linear output level; zero is exactly silent |
@@ -21,11 +21,17 @@ PICK filters the excitation, while DAMP filters the recirculating string. BDEC
 affects the sound only when BEND is above zero. The noise seed is deterministic
 on assignment and advances between hits. Every control has a function.
 
-The pitch table compensates by half a sample for the averaging filter. Actual
-pitch changes slightly with damping and integer delay quantization, especially at
-high notes. BEND updates the delay length once per 32-sample render block. This
+The pitch table holds the whole loop delay with 12 fraction bits. Each block takes
+the DAMP averager's own delay (DAMP/256 samples) off it and splits the rest into the
+ring length and the fraction for a linear-interpolated tap between this sample and
+the one before it, so every raw is in tune within 0.1 cent at any DAMP (it was up
+to 40 cents out with an integer delay). The tap adds a little high-frequency loss
+at fractions near one half. BEND updates the delay length once per 32-sample render block. This
 is a deliberately small original implementation, not a port of any commercial
 instrument's string model.
+
+Version 1.0.0 changed only the tuning: PTCH keeps its law, and saved kits play the
+same notes, now in tune.
 
 ## Trigger, clearing and ownership
 
@@ -49,7 +55,7 @@ python packs/assembly_export.py examples/physical/ks --out my-packs/phy-ks --ass
 ```
 
 The exporter reads only `model.json`, `dsp2.asm` and `tables.asm`. The pack has
-252 DSP words, 640 table words and 21 relocations, and passes the eight
+257 DSP words, 640 table words and 21 relocations, and passes the eight
 relocation placements. `make_tables.py` regenerates the five 128-entry tables
 from their formulas; the exporter never runs it. `npm run test:assembly` checks
 that a fresh export matches the bundled `catalog/physical-ks.json`.
@@ -64,11 +70,11 @@ slices stay untouched.
 
 | Check | Result |
 |---|---|
-| Integer-reference comparison | Exact; 0 mismatches |
-| Worst render block, instruction host | 96.56 cycles/sample |
-| Init / trigger | 38 / 28 cycles |
-| Declared budget | 128 cycles/sample; init 200, trigger 100 |
-| Cold-cache bound | 120.2 cycles/sample (all 252 code words missed once per block, 3 cycles each) |
+| Integer-reference comparison | Exact; 0 mismatches (1.0.0: track 0's 23 cases re-run on the current host, whose track-15 mapping fails before and after the change alike) |
+| Worst render block, instruction host | 104.56 cycles/sample (0.2.0: 96.56; the fractional delay adds 8.0) |
+| Init / trigger | 40 / 30 cycles |
+| Declared budget | 129 cycles/sample (128 before 1.0.0); init 200, trigger 100 |
+| Cold-cache bound | 128.7 cycles/sample (all 257 code words missed once per block, 3 cycles each) |
 | Hardware | Not tested |
 
 The cold-cache figure is an estimate, not a measurement: it does not include

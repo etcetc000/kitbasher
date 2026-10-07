@@ -50,13 +50,14 @@ class StringReference:
         self.ring = [signed(CANARY)] * SLICE
         self.active = False
         self.cursor = self.index = self.previous = self.left = 0
+        self.alpha = self.vprevious = 0
         self.envelope = self.impulse = self.exciter = 0
         self.seed = 0x123457
         self.pending = False
 
     def trigger(self):
         self.active = self.pending = True
-        self.cursor = self.index = self.previous = self.exciter = 0
+        self.cursor = self.index = self.previous = self.exciter = self.vprevious = 0
         self.envelope = Q-1
 
     def block(self, k):
@@ -66,9 +67,12 @@ class StringReference:
             return [0]*32
         if not self.active:
             return [0]*32
-        period = self.tables['period'][k[0]]
+        delay = self.tables['period'][k[0]]          # whole loop delay, 12 fraction bits
         bend = (self.envelope * (k[6] << 15)) >> 23
-        period -= (period * bend) >> 23
+        delay -= (delay * bend) >> 23
+        exact = (delay << 12) - (k[2] << 16)          # minus the DAMP averager's own delay
+        period = exact >> 24                          # the ring length, and the tap's fraction
+        self.alpha = (exact >> 1) & 0x7fffff
         self.envelope = (self.envelope * self.tables['bend_decay'][k[7]]) >> 23
         feedback = self.tables['feedback'][k[1]]
         hammer = self.tables['hammer'][k[4]]
@@ -82,8 +86,10 @@ class StringReference:
         result = []
         for _ in range(32):
             old = self.ring[self.index]
-            damped = sat(old + (((k[2] << 15) * sat(self.previous-old)) >> 23))
+            tap = sat(old + ((self.alpha * sat(self.previous-old)) >> 23))
             self.previous = old
+            damped = sat(tap + (((k[2] << 15) * sat(self.vprevious-tap)) >> 23))
+            self.vprevious = tap
             loop = (damped * feedback) >> 23
             source = 0
             if self.left:
