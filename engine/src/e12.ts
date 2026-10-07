@@ -83,14 +83,16 @@ const r3 = (v: number): number => Math.round(v * 1000) / 1000;
  * Returns the new words, a report, and where the bank now ends.
  *
  * `noTrim`: entries left whole whatever the options say (a swapped sample the user wants kept as
- * is); the pair rule does not shorten them either. With pairs on, a first sample that ends up
- * shorter than its partner -- possible only when one of them was swapped (stock firsts are all
- * longer) or the partner is kept whole -- is padded with silence to the partner's length rather
- * than cutting the partner: the partner is what the user hears, the padding only costs words, and
- * a swapped first is never longer than its stock entry, which is longer than the partner's.
+ * is); the pair rule does not shorten them either. `swapped`: entries holding the user's samples.
+ * The pair rule (a trimmed first sample shortens its partner) applies to stock first samples only:
+ * a swapped first sample never cuts its partner. With pairs on, a first sample that ends up shorter
+ * than its partner -- a swapped first, or one whose partner is kept whole -- is padded with silence
+ * to the partner's length instead: the partner is what the user hears, the padding only costs
+ * words, and a swapped first is never longer than its stock entry, which is longer than the
+ * partner's. With neither set given, this is the stock trim, word for word.
  */
 export function trimBank(seg: number[], segBase: number, table: number, count: number, bankEnd: number,
-  opt: TrimOptions, noTrim: ReadonlySet<number> = new Set()): { words: number[]; report: TrimEntry[]; end: number } {
+  opt: TrimOptions, noTrim: ReadonlySet<number> = new Set(), swapped: ReadonlySet<number> = new Set()): { words: number[]; report: TrimEntry[]; end: number } {
   const fade = opt.fade ?? 256;
   const at = (a: number): number => a - segBase;
   const entries = Array.from({ length: count }, (_, i) => [seg[at(table + 3 * i)], seg[at(table + 3 * i + 1)], seg[at(table + 3 * i + 2)]]);
@@ -141,6 +143,7 @@ export function trimBank(seg: number[], segBase: number, table: number, count: n
       changed = false;
       for (const [a, b] of pairs) {
         if (keeps[a] >= xs[a].length) continue;               // first sample untrimmed: stock behaviour
+        if (swapped.has(a)) continue;                         // the user's first sample: padded below
         if (noTrim.has(b)) continue;                          // kept whole: the first is padded below
         if (wordsOf(keeps[b]) > wordsOf(keeps[a])) { keeps[b] = keeps[a]; forPartner[b] = a; changed = true; }
       }

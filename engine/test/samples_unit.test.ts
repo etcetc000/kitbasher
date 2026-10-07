@@ -45,6 +45,7 @@ test('swapping every entry with its own data gives the stock bank, trimmed or no
   assert.deepEqual(same.words, b.seg);
   assert.equal(same.end, b.end);
   assert.deepEqual(same.capped, []);
+  assert.deepEqual(same.changed, [], 'a swap equal to stock is not a change');
   for (const opt of [KEEP, TRIM, { ...TRIM, cap: 0.01 }]) {
     assert.deepEqual(trimBank(same.words, SEG, TABLE, 3, same.end, opt), trimBank(b.seg, SEG, TABLE, 3, b.end, opt));
   }
@@ -167,4 +168,23 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   bad.samples.swaps[0].sha256 = '0'.repeat(64);
   await assert.rejects(decodeProject(JSON.stringify(bad)), /sha256/);
   await assert.rejects(decodeProject('{"format":"md-layout/1"}'), /not a kitbasher-project\/1/);
+});
+
+test('a swapped first sample shorter than its partner is padded at any length; the stock pair rule is unchanged', () => {
+  const flat = new Array<number>(30000).fill(500);
+  const b = bank([tone(44100), flat], [0, 1]);                       // first 1.0 s, partner 0.68 s
+  const opt: TrimOptions = { db: -20, minSeconds: 0.5, cap: null };
+  // stock: the trimmed first sample shortens its partner, as before
+  const stock = trimBank(b.seg, SEG, TABLE, 2, b.end, opt);
+  assert.equal(stock.report[1].for_partner, 0);
+  assert.ok(stock.report[1].new_words < 15000);
+  // swapped, too short to be trimmed (0.34 s) and long enough to be trimmed (0.59 s): both padded
+  for (const n of [15000, 26000]) {
+    const s = applySwaps(b.seg, SEG, TABLE, 2, b.end, new Map([[0, tone(n)]]));
+    const t = trimBank(s.words, SEG, TABLE, 2, s.end, opt, new Set(), new Set([0]));
+    assert.equal(t.report[0].padded_for, 1, `${n}: first padded`);
+    assert.equal(t.report[0].new_words, 15000, `${n}: to the partner's length`);
+    assert.equal(t.report[1].new_words, 15000, `${n}: partner whole`);
+    assert.equal(t.report[1].for_partner, undefined, `${n}: partner not cut`);
+  }
 });

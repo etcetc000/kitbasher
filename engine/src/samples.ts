@@ -15,7 +15,7 @@
 
 import type { Base } from './bases.js';
 import type { Firmware } from './container.js';
-import { wordsLE } from './bytes.js';
+import { h, wordsLE } from './bytes.js';
 import { records } from './dsp.js';
 import { baseFamilies } from './layout.js';
 import { e12Pairs, LEN_EXTRA, PAD, pack12, roundHalfEven, SR, unpack12 } from './e12.js';
@@ -65,22 +65,21 @@ export function bankRun(fw: Firmware, base: Base): BankRun {
   const D = base.dsp2;
   const w = wordsLE(fw.slots[1].raw);
   const { recs } = records(w);
-  const hx = (v: number): string => '0x' + v.toString(16);
   const first = recs.findIndex((r) => r.addr === D.bankRecord && r.tag === 0);
   if (first < 0 || recs.filter((r) => r.addr === D.bankRecord && r.tag === 0).length !== 1) {
-    throw new Error(`expected one upload record starting the E12 bank at ${hx(D.bankRecord)}`);
+    throw new Error(`expected one upload record starting the E12 bank at ${h(D.bankRecord)}`);
   }
   let last = first;
   while (D.bankRecord + recs.slice(first, last + 1).reduce((n, r) => n + r.count, 0) < D.bankEnd) {
     const r = recs[last + 1];
     const at = recs[last].addr + recs[last].count;
-    if (!r || r.tag !== 0 || r.addr !== at) throw new Error(`the E12 bank's records break off at ${hx(at)} before ${hx(D.bankEnd)}`);
+    if (!r || r.tag !== 0 || r.addr !== at) throw new Error(`the E12 bank's records break off at ${h(at)} before ${h(D.bankEnd)}`);
     last++;
   }
   const run = recs.slice(first, last + 1);
   if (run[run.length - 1].addr + run[run.length - 1].count !== D.bankEnd) throw new Error('E12 bank record does not end where the bank does');
   const other = recs.filter((r, i) => (i < first || i > last) && r.tag === 0 && r.addr < D.bankEnd && r.addr + r.count > D.bankRecord);
-  if (other.length) throw new Error(`another upload record writes into the E12 bank at ${hx(other[0].addr)}`);
+  if (other.length) throw new Error(`another upload record writes into the E12 bank at ${h(other[0].addr)}`);
   const bank = run.flatMap((r) => w.slice(r.index + 3, r.index + 3 + r.count));
   const end = run[run.length - 1];
   return { bank, bankIndex: run[0].index, bankEndIndex: end.index + 3 + end.count, bankRecords: run.length };
@@ -178,7 +177,7 @@ export function capSamples(x: ArrayLike<number>, cap: number): { data: number[];
  * every swap equal to the stock data this is the stock bank, word for word.
  */
 export function applySwaps(seg: number[], segBase: number, table: number, count: number, bankEnd: number,
-  swaps: ReadonlyMap<number, ArrayLike<number>>): { words: number[]; end: number; capped: number[] } {
+  swaps: ReadonlyMap<number, ArrayLike<number>>): { words: number[]; end: number; capped: number[]; changed: number[] } {
   const at = (a: number): number => a - segBase;
   const starts = Array.from({ length: count }, (_, i) => seg[at(table + 3 * i)]);
   if (starts[0] !== table + 3 * count) throw new Error('E12 samples do not start after the table');
@@ -186,6 +185,7 @@ export function applySwaps(seg: number[], segBase: number, table: number, count:
   const ends = [...starts.slice(1), bankEnd];
   const out = seg.slice(0, at(starts[0]));
   const capped: number[] = [];
+  const changed: number[] = [];               // entries whose words differ from the stock ones
   let pos = starts[0];
   for (let i = 0; i < count; i++) {
     const nw = ends[i] - starts[i] - PAD;
@@ -195,14 +195,16 @@ export function applySwaps(seg: number[], segBase: number, table: number, count:
       const c = capSamples(s, 2 * nw);
       if (c.capped) capped.push(i);
       words = pack12(c.data);
+      const stock = seg.slice(at(starts[i]), at(starts[i] + nw));
+      if (words.length !== stock.length || words.some((v, k) => v !== stock[k])) changed.push(i);
     } else words = seg.slice(at(starts[i]), at(starts[i] + nw));
     out[at(table + 3 * i)] = pos;
     out[at(table + 3 * i + 1)] = 2 * words.length + LEN_EXTRA;
-    out.push(...words);
+    for (const v of words) out.push(v);
     for (let k = 0; k < PAD; k++) out.push(0);
     pos += words.length + PAD;
   }
-  return { words: out, end: pos, capped };
+  return { words: out, end: pos, capped, changed };
 }
 
 /** Bank words a set of entry lengths costs: data words plus each entry's pad. */

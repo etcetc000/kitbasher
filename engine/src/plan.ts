@@ -226,14 +226,30 @@ export function trimFor(fw: Firmware, base: Base, opt: TrimOptions, samples?: Sa
   const D = base.dsp2;
   const run = bankRun(fw, base);
   const edited = !!samples && (samples.swaps.size > 0 || samples.noTrim.size > 0);
-  let bank = run.bank, bankEnd = D.bankEnd, capped: number[] = [];
+  let bank = run.bank, bankEnd = D.bankEnd, capped: number[] = [], changed: number[] = [];
   if (samples && samples.swaps.size) {
-    const s = applySwaps(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, samples.swaps);
-    bank = s.words; bankEnd = s.end; capped = s.capped;
+    const s = swappedBank(fw, base, run.bank, samples);
+    bank = s.words; bankEnd = s.end; capped = s.capped; changed = s.changed;
   }
-  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, bankEnd, opt, samples?.noTrim);
+  // only samples that differ from the stock ones are the user's: a swap equal to stock is stock
+  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, bankEnd, opt, samples?.noTrim, new Set(changed));
+  // a copy of the edits, so the report says exactly what was laid even if the caller's change later
+  const edits = edited ? { swaps: new Map(samples!.swaps), noTrim: new Set(samples!.noTrim) } : null;
   return { opt, bankIndex: run.bankIndex, bankEndIndex: run.bankEndIndex, bankRecords: run.bankRecords,
-           words: t.words, end: t.end, report: t.report, edits: edited ? samples! : null, capped };
+           words: t.words, end: t.end, report: t.report, edits, capped };
+}
+
+// The swapped bank, laid once per edits object and firmware: the page's auto trim calls trimFor for
+// up to ~40 thresholds with the same edits. Callers pass a fresh SampleEdits object whenever the
+// edits change (the page snapshots them per revision); one changed in place is not seen here.
+const swapCache = new WeakMap<SampleEdits, WeakMap<Uint8Array, ReturnType<typeof applySwaps>>>();
+function swappedBank(fw: Firmware, base: Base, bank: number[], samples: SampleEdits): ReturnType<typeof applySwaps> {
+  const D = base.dsp2;
+  let byFw = swapCache.get(samples);
+  if (!byFw) { byFw = new WeakMap(); swapCache.set(samples, byFw); }
+  let s = byFw.get(fw.slots[1].raw);
+  if (!s) { s = applySwaps(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, samples.swaps); byFw.set(fw.slots[1].raw, s); }
+  return s;
 }
 
 /**

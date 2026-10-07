@@ -4,7 +4,7 @@
 // deflated, base64) and never the stock samples or the OS itself.
 
 import type { Base } from './bases.js';
-import { sha256 } from './bytes.js';
+import { fromBase64, sha256, toBase64 } from './bytes.js';
 import { parseLayout, type Layout } from './layout.js';
 import { MAX_12, MIN_12 } from './samples.js';
 
@@ -95,13 +95,6 @@ async function through(b: Uint8Array, stream: CompressionStream | DecompressionS
   const out = new Response(new Blob([b as Uint8Array<ArrayBuffer>]).stream().pipeThrough(stream));
   return new Uint8Array(await out.arrayBuffer());
 }
-
-const toBase64 = (b: Uint8Array): string => {
-  let s = '';
-  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-const fromBase64 = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export async function encodeProject(p: Project): Promise<ProjectFile> {
   const swaps: ProjectSwap[] = [];
