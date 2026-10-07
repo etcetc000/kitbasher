@@ -14,7 +14,7 @@
 
 import { baseSet, identify, NotPatchable, type Base, type BaseProfileFile, type BaseSet, type LineageFile } from '../../engine/src/bases.js';
 import { prepare163 } from '../../engine/src/prepare.js';
-import { build, CompressedCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
+import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
 import { checkPack, modelWords, needLines, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
@@ -449,6 +449,11 @@ function reportView(r: BuildReport): HTMLElement {
         ...r.machines.map((m) => el('tr', {}, el('td', {}, m.name.trim()), el('td', {}, m.family), el('td', {}, String(m.id)))))));
 }
 
+/** The build ran out of firmware storage: the compressed DSP slot, or (on bases where that slot
+ *  grows) the OS area. Trimming samples or removing models fixes either. */
+const storageFull = (e: unknown): e is CompressedCapacityError | OsAreaCapacityError =>
+  e instanceof CompressedCapacityError || e instanceof OsAreaCapacityError;
+
 async function onBuild(destination: 'categories' | 'download' = 'download'): Promise<void> {
   if (!input || !base || !current?.ok || building) return;
   building = true;
@@ -469,7 +474,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
           { exclude: excludes(), trim: trimOptions(), allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed());
       } catch (error) {
         if (version !== revision) return;
-        if (!(error instanceof CompressedCapacityError) || trimMode() !== 'auto') throw error;
+        if (!storageFull(error) || trimMode() !== 'auto') throw error;
         if (autoTrimOptions !== keepSamples && autoTrimOptions.db >= -10) throw error;
         const nextDb = autoTrimOptions === keepSamples ? -40 : Math.min(-10, Number((autoTrimOptions.db + 1).toFixed(1)));
         // Storage is known only after compression. Retry within the same finite
@@ -507,11 +512,11 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     if (version !== revision) return;
     $('result').replaceChildren();
     const message = (e as Error).message;
-    if (e instanceof CompressedCapacityError) {
+    if (storageFull(e)) {
       packedCapacityProblem = true;
       $('room').dataset.state = 'over';
       $('room-note').textContent = 'Not enough firmware storage.';
-      $('capacity-problems').textContent = `Compressed firmware capacity exceeded by ${fmt(e.used - e.capacity)} bytes.`;
+      $('capacity-problems').textContent = `Firmware storage exceeded by ${fmt(e.used - e.capacity)} bytes.`;
       $('capacity-problems').hidden = false;
       $('capacity-pending').hidden = true;
       meter('m-packed', e.used, e.capacity, 'bytes', true);
