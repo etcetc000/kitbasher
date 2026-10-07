@@ -9,11 +9,13 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 - **Machine IDs are now given bottom-up.** Every selected model takes the lowest
   free ID, in menu order; packs no longer pin IDs (OSCPW was on 175, WAVTB 124,
-  OSC8B 126, VOXVO 127, ...). Kits saved with an earlier build refer to the old
-  IDs: on the first step, drop the `.syx` you flashed (or your project or layout
-  file), or choose "the IDs Kitbasher gave before October 2026", and every
-  machine keeps its ID. The Download step warns when you built before and
-  restored nothing. On the command line: `--restore <file>` and `--legacy-ids`.
+  OSC8B 126, VOXVO 127, ...). The same selection on the same OS, with the same
+  UW answer and menu layout, gets the same IDs. Kits saved with an earlier build
+  refer to the old IDs: on the first step, drop the `.syx` you flashed (or your
+  project or layout file), or choose "the IDs Kitbasher gave before October
+  2026" (the earlier allocator, on your selection), and every machine keeps its
+  ID. The Download step warns whenever nothing was restored. On the command
+  line: `--restore <file>` and `--legacy-ids`.
 
 ### Changed
 

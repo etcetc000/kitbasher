@@ -531,7 +531,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   // a map saved before a model was renamed names it by its former key
   const lay = opt.layout && resolveLayout(opt.layout, aliases);
   const noUw = !!opt.noUw || opt.uw === false || (opt.uw === undefined && lay?.uw === false);
-  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base),
+  const { sel, moves, problems: idProblems, reused } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base),
     // bottom-up in menu order (the sound categories by default), so a selection always gets the same IDs
     { noUw, rank: opt.menus === 'family' ? undefined : (m) => menuOrder(menuCategory(m)) });
   problems.push(...idProblems);
@@ -551,6 +551,10 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
     if (n > lim.maxPerList) problems.push(`category ${f.name} has ${n} machines and a menu list takes ${lim.maxPerList}`);
   }
   const notes: string[] = [];
+  if (reused.length) {
+    notes.push(`IDs kept for machines of your restored session that are not selected were the only ones left, so they were given to new models: ` +
+      `${reused.map((r) => `ID ${r.id} (was ${r.key})`).join(', ')}; kits that use those machines will find another machine there`);
+  }
   if (moves.length) {
     notes.push(`moved off their preferred ID: ${moves.map((m) => `${m.name} ${m.preferred}->${m.id} (${m.why})`).join(', ')}; ` +
                'kits saved with these machines on another firmware will not find them');
@@ -771,8 +775,12 @@ function soundMenus(sel: Selected[]): Family[] {
 }
 
 /** The layout this build has: the map, with every selected machine where the build put it. */
-function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], uw: boolean | undefined): Layout {
-  const machines = { ...l.machines };
+export function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], uw: boolean | undefined): Layout {
+  // the session's machines that are not selected keep their entries, but never on an ID a machine
+  // of this build has: this build's machines win, and no ID is listed twice
+  const used = new Set(sel.map((s) => s.id));
+  const selected = new Set(sel.map((s) => s.m.key));
+  const machines = Object.fromEntries(Object.entries(l.machines).filter(([k, p]) => selected.has(k) || !used.has(p.id)));
   const cats = [...l.categories];
   for (const f of menus) {
     if (!cats.includes(f.name)) cats.push(f.name);

@@ -147,7 +147,7 @@ export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; share
  * model that plays a UW sample is refused. The build fails, saying so, if no ID below 128 is left.
  */
 export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowMove: boolean, layout: Layout | undefined,
-  listed: Map<number, string>, opt: { noUw?: boolean; rank?: (m: PackModel) => number } = {}): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
+  listed: Map<number, string>, opt: { noUw?: boolean; rank?: (m: PackModel) => number } = {}): { sel: Selected[]; moves: IdMove[]; problems: string[]; reused: { id: number; key: string }[] } {
   const o = base.os;
   const noUw = !!opt.noUw;
   const top = noUw ? NO_UW_ID_LIMIT : 192;
@@ -163,7 +163,23 @@ export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowM
     if (id >= top) return HIGH;
     return null;
   };
-  const lowest = (): number => { let v = 0; while (v < top && why(v)) v++; return v; };
+  // A restored session's machines that are not selected now keep their IDs reserved: a kit made
+  // with that session may still use them, and a later build that selects them again must find
+  // them free. Only when no other ID is left is one taken back (the lowest), and that is reported.
+  const reserved = new Map<number, string>();
+  const reused: { id: number; key: string }[] = [];
+  const selectedKeys = new Set(fams.flatMap((f) => f.models.map((m) => m.key)));
+  for (const [k, p] of Object.entries(layout?.machines ?? {})) {
+    if (!selectedKeys.has(k) && inRange(p.id) && !reserved.has(p.id)) reserved.set(p.id, k);
+  }
+  const lowest = (): number => {
+    let v = 0;
+    while (v < top && (why(v) || reserved.has(v))) v++;
+    if (v < top) return v;
+    for (v = 0; v < top && why(v); v++) ;                 // every free ID is reserved: take one back
+    if (v < top) { reused.push({ id: v, key: reserved.get(v)! }); reserved.delete(v); }
+    return v;
+  };
   const none = (name: string): string => `no free machine ID ${noUw ? 'below 128 ' : ''}left for ${name}: remove a selected model; sample trimming does not free IDs`;
   const sel: Selected[] = [];
   const moves: IdMove[] = [];
@@ -208,5 +224,5 @@ export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowM
   }
   const menuIndex = new Map(catalog.map(({ m }, i) => [m.key, i]));
   sel.sort((a, b) => menuIndex.get(a.m.key)! - menuIndex.get(b.m.key)!);
-  return { sel, moves, problems };
+  return { sel, moves, problems, reused };
 }

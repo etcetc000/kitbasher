@@ -182,17 +182,13 @@ function fileAnswer(uw: boolean | undefined, from: string): void {
 }
 
 // ---- restoring a previous session: the machine IDs saved kits rely on
-let sessionRestored = false;
-const BUILT_KEY = 'kitbasher.built';
 const catalogModels = (): PackModel[] => select(data.packs, {}).fams.flatMap((f) => f.models);
 
 /** A layout from a file, a patched OS or the earlier-IDs preset becomes the user's map. */
 function adoptLayout(l: Layout, from: string, extra = ''): void {
   if (!l.base && base) l = { ...l, base: base.id };
-  layoutEd.adopt(l, from);
-  sessionRestored = true;
+  layoutEd.adopt(l, from);                              // its UW answer: layoutEd.onAdopt
   $('project-status').textContent = `Machine IDs restored from ${from}: ${Object.keys(l.machines).length} machines keep their IDs.${extra}`;
-  fileAnswer(l.uw, from);
   refresh();
 }
 
@@ -207,10 +203,16 @@ async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> 
   return true;
 }
 
+/** The earlier allocator's IDs for the models selected now (recomputed whenever the selection changes). */
+const legacyFor = (): Layout => legacyLayout(base!, fw!.slots[0].raw, select(data.packs, { exclude: excludes() }).fams, listedFreeIds(fw!, base!));
+
 function useLegacyIds(): void {
   if (!fw || !base) { status('Load your OS file first: the earlier IDs depend on it.', 'error'); return; }
-  const f = select(data.packs, {}).fams;
-  adoptLayout(legacyLayout(base, fw.slots[0].raw, f.flatMap((x) => x.models), f, listedFreeIds(fw, base)), LEGACY_LAYOUT_NAME);
+  layoutEd.adopt(legacyFor(), LEGACY_LAYOUT_NAME);
+  layoutEd.legacy = true;
+  $('project-status').textContent = 'Using the IDs an earlier Kitbasher (before October 2026) gave the models you select, recomputed as you change the selection. ' +
+    'This assumes the model catalog has not changed since that build; the .syx you flashed then is the exact record, so drop it here if you have it.';
+  refresh();
 }
 
 /** Models that play a UW sample: "needs UW", and not selectable on a Machinedrum without UW. */
@@ -354,6 +356,7 @@ function meter(id: string, used: number, cap: number, unit: string, over: boolea
 function refresh(minAutoDb: number | null = null): void {
   revision++;
   applyNoUw();                                      // before planning: no plan with a model this unit cannot play
+  if (layoutEd.legacy && fw && base) layoutEd.map = legacyFor();   // the earlier IDs, for the selection as it is now
   packedCapacityProblem = false;
   cachedBuild = null;
   $('room').hidden = !fw;
@@ -421,12 +424,10 @@ function refresh(minAutoDb: number | null = null): void {
   $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
   $('download-needs').hidden = !needs.length;
-  // built here before, and no earlier session restored: the IDs may not be the ones their kits use
-  let builtBefore = false;
-  try { builtBefore = localStorage.getItem(BUILT_KEY) === '1'; } catch { /* storage unavailable */ }
-  $('ids-warning').hidden = sessionRestored || !builtBefore;
-  $('ids-warning').textContent = 'Machine IDs may differ from your earlier build: Kitbasher now gives IDs from the lowest free one, and nothing was restored. ' +
-    'If your kits use machines from an earlier build, go back to the first step and drop that build\'s .syx (or your project or layout file), or use the IDs Kitbasher gave before October 2026.';
+  // nothing restored: a kit made with an earlier Kitbasher build may not find its machines
+  $('ids-warning').hidden = layoutEd.restoredFrom !== null;
+  $('ids-warning').textContent = 'No earlier session restored. If you built with Kitbasher before, machine IDs may differ from that build (IDs are now given from the lowest free one), and kits made with it may play the wrong machines. ' +
+    'Go back to the first step and drop that build\'s .syx (or your project or layout file), or use the IDs Kitbasher gave before October 2026.';
   $('download-needs').replaceChildren(...(needs.length ? [
     el('h3', {}, 'UW sample data: a separate step'),
     el('p', {}, needs.join(' ')),
@@ -690,7 +691,6 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     const stem = inputName.replace(/\.(syx|bin)$/i, '');
     const name = `${stem}-models.syx`;
     downloadUrl = URL.createObjectURL(blob);
-    try { localStorage.setItem(BUILT_KEY, '1'); } catch { /* storage unavailable */ }
     const a = el('a', { class: 'download', href: downloadUrl, download: name }, `Download ${name}`);
     $('result').replaceChildren(a, el('details', {}, el('summary', {}, 'Build details and checks'), reportView(report)));
     status(`Built in ${((performance.now() - t) / 1000).toFixed(1)} s.`, 'ok');
@@ -796,7 +796,7 @@ function applyProject(p: Project, name: string): boolean {
   // a model this Machinedrum cannot play stays unticked
   for (const i of boxes()) i.checked = want.has(i.dataset.module!) && !i.disabled;
   const missing = p.models.filter((m) => !have.has(m));
-  if (p.layout) { layoutEd.adopt(p.layout, name); sessionRestored = true; } else layoutEd.map = null;
+  if (p.layout) layoutEd.adopt(p.layout, name); else layoutEd.clear();
   updateTrimControls();
   $('project-status').textContent = `Loaded ${name}.`;
   status(`Loaded project ${name}: ${p.swaps.size} sample${p.swaps.size === 1 ? '' : 's'} replaced, ${want.size - missing.length} models.` +
@@ -813,7 +813,7 @@ async function main(): Promise<void> {
   layoutEd = new LayoutEditor($('layout-anchor'), () => {
     refresh();
   });
-  layoutEd.onAdopt = (l, from) => { sessionRestored = true; fileAnswer(l.uw, from); };
+  layoutEd.onAdopt = (l, from) => fileAnswer(l.uw, from);
   $('legacy-ids').addEventListener('click', useLegacyIds);
   for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) {
     r.addEventListener('change', () => {

@@ -64,22 +64,65 @@ export function machinesFromDescriptors(flash: Uint8Array, descriptorTable: numb
   return null;
 }
 
+/**
+ * Names the catalog's models were published under before (catalog/ before commit 387a991,
+ * "Rename models to engine-based names"), as a descriptor of an older build carries them.
+ */
+export const FORMER_NAMES: Record<string, string[]> = {
+  'VAD/BD': ['AN BD'], 'VAD/CY': ['AN CY'], 'VAD/HH': ['AN HH'], 'VAD/PC': ['AN PC'], 'VAD/RC': ['AN RC'],
+  'VAD/SD': ['AN SD'], 'VAD/SY': ['AN SY'], 'OSC/AC': ['ACID '], 'OSC/SP': ['SAWPW'], 'FMS/4O': ['FM4OP'],
+  'VOX/FR': ['FORMT'], 'NZE/PL': ['NOISE'], 'FMS/2O': ['FM ST'], 'FMS/3O': ['FM PA'], 'FMS/SW': ['FM DY'],
+  'OSC/SW': ['MMSAW'], 'OSC/PW': ['MMPLS'], 'WAV/TB': ['MMWAV'], 'VOX/VO': ['MMVO6'], 'OSC/8B': ['MMSID'],
+  'WAV/CH': ['MMDEN'], 'OSC/CH': ['MMENS'], 'WAV/MR': ['MMDDR'],
+};
+
+/** Key prefix of a session entry for a machine the catalog does not have: kept so its ID stays reserved. */
+export const UNKNOWN_KEY = '?';
+
+/** The catalog model a descriptor name means: its name now, or one it had before. */
+function modelNamed(models: PackModel[], name: string): PackModel | undefined {
+  const t = name.trim();
+  return models.find((m) => m.name === name || m.name.trim() === t) ??
+    models.find((m) => (FORMER_NAMES[m.key] ?? []).some((f) => f.trim() === t) || (m.aliases ?? []).some((a) => (FORMER_NAMES[a] ?? []).some((f) => f.trim() === t)));
+}
+
 /** The session an image Kitbasher built carries, or null when it is not one. */
 export function recoverSession(fw: Firmware, models: PackModel[], descriptorTable: number): Recovered | null {
-  const table = findLayout(fw);
-  if (table) return { layout: table.layout, how: 'table', unknown: [] };
+  const keys = new Set(models.map((m) => m.key));
+  const aliasOf = new Map(models.flatMap((m) => (m.aliases ?? []).map((a) => [a, m.key] as const)));
   const found = machinesFromDescriptors(fw.flash, descriptorTable);
+  const table = findLayout(fw);
+  if (table) {
+    const l = table.layout;
+    // two entries on one ID (a session reused an ID): the machine the image really has there wins
+    const byId = new Map<number, string[]>();
+    for (const [k, p] of Object.entries(l.machines)) byId.set(p.id, [...(byId.get(p.id) ?? []), k]);
+    const machines = { ...l.machines };
+    for (const [id, ks] of byId) {
+      if (ks.length < 2) continue;
+      const there = found?.get(id);
+      const m = there === undefined ? undefined : modelNamed(models, there);
+      const keep = m ? ks.find((k) => k === m.key || aliasOf.get(k) === m.key) : undefined;
+      for (const k of ks) if (k !== (keep ?? ks[ks.length - 1])) delete machines[k];
+    }
+    const unknown = Object.entries(machines).filter(([k]) => !keys.has(k) && !aliasOf.has(k))
+      .map(([k, p]) => ({ id: p.id, name: k.startsWith(UNKNOWN_KEY) ? k.slice(1).replace(/@\d+$/, '') : k }));
+    return { layout: { ...l, machines }, how: 'table', unknown };
+  }
   if (!found) return null;
-  const byName = new Map(models.map((m) => [m.name, m]));
   const unknown: Recovered['unknown'] = [];
   const placed: { m: PackModel; id: number }[] = [];
   for (const [id, name] of [...found].sort((a, b) => a[0] - b[0])) {
-    const m = byName.get(name) ?? models.find((x) => x.name.trim() === name.trim());
+    const m = modelNamed(models, name);
     if (m) placed.push({ m, id }); else unknown.push({ id, name: name.trim() });
   }
   const cats = [...new Set(placed.map((p) => menuCategory(p.m)))].sort((a, b) => menuOrder(a) - menuOrder(b));
   const machines: Layout['machines'] = {};
   for (const c of cats) placed.filter((p) => menuCategory(p.m) === c).forEach((p, i) => { machines[p.m.key] = { id: p.id, category: c, order: i }; });
+  // machines the catalog does not know keep their IDs reserved (selection.ts: an unselected entry)
+  if (unknown.length && !cats.length) cats.push('OTH');
+  const after = Object.values(machines).filter((p) => p.category === cats[0]).length;
+  unknown.forEach((u, i) => { machines[`${UNKNOWN_KEY}${u.name}@${u.id}`] = { id: u.id, category: cats[0], order: after + i }; });
   // the base is the one the user loads to patch again: '' until then (layout-ui.ts setBase)
   return { layout: { format: LAYOUT_FORMAT, base: '', categories: cats, machines }, how: 'descriptors', unknown };
 }

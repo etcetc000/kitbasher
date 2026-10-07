@@ -170,7 +170,7 @@ async function main(): Promise<void> {
   for (const [k, v] of Object.entries(base.support)) if (!v.ok) console.log(`  not supported on this base: ${supportLine(k, v)}`);
   const cap = a['trim-cap'] === undefined ? 0.55 : Number(a['trim-cap']);
   if (a['no-uw'] && a.uw) throw new Error('--uw and --no-uw: choose one');
-  const uw = a['no-uw'] ? false : a.uw ? true : undefined;
+  let uw = a['no-uw'] ? false : a.uw ? true : undefined;
   const all = select(packs, {}).fams.flatMap((f) => f.models);
   // the session whose IDs to keep
   let layout = a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined;
@@ -187,9 +187,17 @@ async function main(): Promise<void> {
       layout = JSON.parse(text).format === 'kitbasher-project/1' ? (await decodeProject(text)).layout ?? undefined : parseLayout(text);
     }
   }
-  if (a['legacy-ids']) {
-    if (layout) throw new Error('--legacy-ids is a layout of its own: do not combine it with --map or --restore');
-    layout = legacyLayout(base, readFirmware(input).slots[0].raw, all, select(packs, {}).fams, listedFreeIds(readFirmware(input), base));
+  let allowIdMove = !!a['allow-id-move'];
+  // a session made on another base: rebased onto this one; machines whose ID this base uses move
+  if (layout && layout.base && layout.base !== base.id) {
+    console.log(`the restored session was made for ${layout.base}: applied to ${base.name}; any machine whose ID it uses moves (listed below)`);
+    layout = { ...layout, base: base.id };
+    allowIdMove = true;
+  }
+  // the session's UW answer, when no flag gives one
+  if (uw === undefined && layout?.uw !== undefined) {
+    uw = layout.uw;
+    console.log(`the restored session was made for a Machinedrum ${uw ? 'with' : 'without'} UW (--uw / --no-uw to override)`);
   }
   // without UW, models that play a UW sample cannot work: leave them out, and say so
   let exclude = a.exclude ? a.exclude.split(',') : undefined;
@@ -199,8 +207,14 @@ async function main(): Promise<void> {
       .filter((m) => !(exclude ?? []).includes(m.module));
     if (out.length) { console.log(`left out (they play UW samples, which a Machinedrum without UW does not have): ${out.map((m) => m.name.trim()).join(', ')}`); exclude = [...(exclude ?? []), ...out.map((m) => m.module)]; }
   }
+  if (a['legacy-ids']) {
+    if (layout) throw new Error('--legacy-ids is a layout of its own: do not combine it with --map or --restore');
+    const fw0 = readFirmware(input);
+    const chosen = select(packs, { families: a.families ? a.families.split(',') : undefined, exclude }).fams;
+    layout = legacyLayout(base, fw0.slots[0].raw, chosen, listedFreeIds(fw0, base));
+  }
   const { output, report, gateReport } = await build(input, base, packs, core, {
-    allowIdMove: !!a['allow-id-move'],
+    allowIdMove,
     uw,
     ctrControlAll: !!a['ctr-control-all'] || !!a['clean-recovery'],
     layout,

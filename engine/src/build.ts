@@ -472,13 +472,12 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   // Without the fix a non-UW unit shows the wrong categories (1.63, DEV), or opens the machine menu
   // on the wrong one and, on X.13, hangs at boot. A build for a Machinedrum without UW must have
   // it; a build for a UW unit still builds without it and says so.
-  const buildNoUw = noUw;
   let uwWhy: string;
   let uwOk = true;
   if (!O.uwMenu || !ram.uwMenu) {
     uwWhy = !O.uwMenu ? `not found (${base.support.uwMenu?.why ?? 'not discovered'})` : "the base's table has no ROM and RAM records to remove";
-    uwOk = !buildNoUw;
-    if (buildNoUw) uwWhy += ': a Machinedrum without UW would show the wrong categories';
+    uwOk = !noUw;
+    if (noUw) uwWhy += ': a Machinedrum without UW would show the wrong categories';
   } else {
     try {
       const u = uwMenuPatches(O.uwMenu, ram.uwMenu.entry);

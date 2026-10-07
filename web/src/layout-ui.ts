@@ -124,17 +124,31 @@ export class LayoutEditor {
     host.before(this.root);
   }
 
-  /** A base was loaded: its IDs and its own categories. A map made for another base is set aside. */
+  /** where the map came from when it was restored (a file, a patched OS, the earlier IDs); null: nothing restored */
+  restoredFrom: string | null = null;
+  /** the map is the earlier allocator's for the current selection: the page recomputes it when the selection changes */
+  legacy = false;
+
+  /** No map: the default layout, and nothing restored. */
+  clear(): void { this.map = null; this.restoredFrom = null; this.legacy = false; }
+
+  /**
+   * A map made for another OS is applied to this one: every machine keeps its ID where this OS
+   * has it free; the others move to free IDs, and the Models step lists each move.
+   */
+  private rebase(): void {
+    if (!this.map || !this.base || this.map.base === this.base.id) return;
+    const was = this.map.base;
+    this.map = { ...this.map, base: this.base.id };
+    if (was) this.say(`The layout was made for ${was}; it is applied to ${this.base.name}. Machines keep their IDs where ${this.base.name} has them free; any that move are listed on the Models step. Reset to default to drop it.`, 'info');
+  }
+
+  /** A base was loaded: its IDs and its own categories. A map made for another base is applied to it. */
   setBase(fw: Firmware | null, base: Base | null): void {
     this.base = base;
     this.slots = fw && base ? idSlots(fw, base) : [];
     this.stock = fw && base ? baseFamilies(fw, base) : [];
-    // a map read from an OS's machines names no base: it is for the one loaded now
-    if (this.map && base && !this.map.base) this.map = { ...this.map, base: base.id };
-    if (this.map && base && this.map.base !== base.id) {
-      this.say(`The map you had was made for base ${this.map.base}; this OS is ${base.name}, so it was set aside.`, 'error');
-      this.map = null;
-    }
+    this.rebase();
   }
 
   /** A map read from a file or a patched OS: it becomes the user's. */
@@ -143,6 +157,9 @@ export class LayoutEditor {
 
   adopt(l: Layout, from: string): void {
     this.map = l;
+    this.restoredFrom = from;
+    this.legacy = false;
+    this.rebase();
     this.onAdopt?.(l, from);
     void fingerprint(l).then((fp) => this.say(`Layout ${fp} restored from ${from}.`, 'ok'));
   }
@@ -177,6 +194,7 @@ export class LayoutEditor {
     const l: Layout = structuredClone(this.eff);
     const msg = f(l);
     if (typeof msg === 'string' && msg.startsWith('!')) { this.say(msg.slice(1), 'error'); return; }
+    this.legacy = false;                                   // edited by hand: no longer recomputed
     this.renumber(l);
     this.map = l;
     this.say(msg || '', 'info');
@@ -254,7 +272,7 @@ export class LayoutEditor {
     imp.addEventListener('change', () => { if (imp.files?.[0]) void this.importMap(imp.files[0]); });
     const reset = el('button', { type: 'button', id: 'lay-reset' }, 'Reset to default');
     if (!this.map) reset.setAttribute('disabled', '');
-    reset.addEventListener('click', () => { this.map = null; this.say('Default categories and automatic ID assignments restored.', 'info'); this.onChange(); });
+    reset.addEventListener('click', () => { this.clear(); this.say('Default categories and automatic ID assignments restored.', 'info'); this.onChange(); });
     const head = el('div', { class: 'section-head' }, el('h2', { id: 'layout-title' }, 'Arrange categories'),
       el('div', { class: 'lay-actions' }, exp, el('label', { class: 'btn' }, 'Load layout', imp), reset));
     const intro = el('p', { class: 'fine' }, 'Arrange the machine menu. Save your layout to reuse it.');
@@ -477,7 +495,6 @@ export class LayoutEditor {
   private async importMap(f: File): Promise<void> {
     try {
       const l = parseLayout(await f.text());
-      if (this.base && l.base !== this.base.id) throw new Error(`it was made for base ${l.base}, and this OS is ${this.base.name}`);
       this.adopt(l, f.name);
       this.onChange();
     } catch (e) {

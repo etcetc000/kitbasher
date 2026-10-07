@@ -157,8 +157,9 @@ With a Yes nothing changes.
 ## Machine IDs
 
 Saved kits find machines by ID. Kitbasher gives each selected model the lowest
-free ID, in menu order, so the same selection on the same OS always gets the
-same IDs. A model's pack no longer fixes its ID.
+free ID, in menu order: the same selection on the same OS, with the same UW
+answer and the same menu layout, always gets the same IDs. A model's pack no
+longer fixes its ID.
 
 **This changed in October 2026.** Earlier builds put some models on fixed IDs
 (OSCPW 175, WAVTB 124, OSC8B 126, VOXVO 127, WAVCH 6, FMSSW 10, FMS2O 11,
@@ -167,14 +168,22 @@ made with an earlier build working, restore that build's IDs on the first step:
 
 - drop the **.syx you flashed** (or the .bin): Kitbasher reads the layout table
   every build carries, or, failing that, the machines it added, matched to the
-  catalog by name (the page names any it does not know);
+  catalog by their names now or before the October 2026 rename (the page names
+  any it does not know, and keeps their IDs free);
 - or your **project file** or **layout file**;
-- or choose **the IDs Kitbasher gave before October 2026**: every catalog model
-  on the ID an earlier build with everything selected gave it. A build of a
-  smaller selection gave some models lower IDs; the .syx is exact.
+- or choose **the IDs Kitbasher gave before October 2026**: the earlier
+  allocator run on the models you select, recomputed as you change the
+  selection. It gives what an earlier build of the same selection gave as long
+  as the model catalog has not changed since; the .syx is the exact record.
 
 Every machine the restored session names keeps its ID; models it does not name
-take free IDs. On the command line: `--restore <file>` or `--legacy-ids`.
+take free IDs. Machines of the session that you do not select now keep their
+IDs reserved, so a later build that selects them again finds them free; only
+when no other ID is left is one given to a new model, and the build report says
+so. A session made for another OS is applied to the one you load: machines keep
+their IDs where that OS has them free, and the others move (each move is
+listed). On the command line: `--restore <file>` or `--legacy-ids`; a session
+that records the UW answer sets it unless `--uw` or `--no-uw` is given.
 
 ## Adding a base
 

@@ -87,12 +87,14 @@ export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], lis
 }
 
 /**
- * The layout that puts every catalog model on its earlier ID, in the default menu categories.
- * Models the user does not select are simply not built; the rest keep these IDs.
+ * The layout the earlier allocator gives this selection (`families`: the selected models, as the
+ * engine selects them), in the default menu categories: what a build of the same selection with an
+ * earlier Kitbasher gave, as long as the catalog has not changed since. The .syx of that build is
+ * the exact record.
  */
-export function legacyLayout(base: Base, main: Uint8Array, models: PackModel[], families: { name: string; models: PackModel[] }[], listed: Map<number, string>): Layout {
+export function legacyLayout(base: Base, main: Uint8Array, families: { name: string; models: PackModel[] }[], listed: Map<number, string>): Layout {
   const { sel } = legacyAllocate(base, main, families, listed);
-  const cats = [...new Set(models.map((m) => menuCategory(m)))].sort((a, b) => menuOrder(a) - menuOrder(b));
+  const cats = [...new Set(sel.map((s) => menuCategory(s.m)))].sort((a, b) => menuOrder(a) - menuOrder(b));
   const machines: Layout['machines'] = {};
   for (const c of cats) {
     sel.filter((s) => menuCategory(s.m) === c).forEach((s, i) => { machines[s.m.key] = { id: s.id, category: c, order: i }; });

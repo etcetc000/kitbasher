@@ -96,3 +96,14 @@ test('the first step offers to restore a previous session, a Kitbasher .syx incl
   const refresh = app.slice(app.indexOf('function refresh('), app.indexOf('function refresh(') + 300);
   assert.match(refresh, /applyNoUw\(\);/);
 });
+
+test('the Download warning shows whenever nothing was restored; a map for another OS is applied, not dropped', () => {
+  assert.match(app, /\$\('ids-warning'\)\.hidden = layoutEd\.restoredFrom !== null;/);
+  assert.doesNotMatch(app, /kitbasher\.built/);
+  const ui = readFileSync(new URL('../web/src/layout-ui.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(ui, /so it was set aside/);
+  assert.match(ui, /private rebase\(\)/);
+  assert.match(ui, /clear\(\): void \{ this\.map = null; this\.restoredFrom = null; this\.legacy = false; \}/);
+  // the earlier IDs follow the selection
+  assert.match(app, /if \(layoutEd\.legacy && fw && base\) layoutEd\.map = legacyFor\(\);/);
+});

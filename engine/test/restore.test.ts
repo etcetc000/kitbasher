@@ -2,15 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { be32, hex } from '../src/bytes.js';
 import type { Firmware } from '../src/container.js';
-import { encodeLayout, LAYOUT_FORMAT, type Layout } from '../src/layout.js';
+import { decodeLayout, encodeLayout, LAYOUT_FORMAT, type Layout } from '../src/layout.js';
 import type { PackModel } from '../src/packs.js';
-import { machinesFromDescriptors, recoverSession } from '../src/restore.js';
+import { machinesFromDescriptors, recoverSession, UNKNOWN_KEY } from '../src/restore.js';
 
 // A session from an OS Kitbasher built: its layout table, or (an image without one) the machines
 // its boot routine writes into the descriptor table.
 
 const DT = 0x252092;
-const model = (key: string, name: string): PackModel => ({ key, name, id: 0, module: key } as unknown as PackModel);
+const model = (key: string, name: string): PackModel => ({ key, name, id: 0, module: key, aliases: [] } as unknown as PackModel);
 const MODELS = [model('VAD/BD', 'VADBD'), model('OSC/PW', 'OSCPW'), model('VAD/SD', 'VADSD')];
 
 /** OS-area flash with one boot routine of ours: one RAM copy (the descriptors), then the patch list. */
@@ -49,7 +49,7 @@ test('an image without a layout table: the catalog\'s models on their IDs, the r
   const f = image([{ id: 4, name: 'VADBD' }, { id: 175, name: 'OSCPW' }, { id: 9, name: 'NDSQ ' }]);
   const r = recoverSession({ flash: f, osEnd: 0xb000 } as unknown as Firmware, MODELS, DT)!;
   assert.equal(r.how, 'descriptors');
-  assert.deepEqual(Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id])), { 'VAD/BD': 4, 'OSC/PW': 175 });
+  assert.deepEqual(Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id])), { 'VAD/BD': 4, 'OSC/PW': 175, [`${UNKNOWN_KEY}NDSQ@9`]: 9 });
   assert.deepEqual(r.unknown, [{ id: 9, name: 'NDSQ' }]);
   assert.equal(r.layout.base, '');                                           // set when the user loads the OS to patch
   for (const m of Object.values(r.layout.machines)) assert.ok(r.layout.categories.includes(m.category));
@@ -64,3 +64,50 @@ test('an image with its layout table: that layout, with the UW answer', () => {
   assert.equal(r.how, 'table');
   assert.deepEqual(r.layout, lay);
 });
+
+test('former names (before the 2026-10 rename) are recognised; unknown machines keep their IDs reserved', () => {
+  const models = [model('VAD/BD', 'VADBD'), model('OSC/PW', 'OSCPW'), model('FMS/4O', 'FMS4O')];
+  const f = image([{ id: 4, name: 'AN BD' }, { id: 175, name: 'MMPLS' }, { id: 40, name: 'FM4OP' }, { id: 9, name: 'NDSQ ' }]);
+  const r = recoverSession({ flash: f, osEnd: 0xb000 } as unknown as Firmware, models, DT)!;
+  const byKey = Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id]));
+  assert.deepEqual(byKey, { 'VAD/BD': 4, 'OSC/PW': 175, 'FMS/4O': 40, [`${UNKNOWN_KEY}NDSQ@9`]: 9 });
+  assert.deepEqual(r.unknown, [{ id: 9, name: 'NDSQ' }]);
+  // the session still encodes into the OS's layout table (orders and keys in range)
+  assert.doesNotThrow(() => encodeLayout(r.layout));
+});
+
+test('a layout table that lists two machines on one ID: the machine the image has there wins', () => {
+  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['KIK', 'SNR'],
+    machines: { 'VAD/SD': { id: 6, category: 'SNR', order: 0 }, 'VAD/BD': { id: 6, category: 'KIK', order: 0 } } };
+  for (const [there, wins] of [['VADBD', 'VAD/BD'], ['VADSD', 'VAD/SD']]) {
+    const f = image([{ id: 6, name: there }]);
+    const t = encodeLayout(lay);
+    f.set(t, 0xb000);
+    const r = recoverSession({ flash: f, osEnd: 0xb000 + t.length } as unknown as Firmware, MODELS, DT)!;
+    assert.deepEqual(Object.keys(r.layout.machines), [wins]);
+  }
+});
+
+test('the layout table: machines not in the catalog are reported (and stay reserved); a bad UW byte is refused', () => {
+  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['KIK'],
+    machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 }, 'ND/SQ': { id: 31, category: 'KIK', order: 1 } }, uw: true };
+  const f = image([{ id: 4, name: 'VADBD' }]);
+  const t = encodeLayout(lay);
+  f.set(t, 0xb000);
+  const r = recoverSession({ flash: f, osEnd: 0xb000 + t.length } as unknown as Firmware, MODELS, DT)!;
+  assert.deepEqual(r.unknown, [{ id: 31, name: 'ND/SQ' }]);
+  assert.equal(r.layout.machines['ND/SQ'].id, 31);
+  const bad = t.slice();
+  bad[8 + 3] = 7;                                                  // the UW byte after 'x13'
+  assert.throws(() => decodeLayout(fixCrc(bad)), /UW answer byte 7/);
+});
+
+/** the table with its CRC made right again, so only the UW byte is wrong */
+function fixCrc(t: Uint8Array): Uint8Array {
+  const body = t.subarray(0, t.length - 12);
+  let c = 0xffffffff;
+  for (const v of body) { c ^= v; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
+  const out = t.slice();
+  out.set(be32((c ^ 0xffffffff) >>> 0), t.length - 12);
+  return out;
+}

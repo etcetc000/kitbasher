@@ -23,7 +23,8 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 
    **Built with Kitbasher before?** Drop the `.syx` you flashed (or your project
    or layout file) in the same step, so your kits keep finding their machines:
-   machine IDs are now given from the lowest free one, and earlier builds used
+   machine IDs are now given from the lowest free one (the same selection, OS,
+   UW answer and menu layout always get the same IDs), and earlier builds used
    others. See [Machine IDs](docs/BASES.md#machine-ids).
 3. **Swap samples (optional).** The E12 machines appear as a grid of pads: click
    one to hear it, drop a WAV or AIFF file on it to replace it, or drop several

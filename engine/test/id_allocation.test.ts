@@ -7,7 +7,7 @@ import { legacyAllocate, legacyLayout } from '../src/legacy_ids.js';
 import { loadPacks } from '../src/node.js';
 import type { Pack, PackModel } from '../src/packs.js';
 import { needsUwSamples } from '../src/packs.js';
-import { allocateIds, select } from '../src/plan.js';
+import { allocateIds, effectiveLayout, select } from '../src/plan.js';
 import { decodeProject, encodeProject, type Project } from '../src/project.js';
 import { menuCategory, menuOrder } from '../src/sound_catalog.js';
 
@@ -116,26 +116,65 @@ const EARLIER_163: Record<string, number> = {
 };
 const BASE_163 = { ...BASE, id: 'stock-163-prepared', name: 'OS 1.63', os: { ...BASE.os, deadIds: [0x60, 0x7b] } } as unknown as Base;
 
-test('the earlier-IDs layout puts every catalog model where earlier builds did', () => {
+test('the earlier-IDs layout: the earlier allocator on the selection itself', () => {
   const { packs } = loadPacks(resolve(process.cwd(), 'catalog'));
   const { fams: all } = select(packs as Pack[], {});
   const models = all.flatMap((f) => f.models);
+  // everything selected: what earlier builds gave
   const legacy = legacyAllocate(BASE_163, MAIN, all, STOCK_163);
   assert.deepEqual(legacy.problems, []);
   assert.deepEqual(Object.fromEntries(legacy.sel.map((s) => [s.m.name.trim(), s.id])), EARLIER_163);
-  const lay = legacyLayout(BASE_163, MAIN, models, all, STOCK_163);
+  const lay = legacyLayout(BASE_163, MAIN, all, STOCK_163);
   assert.equal(lay.base, 'stock-163-prepared');
   assert.deepEqual(Object.fromEntries(models.map((m) => [m.name.trim(), lay.machines[m.key].id])), EARLIER_163);
   assert.deepEqual(lay.categories, [...lay.categories].sort((a, b) => menuOrder(a) - menuOrder(b)));
   for (const m of models) assert.equal(lay.machines[m.key].category, menuCategory(m));
-  // building with it as the session gives those IDs back, whatever subset is selected
-  const drums = all.map((f) => ({ ...f, models: f.models.filter((m) => /^VAD(BD|HH|SD)/.test(m.name)) })).filter((f) => f.models.length);
-  const r = allocateIds(BASE_163, MAIN, drums, true, lay, STOCK_163);
+  // a smaller selection: what an earlier build of that selection gave, not the full-catalog IDs
+  // (VADHH was on 7 and VADSD on 15 with everything selected; on its own, the drums took 4, 5, 6 ...)
+  const drums = select(packs as Pack[], { families: ['AN', 'NP'], exclude: ['VAD/SY'] }).fams;
+  const sub = legacyLayout(BASE_163, MAIN, drums, STOCK_163);
+  const earlierDrums = Object.fromEntries(legacyAllocate(BASE_163, MAIN, drums, STOCK_163).sel.map((s) => [s.m.key, s.id]));
+  assert.deepEqual(Object.fromEntries(Object.entries(sub.machines).map(([k, p]) => [k, p.id])), earlierDrums);
+  // the earlier build of the drums (origin/main, 2026-10-07): VADBD 4, VADCY 5, VADHH 6, VADPC 7, VADRC 8, VADSD 9, NZEPL 10
+  assert.deepEqual(Object.fromEntries(Object.entries(sub.machines).map(([k, p]) => [models.find((m) => m.key === k)!.name.trim(), p.id])),
+    { VADBD: 4, VADCY: 5, VADHH: 6, VADPC: 7, VADRC: 8, VADSD: 9, NZEPL: 10 });
+  // building with it as the session gives those IDs back
+  const r = allocateIds(BASE_163, MAIN, drums, true, sub, STOCK_163);
   assert.deepEqual(r.problems, []);
-  assert.deepEqual(Object.fromEntries(r.sel.map((s) => [s.m.name.trim(), s.id])), { VADBD: 4, VADHH: 7, VADSD: 15 });
-  // and without the session, the new bottom-up IDs
-  assert.deepEqual(Object.fromEntries(allocateIds(BASE_163, MAIN, drums, true, undefined, STOCK_163).sel.map((s) => [s.m.name.trim(), s.id])),
-    { VADBD: 4, VADHH: 5, VADSD: 6 });
+  assert.deepEqual(Object.fromEntries(r.sel.map((s) => [s.m.key, s.id])), earlierDrums);
+});
+
+// ---- a restored session's machines that are not selected now
+
+test('restored but unselected machines keep their IDs reserved; new models do not take them', () => {
+  // X.14-style repro: built with VADSD on 6; restore, deselect VADSD, add VADBD
+  const SD = model('VAD/SD', 'VADSD'), BD = model('VAD/BD', 'VADBD');
+  const session = layoutOf({ 'VAD/SD': 6 });
+  const r = run(fams(BD), { layout: session, listed: own(range(0, 5)) });
+  assert.deepEqual(r.problems, []);
+  assert.deepEqual(ids(r), { VADBD: 7 });                           // not 6: VADSD's
+  assert.deepEqual(r.reused, []);
+  // the layout the build embeds lists both, on different IDs
+  const out = effectiveLayout(BASE, session, [{ name: 'F', models: [BD] }], r.sel, undefined);
+  assert.deepEqual(Object.fromEntries(Object.entries(out.machines).map(([k, p]) => [k, p.id])), { 'VAD/SD': 6, 'VAD/BD': 7 });
+  // restoring that with both selected: each keeps its ID, no problem, no move
+  const both = run(fams(BD, SD), { layout: out, listed: own(range(0, 5)) });
+  assert.deepEqual(both.problems, []);
+  assert.deepEqual(ids(both), { VADBD: 7, VADSD: 6 });
+  assert.deepEqual(both.moves, []);
+});
+
+test("a reserved ID is taken back only when no other is left, reported; this build's machine wins the ID", () => {
+  const SD = model('VAD/SD', 'VADSD'), BD = model('VAD/BD', 'VADBD');
+  const listed = own([...range(0, 5), ...range(7, 191)]);             // only 6 is free, and VADSD holds it
+  const session = layoutOf({ 'VAD/SD': 6 });
+  const r = run(fams(BD), { layout: session, listed });
+  assert.deepEqual(r.problems, []);
+  assert.deepEqual(ids(r), { VADBD: 6 });
+  assert.deepEqual(r.reused, [{ id: 6, key: 'VAD/SD' }]);
+  // the embedded layout drops VADSD's entry: one machine per ID, this build's
+  const out = effectiveLayout(BASE, session, [{ name: 'F', models: [BD] }], r.sel, undefined);
+  assert.deepEqual(Object.fromEntries(Object.entries(out.machines).map(([k, p]) => [k, p.id])), { 'VAD/BD': 6 });
 });
 
 // ---- the UW answer in files

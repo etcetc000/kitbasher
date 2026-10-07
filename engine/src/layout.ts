@@ -266,7 +266,9 @@ export function decodeLayout(t: Uint8Array): Layout {
   let o = 8;
   const str = (n: number): string => { const s = String.fromCharCode(...t.subarray(o, o + n)); o += n; return s; };
   const base = str(t[7]);
-  const uw = t[4] === LAYOUT_TABLE_VERSION_UW ? t[o++] === 1 : undefined;
+  const uwByte = t[4] === LAYOUT_TABLE_VERSION_UW ? t[o++] : undefined;
+  if (uwByte !== undefined && uwByte > 1) bad(`UW answer byte ${uwByte}, not 0 or 1`);
+  const uw = uwByte === undefined ? undefined : uwByte === 1;
   const categories: string[] = [];
   for (let i = 0; i < t[5]; i++) { categories.push(String.fromCharCode(...Array.from(t.subarray(o, o + 4)).filter((c) => c))); o += 4; }
   const machines: Record<string, MachinePlace> = {};
