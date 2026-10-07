@@ -213,13 +213,13 @@ function planFor(exclude: string[], opt = trimOptions()): Plan {
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
-function autoPlan(exclude: string[], minDb: number): Plan {
+function autoPlan(exclude: string[], minDb: number | null): Plan {
   autoTrimOptions = keepSamples;
   const p = planFor(exclude);
-  if (p.dsp2.fits && minDb === -40) return p;
+  if (p.dsp2.fits && minDb === null) return p;
   const cap = Number($<HTMLInputElement>('cap').value) || null;
   const found = findTrimThreshold(db => planFor(exclude, { db, minSeconds: 0.5, cap }),
-    candidate => candidate.dsp2.fits, minDb);
+    candidate => candidate.dsp2.fits, minDb ?? -40);
   autoTrimOptions = { db: found.db, minSeconds: 0.5, cap };
   $<HTMLInputElement>('db').value = String(autoTrimOptions.db);
   return found.value;
@@ -249,14 +249,14 @@ function meter(id: string, used: number, cap: number, unit: string, over: boolea
 }
 
 /** Re-plan and show it: the meters, the problems, which machines can still be added, Build. */
-function refresh(minAutoDb = -40): void {
+function refresh(minAutoDb: number | null = null): void {
   revision++;
   packedCapacityProblem = false;
   cachedBuild = null;
   $('room').hidden = !fw;
   $('m-packed').dataset.state = 'pending';
   $('m-packed').removeAttribute('title');
-  $('m-packed').querySelector('.num')!.textContent = 'Checked when you continue';
+  $('m-packed').querySelector('.num')!.textContent = 'Checking…';
   ($('m-packed').querySelector('.fill') as HTMLElement).style.width = '0';
   $('capacity-pending').hidden = false;
   $('capacity-problems').textContent = '';
@@ -332,6 +332,7 @@ function refresh(minAutoDb = -40): void {
     label.title = label.dataset.labels ?? '';
   }
   syncWizard();
+  scheduleStorageCheck();
 }
 
 function syncTrim(): void {
@@ -454,11 +455,111 @@ function reportView(r: BuildReport): HTMLElement {
 const storageFull = (e: unknown): e is CompressedCapacityError | OsAreaCapacityError =>
   e instanceof CompressedCapacityError || e instanceof OsAreaCapacityError;
 
+function buildWith(trim: TrimOptions): Promise<BuildResult> {
+  return build(input!, base!, data.packs, data.core!,
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
+}
+
+function showStorage(report: BuildReport): void {
+  $('capacity-pending').hidden = true;
+  $('room-note').textContent = 'Memory fits.';
+  if (report.dsp2.packed_capacity !== null) {
+    meter('m-packed', report.dsp2.packed, report.dsp2.packed_capacity, 'bytes', false);
+  } else {
+    $('m-packed').dataset.state = 'ok';
+    $('m-packed').querySelector('.num')!.textContent = 'Fits; this base allows the storage slot to grow';
+  }
+}
+
+function showStorageProblem(e: CompressedCapacityError | OsAreaCapacityError): void {
+  packedCapacityProblem = true;
+  $('room').dataset.state = 'over';
+  $('room-note').textContent = 'Not enough firmware storage.';
+  $('capacity-problems').textContent = `Firmware storage exceeded by ${fmt(e.used - e.capacity)} bytes.`;
+  $('capacity-problems').hidden = false;
+  $('capacity-pending').hidden = true;
+  meter('m-packed', e.used, e.capacity, 'bytes', true);
+  $('make-room').hidden = false;
+  $('make-room-help').hidden = false;
+  $('sample-options').hidden = false;
+  $('make-room-help').textContent = trimMode() === 'auto'
+    ? 'Still too large. Remove models or lower At most.' : 'Remove models or choose Auto trim.';
+}
+
+/**
+ * Firmware storage is known only after compressing a build, so it is checked in the background
+ * while the Models step is open. In Auto trim the check also settles the gentlest threshold that
+ * fits storage, and the page shows that one: Continue builds exactly the trim on screen.
+ */
+let storage: { revision: number; done: Promise<void> } | null = null;
+
+function scheduleStorageCheck(): void {
+  storage = null;
+  if (!input || !base || !current?.ok) {
+    $('m-packed').querySelector('.num')!.textContent = '';
+    return;
+  }
+  const version = revision;
+  // a short pause, so a run of clicks checks once
+  storage = { revision: version, done: new Promise<void>((r) => setTimeout(r, 300)).then(() => checkStorage(version)) };
+}
+
+async function checkStorage(version: number): Promise<void> {
+  if (version !== revision || cachedBuild?.revision === version) return;
+  const attempt = async (trim: TrimOptions): Promise<BuildResult | Error> => {
+    await new Promise((r) => setTimeout(r, 0));          // let the page answer clicks between builds
+    if (version !== revision) return new Error('stale');
+    try { return await buildWith(trim); } catch (e) { return e as Error; }
+  };
+  let got = await attempt(trimOptions());
+  if (version !== revision) return;
+  if (storageFull(got) && trimMode() === 'auto') {
+    // The gentlest threshold that fits, to 0.5 dB: -40 dB first (usually enough), then halving
+    // between the last failing threshold and the strongest one.
+    const cap = Number($<HTMLInputElement>('cap').value) || null;
+    const at = (db: number): TrimOptions => ({ db, minSeconds: 0.5, cap });
+    let lo = autoTrimOptions === keepSamples ? -40.5 : autoTrimOptions.db;
+    let hi = Math.max(-40, lo + 0.5);
+    let best = await attempt(at(hi));
+    if (storageFull(best) && hi < -10) { lo = hi; hi = -10; best = await attempt(at(hi)); }
+    while (!(best instanceof Error) && hi - lo > 0.5) {
+      const mid = Math.round(lo + hi) / 2;
+      const r = await attempt(at(mid));
+      if (version !== revision) return;
+      if (r instanceof Error) { if (!storageFull(r)) { best = r; break; } lo = mid; }
+      else { hi = mid; best = r; }
+    }
+    if (version !== revision) return;
+    if (!(best instanceof Error)) {
+      refresh(hi);                                       // the plan, meters and slider at the new trim
+      cachedBuild = { revision, result: best };
+      storage = { revision, done: Promise.resolve() };
+      showStorage(best.report);
+      return;
+    }
+    got = best;
+  }
+  if (got instanceof Error) {
+    if (storageFull(got)) showStorageProblem(got);
+    else $('m-packed').querySelector('.num')!.textContent = '';
+    return;
+  }
+  cachedBuild = { revision: version, result: got };
+  showStorage(got.report);
+}
+
 async function onBuild(destination: 'categories' | 'download' = 'download'): Promise<void> {
   if (!input || !base || !current?.ok || building) return;
   building = true;
-  let version = revision;
   let succeeded = false;
+  status(destination === 'categories' ? 'Checking that your selection fits…' : 'Building…');
+  // The background check settles the trim (and may re-plan with it): wait for it, then build that.
+  while (storage && storage.revision === revision && cachedBuild?.revision !== revision) {
+    const s = storage;
+    await s.done;
+    if (storage === s) break;
+  }
+  const version = revision;
   clearDownload();
   syncWizard();
   const btn = $('build');
@@ -467,37 +568,11 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
   await new Promise((r) => setTimeout(r, 20));
   try {
     const t = performance.now();
-    let result = cachedBuild?.revision === version ? cachedBuild.result : undefined;
-    while (!result) {
-      try {
-        result = await build(input, base, data.packs, data.core!,
-          { exclude: excludes(), trim: trimOptions(), allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed());
-      } catch (error) {
-        if (version !== revision) return;
-        if (!storageFull(error) || trimMode() !== 'auto') throw error;
-        if (autoTrimOptions !== keepSamples && autoTrimOptions.db >= -10) throw error;
-        const nextDb = autoTrimOptions === keepSamples ? -40 : Math.min(-10, Number((autoTrimOptions.db + 1).toFixed(1)));
-        // Storage is known only after compression. Retry within the same finite
-        // threshold range, and never treat ABI, menu, or other build errors as capacity.
-        refresh(nextDb);
-        version = revision;
-        if (!current?.ok) throw new Error(current?.problems.join(' · ') || 'Selection does not fit.');
-        status('Auto trimming to fit firmware storage…');
-        await new Promise((r) => setTimeout(r, 20));
-        if (version !== revision) return;
-      }
-    }
+    const result = cachedBuild?.revision === version ? cachedBuild.result : await buildWith(trimOptions());
     if (version !== revision) return;
     cachedBuild = { revision: version, result };
     const { output, kind, report } = result;
-    $('capacity-pending').hidden = true;
-    $('room-note').textContent = 'Memory fits.';
-    if (report.dsp2.packed_capacity !== null) {
-      meter('m-packed', report.dsp2.packed, report.dsp2.packed_capacity, 'bytes', false);
-    } else {
-      $('m-packed').dataset.state = 'ok';
-      $('m-packed').querySelector('.num')!.textContent = 'Fits; this base allows the storage slot to grow';
-    }
+    showStorage(report);
     succeeded = true;
     if (destination === 'categories') { status('Your selection fits.', 'ok'); return; }
     const syx = kind === 'syx' ? output : encodeSyx(containerOf(output));
@@ -513,18 +588,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     $('result').replaceChildren();
     const message = (e as Error).message;
     if (storageFull(e)) {
-      packedCapacityProblem = true;
-      $('room').dataset.state = 'over';
-      $('room-note').textContent = 'Not enough firmware storage.';
-      $('capacity-problems').textContent = `Firmware storage exceeded by ${fmt(e.used - e.capacity)} bytes.`;
-      $('capacity-problems').hidden = false;
-      $('capacity-pending').hidden = true;
-      meter('m-packed', e.used, e.capacity, 'bytes', true);
-      $('make-room').hidden = false;
-      $('make-room-help').hidden = false;
-      $('sample-options').hidden = false;
-      $('make-room-help').textContent = trimMode() === 'auto'
-        ? 'Still too large. Remove models or lower At most.' : 'Remove models or choose Auto trim.';
+      showStorageProblem(e);
       status('Your selection needs more room. Choose how to make space in the Models step.', 'error');
     } else status(message, 'error');
   } finally {
