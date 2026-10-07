@@ -108,7 +108,7 @@ const DECODE: Record<string, Decoder> = {
     return interp(table(m, 'e0_finc'), 24 + ofs + r / 2) / 2 ** 24 * SR;
   },
   'VAD/SY': (m, r) => interp(table(m, 'e0_osc_pitch'), 24 + r / 2) / 2 ** 24 * SR,
-  // The compiled Monomachine ports (synths.json), with md-firmware-mod's PITCH_TABLE_HZ scales.
+  // The compiled Monomachine ports (synths.json), at their table word scales.
   'FMS/2O': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,                // 2 f / (2 SR) at 2x oversampling
   'FMS/3O': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,
   'FMS/SW': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,
@@ -119,7 +119,7 @@ const DECODE: Record<string, Decoder> = {
   'WAV/CH': (m, r) => table(m, 'dn_inc')[r] / 2 ** 24 * SR,
   'OSC/CH': (m, r) => 2 * table(m, 'en_inc')[r] / 2 ** 23 * SR,
   // OSC8B and WAVMR hold the Monomachine's own pitch word, 2048 a octave from MIDI -2: decoded in
-  // the word domain (the native exponent table adds at most 0.7 c, held by md-firmware-mod's gate)
+  // the word domain (the native exponent table adds at most 0.7 c, held by the firmware pitch gate)
   'OSC/8B': (m, r) => midiHz(table(m, 'sid_note')[r] * 12 / 2048 - 2),
   'WAV/MR': (m, r) => midiHz(table(m, 'dw_note')[r] * 12 / 2048 - 2),
 };

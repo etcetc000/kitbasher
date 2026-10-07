@@ -6,7 +6,7 @@
 // the quarter tone between, and raw 127 = MIDI 87.5. Octave names follow the Machinedrum's own
 // MIDI machine: MIDI 60 = C3 (MIDI 0 = C-2), so raw 0 is C0 and raw 72 is C3.
 //
-// This module is the TypeScript twin of md-firmware-mod's tools/pitch_meta.py; the two must agree.
+// packs/pitch.py is this module's Python twin, and the firmware sources declare the same law; all must agree.
 
 export type PitchLaw = 'quarter' | 'chromatic' | 'continuous' | 'relative' | 'none';
 
