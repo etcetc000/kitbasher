@@ -56,11 +56,12 @@ is and its pad follows.
   main sample's length; the layer is read while the position is inside it. If the main sample
   ends before its layer, the stopped position stays inside the layer and its 32-sample window
   repeats every block: a 1378 Hz tone. Stock main samples are all longer than their layers. When
-  a swap (or "Don't trim" on a layer) makes a main sample shorter than its layer, the build pads
-  the main sample with silence to the layer's length. The layer is what you hear, so it is left
-  as it is; the padding only costs memory, and never more than the main sample's stock length.
-  The page marks such rows. The existing trim rule still applies when trimming shortens a main
-  sample: its layer is shortened to match unless the layer is marked "Don't trim".
+  your main sample ends up shorter than its layer, before or after trimming, the build pads it
+  with silence to the layer's length. The layer is what you hear, so it is left as it is; the
+  padding only costs memory, and never more than the main sample's stock length. When trimming
+  shortens a stock main sample, its layer is shortened to match (the trim's existing rule),
+  unless the layer is marked "Don't trim", in which case the main sample is padded instead. The
+  pads show what the build does, from the trim it will use.
 - **Don't trim.** Each sample can be excluded from the E12 trim, so a sample you made to a
   particular length is never cut further.
 - **Identity.** With no swaps, or with every sample swapped for its own stock data, the build
