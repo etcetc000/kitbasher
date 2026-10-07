@@ -36,7 +36,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 - E12 sample swapping: a Samples step after loading the OS shows the 16 E12
   machines as a pad grid (which machine plays which sample is read from the OS's
   own code). Click a pad to hear it, drop a WAV or AIFF file on it to replace it,
-  or drop several files or a folder to place them by name after a review. Files are
+  or drop several files or a folder to fill the pads in order (sorted by name) after
+  a review. Files are
   converted in the browser to 12-bit 44.1 kHz mono, and a new sample is never
   longer than the one it replaces. Per-sample "Don't trim"; the memory meters and
   auto trim use the swapped bank.

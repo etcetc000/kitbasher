@@ -1,7 +1,8 @@
 // The Samples step: the OS's E12 bank as a pad grid, one tile per E12 machine in Machinedrum order
 // (BD SD HT LT CP RS CB CH / OH RC CC BR TA TR SH BC); the two-sample machines split into a main
 // and a layer half. Click a pad to select and play it; drop a file on a pad to replace it; drop
-// several files or a folder for a matched-by-name review (web/src/sample-match.ts). The detail strip under the grid has the larger
+// several files or a folder to fill the pads in order from there (web/src/sample-fill.ts), shown
+// for review before anything is converted. The detail strip under the grid has the larger
 // waveform, Revert, Don't trim, the notes and a file picker.
 //
 // Swapped samples are converted in the browser (web/src/convert.ts) and never longer than the
@@ -12,7 +13,7 @@
 import { PAD } from '../../engine/src/e12.js';
 import { type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
 import { bufferFor, convertFile, play, primeAudio, stopPlaying, warmAudio, SAMPLE_RATE, type ConvertOptions } from './convert.js';
-import { AUDIO_EXT, matchFiles, type Match } from './sample-match.js';
+import { AUDIO_EXT, fillInOrder } from './sample-fill.js';
 
 const el = (tag: string, props: Record<string, string> = {}, ...kids: (Node | string)[]): HTMLElement => {
   const e = document.createElement(tag);
@@ -59,7 +60,8 @@ export interface SamplesHost {
 /** One pad: a machine's sample, or one half of a two-sample machine. */
 interface Target { m: E12Machine; entry: number; part: 'main' | 'layer' | null }
 
-interface ReviewItem { file: File; match: Match; target: number | null }
+/** A dropped file and the pad it goes to (`pad` names it: "SD", "RC layer"), or not placed. */
+interface ReviewItem { file: File; target: number | null; pad: string | null; order: number }
 
 export class SamplesStep {
   bank: E12Bank | null = null;
@@ -309,7 +311,7 @@ export class SamplesStep {
       ev.preventDefault();
       ev.stopPropagation();
       const chip = dt.getData(DRAG_CHIP);
-      if (chip !== '') this.assignChip(Number(chip), t.entry);
+      if (chip !== '') this.assignChip(Number(chip), t);
       else void this.onFilesDropped(dt, t);
     });
     return btn;
@@ -375,30 +377,28 @@ export class SamplesStep {
 
   private reviewEl(): HTMLElement {
     const items = this.review!;
-    const name = (entry: number): string => {
-      const t = this.targets().find((x) => x.entry === entry)!;
-      return `${codeOf(t.m)}${t.part === 'layer' ? ' layer' : ''}`;
-    };
-    const matched = items.filter((i) => i.target !== null);
+    const placed = items.filter((i) => i.target !== null).sort((x, y) => x.order - y.order);
+    const extra = items.filter((i) => i.target === null);
     const chip = (i: ReviewItem): HTMLElement => {
       const k = items.indexOf(i);
-      const c = el('span', { class: 'review-chip', draggable: 'true', 'data-assigned': String(i.target !== null), title: i.match.why ?? 'Drag onto a pad' },
-        i.file.name, i.target !== null ? el('b', {}, ` → ${name(i.target)}`) : '');
+      const c = el('span', { class: 'review-chip', draggable: 'true', 'data-assigned': String(i.target !== null),
+        title: i.target !== null ? 'Drag onto another pad to put it there instead' : 'Not placed: drag onto a pad' },
+        ...(i.pad ? [el('b', {}, `${i.pad} ← `)] : []), i.file.name);
       c.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData(DRAG_CHIP, String(k)); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; });
       return c;
     };
-    const apply = el('button', { type: 'button', class: 'wizard-primary', id: 'review-apply' }, `Apply ${matched.length}`);
-    if (!matched.length) apply.setAttribute('disabled', '');
+    const apply = el('button', { type: 'button', class: 'wizard-primary', id: 'review-apply' }, `Apply ${placed.length}`);
+    if (!placed.length) apply.setAttribute('disabled', '');
     apply.addEventListener('click', () => void this.applyReview());
     const cancel = el('button', { type: 'button', class: 'sample-btn', id: 'review-cancel' }, 'Cancel');
     cancel.addEventListener('click', () => { this.review = null; this.say('Nothing was changed.'); this.render(); });
     return el('section', { class: 'review-bar', id: 'review-bar', 'aria-label': 'Files to apply' },
       el('div', { class: 'review-head' },
-        el('strong', {}, `${matched.length} matched, ${items.length - matched.length} unmatched`),
-        el('span', { class: 'fine' }, 'Drag a file onto a pad to place it, or onto another pad to move it.'),
+        el('strong', {}, `${placed.length} placed in order` + (extra.length ? `, ${extra.length} not placed` : '')),
+        el('span', { class: 'fine' }, 'Sorted by name, filling the pads from where you dropped them. Drag a file onto another pad to move it.'),
         el('span', { class: 'review-actions' }, cancel, apply)),
-      el('div', { class: 'review-chips' }, ...matched.map(chip)),
-      items.length > matched.length ? el('div', { class: 'review-chips', 'data-unmatched': '' }, ...items.filter((i) => i.target === null).map(chip)) : '');
+      el('div', { class: 'review-chips' }, ...placed.map(chip)),
+      extra.length ? el('div', { class: 'review-chips', 'data-unmatched': '' }, el('span', { class: 'fine' }, 'Not placed:'), ...extra.map(chip)) : '');
   }
 
   // ---- actions
@@ -505,32 +505,42 @@ export class SamplesStep {
       if (await this.replace(t.entry, audio[0])) this.changed();
       return;
     }
-    this.startReview(audio);
+    this.startReview(audio, t);
   }
 
-  private startReview(files: File[]): void {
-    const byCode = new Map(this.bank!.machines.map((m) => [codeOf(m), m]));
-    this.review = matchFiles(files.map((f) => f.name)).map((match, i) => {
-      const m = match.code ? byCode.get(match.code) : undefined;
-      const target = m ? (match.part === 'layer' && m.entries.length > 1 ? m.entries[1] : m.entries[0]) : null;
-      return { file: files[i], match, target };
-    });
-    // two files can still land on one sample (SD and RS share their main): keep the first
-    const seen = new Set<number>();
-    for (const r of this.review) {
-      if (r.target === null) continue;
-      if (seen.has(r.target)) { r.match = { ...r.match, why: `sample ${r.target} is already taken` }; r.target = null; } else seen.add(r.target);
-    }
+  /** The pads' main samples in grid order, for filling in order (a shared sample is one slot). */
+  private slots(): { pad: string; entry: number; m: E12Machine }[] {
+    return this.targets().filter((t) => t.part !== 'layer').map((t) => ({ pad: codeOf(t.m), entry: t.entry, m: t.m }));
+  }
+
+  /** Several files: fill the pads in order from the pad dropped on (BD for the grid), for review. */
+  private startReview(files: File[], at: Target | null): void {
+    const slots = this.slots();
+    const start = at ? Math.max(0, slots.findIndex((s) => s.m.id === at.m.id)) : 0;
+    const byName = new Map<string, File[]>();
+    for (const f of files) byName.set(f.name, [...(byName.get(f.name) ?? []), f]);
+    const take = (name: string): File => byName.get(name)!.shift()!;
+    const { placed, extra } = fillInOrder(files.map((f) => f.name), slots, start);
+    const pads = this.targets();
+    const orderOf = (pad: string): number => pads.findIndex((x) => codeOf(x.m) === pad && x.part !== 'layer');
+    this.review = [
+      ...placed.map((p) => ({ file: take(p.name), target: p.entry, pad: p.pad, order: orderOf(p.pad) })),
+      ...extra.map((n) => ({ file: take(n), target: null, pad: null, order: Infinity })),
+    ];
     this.say('');
     this.render();
     this.ui.querySelector<HTMLElement>('#review-bar')?.scrollIntoView({ block: 'nearest' });
   }
 
-  private assignChip(k: number, entry: number): void {
+  /** A review file dragged onto a pad: it goes there, and whatever was there is not placed. */
+  private assignChip(k: number, t: Target): void {
     const items = this.review;
     if (!items?.[k]) return;
-    for (const i of items) if (i.target === entry) i.target = null;
-    items[k].target = entry;
+    for (const i of items) if (i.target === t.entry) { i.target = null; i.pad = null; i.order = Infinity; }
+    const pads = this.targets();
+    items[k].target = t.entry;
+    items[k].pad = `${codeOf(t.m)}${t.part === 'layer' ? ' layer' : ''}`;
+    items[k].order = pads.findIndex((x) => x.m.id === t.m.id && x.entry === t.entry);
     this.render();
   }
 

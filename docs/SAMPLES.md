@@ -70,10 +70,15 @@ is and its pad follows.
 
 The 16 E12 machines are laid out as pads in Machinedrum order (BD SD HT LT CP RS CB CH /
 OH RC CC BR TA TR SH BC); the two-sample machines have a main and a layer half. Click a
-pad to select and play it. Drop one file on a pad to replace it. Drop several files or
-a folder on the grid to place them by name ([web/src/sample-match.ts](../web/src/sample-match.ts):
-kick or bd for BD, snare or sd for SD, open hat for OH and so on); a review bar lists
-what matched, and files that did not can be dragged onto a pad before **Apply**.
+pad to select and play it. Drop one file on a pad to replace it (or one half of it).
+Drop several files or a folder to fill the pads in order
+([web/src/sample-fill.ts](../web/src/sample-fill.ts)): the files sorted by name with
+numbers in numeric order ("Kick 2" before "Kick 10"), the pads in grid order, main
+samples only, one file per pad, starting at the pad you drop on, or at BD when you drop
+on the grid between pads. E12-SD and E12-RS share their main sample, so it is filled
+once and the second of the two is skipped. A review bar shows each pad and its file
+before **Apply** or **Cancel**; files left over when the pads run out are listed as not
+placed, and any file can be dragged onto another pad first.
 Dropping a `.kitbasher.json` loads it as a project. With the keyboard, the arrow keys
 move between pads, Space plays, Enter opens the file picker and Delete reverts.
 
