@@ -2,6 +2,7 @@ import { isaGate, rewrittenCode } from './isa_gate.js';
 import { assertBootRamWrites } from './boot_safety.js';
 import { decodeLinear } from './isa.js';
 import { menuRefreshPatches } from './menu_refresh.js';
+import { uwMenuPatches } from './uw_menu.js';
 export { isaGate, rewrittenCode } from './isa_gate.js';
 // Build orchestration: discovered base + relocatable packs -> gated OS image.
 // Planning owns placement; selection.ts owns catalog/IDs; isa_gate.ts independently reads
@@ -461,6 +462,17 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   }
   for (const s of O.familyBaseSites) { patches.push([s, family]); checks.push([s, O.familyTable]); }
   for (const s of O.familyListSites) { patches.push([s, family + 4]); checks.push([s, O.familyTable + 4]); }
+  // a Machinedrum without UW hides ROM and RAM, not two of our categories (engine/src/uw_menu.ts)
+  if (O.uwMenu) {
+    const u = uwMenuPatches(O.uwMenu, O.familyTable, family, ram.uwMenu?.entry ?? null);
+    patches.push(...u.patches); checks.push(...u.checks);
+  }
+  // a base where it is not found still builds (a UW unit is unaffected); the detail says so
+  gate('uw-menu', O.uwMenu === null || O.uwMenu.kind !== 'count' || ram.uwMenu !== null,
+       !O.uwMenu ? `not found (${base.support.uwMenu?.why ?? 'not discovered'})`
+       : O.uwMenu.kind === 'count' ? `without UW, ${h(ram.uwMenu!.entry)} removes ROM and RAM from the family table before the count at ${h(O.uwMenu.entry)} (entered from ${O.uwMenu.callers.map((c) => h(c - 2)).join(', ')}); the count's own -2 at ${h(O.uwMenu.branch)} is skipped`
+       : O.uwMenu.kind === 'shift' ? `the base's own ROM/RAM removal ends at our table: ${O.uwMenu.endSites.map(h).join(', ')} -> ${h(family - 0x10)}`
+       : `the base removes ROM and RAM by index: nothing to repoint`);
   if (ram.dsp1) {
     const F = base.features.dsp1Drive!;
     for (const s of F.senderSites) { patches.push([s, ram.dsp1.entry]); checks.push([s, F.sender]); }
@@ -652,7 +664,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
                        loop_skip: O.ctrLoopSkip ? h(O.ctrLoopSkip.site) : null, patched: caFix, ids: O.ctrMask.ids },
     ctr: { needed: c.needed, tests: c.found.size, patched: c.needed ? O.ctrMask.sites.length : 0,
            missed: c.missed.map(h), extra: c.extra.map(h) },
-    notes: stub && !stub.applied ? [...pl.notes, stub.note] : pl.notes,
+    notes: [...pl.notes, ...(stub && !stub.applied ? [stub.note] : []),
+      ...sel.filter((s) => s.id >= 128).map((s) => `${s.m.name.trim()} is on ID ${s.id}: a Machinedrum without UW cannot use IDs 128 and up (it selects ${s.id - 128} instead); give it an ID below 128 in the layout for such a unit`)],
     features: {
       dyn_labels: ram.dyn ? { bytes: ram.dyn.blob.length, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
       dsp1_drive: ram.dsp1 ? { machines: ram.dsp1.pairs.length, entry: h(ram.dsp1.entry), laws: ram.dsp1.link.laws } : null,

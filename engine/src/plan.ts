@@ -11,6 +11,7 @@ import { be32, Buf, fromBase64, h, wordsLE } from './bytes.js';
 import type { Base } from './bases.js';
 import { hostSendReorder, levBarStub } from './coldfire.js';
 import { menuRefreshSite, menuRefreshCode, type MenuRefreshSite } from './menu_refresh.js';
+import { recordName, uwMenuCode } from './uw_menu.js';
 import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
@@ -163,6 +164,8 @@ export interface RamImage {
   base: number; bytes: number; limit: number; image: Uint8Array; descs: [Selected, number][];
   family: number; levStub: number | null;
   menuRefresh: {site: MenuRefreshSite; entry: number; code: Uint8Array} | null;
+  /** the non-UW menu routine (engine/src/uw_menu.ts), on a base that counts its families at init */
+  uwMenu: { entry: number; code: Uint8Array } | null;
   flashBlock: Uint8Array;          // descriptors (then label blocks) that live in OS-area flash
   dyn: { blob: Uint8Array; base: number; limit: number; update: number; values: number; page: number } | null;
   dsp1: { entry: number; pairs: [number, number][]; link: DriveLink } | null;
@@ -321,6 +324,15 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
   });
   ext.push(new Uint8Array(8));
   ext.align(4, 0);
+  // on a unit without UW the base hides its last two families (ROM and RAM): on a base that does
+  // it by count, a routine of ours removes those two records from our copy instead
+  let uwMenu: RamImage['uwMenu'] = null;
+  if (O.uwMenu?.kind === 'count' && nf >= 2) {
+    const entry = E + ext.length;
+    const code = uwMenuCode(O.uwMenu, family + 8 * (nf - 2), recordName(main, O.cfBase, O.familyTable, nf - 2));
+    ext.push(code).align(4, 0);
+    uwMenu = { entry, code };
+  }
   let dyn: RamImage['dyn'] = null;
   if (opt.dyn) {
     const seg = base.features.dynLabels!.segment;
@@ -390,7 +402,7 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     menuRefresh={site:menuSite,entry:E+ext.length,code:menuRefreshCode(menuSite)};
     ext.push(menuRefresh.code).align(4,0);
   }
-  return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh,
+  return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh, uwMenu,
            flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator };
 }
 

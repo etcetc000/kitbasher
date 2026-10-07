@@ -36,6 +36,10 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 Some models use a sample in UW memory; the page lists those and offers the
 sample files with instructions.
 
+A Machinedrum without the UW option takes the same OS update; a few models and
+machine IDs need UW, and the page says which (see
+[Machinedrum without UW](docs/BASES.md#machinedrum-without-uw)).
+
 ## Supported bases
 
 | Base | Support |

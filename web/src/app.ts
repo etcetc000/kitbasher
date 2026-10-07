@@ -317,8 +317,13 @@ function refresh(minAutoDb: number | null = null): void {
   const swapped = samples.state.swaps.size;
   $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
-  $('download-needs').hidden = !needs.length;
-  $('download-needs').replaceChildren(...(needs.length ? [
+  // a Machinedrum without UW cannot select or load machine IDs 128 and up (it takes 128 off)
+  const high = p.sel.filter((s) => s.id >= 128);
+  $('download-needs').hidden = !needs.length && !high.length;
+  $('download-needs').replaceChildren(...(high.length ? [
+    el('h3', {}, 'Machinedrum without UW'),
+    el('p', {}, `${high.map((s) => `${s.m.name.trim()} is on ID ${s.id}`).join(', ')}. A Machinedrum without the UW option cannot use machine IDs 128 and up: selecting ${high.length === 1 ? 'it' : 'one'} gives an empty machine. If yours has no UW, move ${high.length === 1 ? 'it' : 'them'} to an ID below 128 in the layout before you download.`),
+  ] : []), ...(needs.length ? [
     el('h3', {}, 'UW sample data: a separate step'),
     el('p', {}, needs.join(' ')),
     el('p', {}, 'These sample-based features require a UW Machinedrum. After installing the firmware, load the matching sample/wavetable SysEx through the UW sample manager, not the firmware upgrade screen. Back up your UW samples first and check the destination slot.'),

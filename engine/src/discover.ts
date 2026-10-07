@@ -27,6 +27,7 @@ import type { PiSlices } from './pi_clean.js';
 import { findSite as findFlushHook, NoIndicator, type Site as FlushSite } from './indicator.js';
 import { recoverProblems, ANCHORS } from './recover.js';
 import {qualifyModelRuntime} from './model_runtime.js';
+import { findUwMenu } from './uw_menu.js';
 
 export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
@@ -40,7 +41,9 @@ export interface Discovery {
   findings: Finding[];
   support: { dynLabels: Support; dsp1Drive: Support; hostSend: Support; descFlash: Support; ramWindow: Support; idFixes: Support; piClean: Support;
              /** the options: --dsp1-recover (its anchors in DSP1/DSP2), --cpu-indicator (the LCD flush hook), --ctr-control-all (its three sites) */
-    dsp1Recover: Support; cpuIndicator: Support; ctrControlAll: Support; modelRuntime: Support };
+    dsp1Recover: Support; cpuIndicator: Support; ctrControlAll: Support; modelRuntime: Support;
+    /** the menu on a Machinedrum without UW: how the base hides ROM and RAM there (engine/src/uw_menu.ts) */
+    uwMenu: Support };
   /** the patchable base; null with `refused` saying why */
   base: Base | null;
   refused: string | null;
@@ -268,6 +271,11 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     const familyListSites = famOps.filter((o) => o.value === familyTable + 4).map((o) => o.at);
     note('family table', true, `${h(familyTable)}${at1('family_table', familyTable)}, ${isFamilyTable(familyTable)} families; named at ${familyBaseSites.map(h).join(', ')}; its lists at ${familyListSites.map(h).join(', ')}`);
     val('os.family_table', familyTable); val('os.family_base_sites', familyBaseSites); val('os.family_list_sites', familyListSites);
+    // how a unit without UW hides ROM and RAM, which decides what it shows of our families
+    const uw = findUwMenu(images, familyTable);
+    note('non-UW menu', uw.menu !== null, uw.why);
+    if (uw.menu?.kind === 'count') { val('os.uw_menu.entry', uw.menu.entry); val('os.uw_menu.callers', uw.menu.callers); val('os.uw_menu.branch', uw.menu.branch); }
+    if (uw.menu?.kind === 'shift') val('os.uw_menu.end_sites', uw.menu.endSites);
     // the machine IDs of the base's menu family with this name (the descriptor's ID byte at +4)
     const familyMembers = (table: number, name: string): number[] | null => {
       for (let n = 0; n < 256; n++) {
@@ -550,7 +558,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush },
       os: {
         cfBase, osMain, descriptorTable, freeDescriptor, descriptorSize: dsz,
-        familyTable, familyBaseSites, familyListSites, pageDraw, redrawStub,
+        familyTable, familyBaseSites, familyListSites, uwMenu: uw.menu, pageDraw, redrawStub,
         heap, heapStart,
         deadIds: [num(lin.os.dead_ids.from), num(lin.os.dead_ids.to)],
         highDefaults: { ids: range(fx.high_defaults.ids), site: hd!, old: hdOld, new: num(fx.high_defaults.new) },
@@ -584,6 +592,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     note('model runtime',base.modelRuntime.ok,base.modelRuntime.why);
     const support: Discovery['support'] = {
       modelRuntime:{ok:base.modelRuntime.ok,why:base.modelRuntime.why},
+      uwMenu: uw.menu ? { ok: true, why: `discovered: ${uw.why}` } : { ok: false, why: `${uw.why}: on a Machinedrum without UW the menu hides the last two added categories and shows ROM and RAM` },
       idFixes: { ok: true, why: `discovered: ${ctrSites.length} CTR-range tests, high defaults, LEV bar, preview` },
       ramWindow: ramWhy ? { ok: false, why: ramWhy } : { ok: true, why: `discovered free: ${env.map(([a, b]) => `${h(a)}..${h(b)}`).join(' + ')}` },
       dynLabels: dyn2 ? { ok: true, why: `discovered: ${dyn2.redraw.mode === 'stub' ? 'the base\'s refresh stub' : `${dyn2.redraw.sites.length} refresh calls`}, ${dyn2.pageSites.length} page-draw sites` }

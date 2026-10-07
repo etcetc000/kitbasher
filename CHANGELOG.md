@@ -75,3 +75,9 @@ All notable changes to Kitbasher are recorded here. The format follows
   and early code runs from flash that is already mapped.
 - On X.14, DSP1 drive curves reach every track.
 - On DEV 26A01, the kit editor draws a newly chosen category in full.
+- On a Machinedrum without UW, the machine-select menu shows every added
+  category and hides ROM and RAM, as on stock. Before, OS 1.63 and DEV builds hid
+  the last two added categories and showed ROM and RAM (which load GND--), and
+  X.13 builds hung at the boot screen.
+- The page and the build report name any machine on ID 128 or above, which a
+  Machinedrum without UW cannot select.

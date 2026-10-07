@@ -108,6 +108,30 @@ finds the new patch sites; nothing is reused from the older DEV profile.
   category's cached length. The patch refreshes that cache first, so the list of
   added machines draws in full.
 
+## Machinedrum without UW
+
+The same OS files run on a Machinedrum with and without the UW option. At boot
+the OS reads which one it is on and, without UW, takes the ROM and RAM machine
+categories out of the machine-select menu. Stock 1.63 and the DEV builds do that
+by dropping the *last two* categories of the menu; X.13 and X.14 find the
+category named ROM and move the later ones down over ROM and RAM.
+
+Added categories come after the base's own, so on 1.63 and DEV the stock rule
+would hide two of them and show ROM and RAM instead (which play nothing without
+UW). Every build therefore adds a short routine that, on a unit without UW,
+removes ROM and RAM from the menu the way X.13 does, and turns off the stock
+rule. On X.13 the build points the end of X.13's own move at the new menu table;
+without that, a unit without UW would hang at the boot screen. X.14 needs
+nothing. The `uw-menu` check in the build report says which case applies.
+
+Two things still need a UW Machinedrum:
+
+- **Machine IDs 128 and up.** Without UW the OS takes 128 off any machine ID of
+  128 or more, so a machine there is selected as an empty one. The page and the
+  build report name any such machine; give it an ID below 128 in the layout if
+  your Machinedrum has no UW.
+- **Models that play a UW sample** (marked *requires UW* on the page).
+
 ## Adding a base
 
 To request support for another OS build, open a
