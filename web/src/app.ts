@@ -17,7 +17,7 @@ import { prepare163 } from '../../engine/src/prepare.js';
 import { build, CompressedCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
-import { checkPack, needLines, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
+import { checkPack, modelWords, needLines, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
 import { merged, plan, trimFor, type Plan, type Trimmed } from '../../engine/src/plan.js';
 import { drawLcd } from './lcd.js';
 import { categories, describeModel } from './catalog.js';
@@ -146,12 +146,12 @@ function inspectModel(m: PackModel, scroll = false): void {
 function renderMachines(): void {
   const box = $('machines');
   box.replaceChildren();
-  const models = merged(data.packs).flatMap(f => f.models.map(m => ({ m })));
+  const models = merged(data.packs).flatMap(f => f.models.map(m => ({ m, size: modelWords(m, f.shared) })));
   const groups = [...categories, 'Other models'].filter(category => models.some(({ m }) => describeModel(m).category === category));
   for (const [index, category] of groups.entries()) {
     const list = el('div', { class: 'machines' });
     const group = models.filter(({ m }) => describeModel(m).category === category);
-    for (const { m } of group) {
+    for (const { m, size } of group) {
       // Every model starts selected; auto trim and the meters account for workspace memory.
       const cb = el('input', { type: 'checkbox', 'aria-label': `Include ${m.name.trim()}`, 'data-module': m.module, checked: '' }) as HTMLInputElement;
       cb.addEventListener('change', () => { inspectModel(m); refresh(); });
@@ -159,6 +159,7 @@ function renderMachines(): void {
       const requiresUW = m.needs?.some(n => n.kind === 'uw-sample') ?? false;
       const info = el('button', { type: 'button', class: 'machine-info', 'aria-label': `Preview ${m.name.trim()}${requiresUW ? ', requires UW' : ''}`, 'aria-controls': 'inspector', 'aria-pressed': 'false' },
         el('span', { class: 'machine-heading' }, el('span', { class: 'mname' }, m.name.trim()),
+          el('span', { class: 'model-size', title: `${size.toLocaleString('en')} words of DSP memory` }, wordsLabel(size)),
           requiresUW ? el('span', { class: 'uw-badge' }, 'requires UW') : ''),
         el('span', { class: 'machine-description' }, describeModel(m).description));
       info.addEventListener('click', () => inspectModel(m, true));
@@ -175,6 +176,9 @@ function renderMachines(): void {
   }
   if (models.length) inspectModel((models.find(({ m }) => m.module === inspected?.module) ?? models[0]).m);
 }
+
+/** A model's DSP memory, short: 640 words, 1.6k words. */
+const wordsLabel = (n: number): string => n < 1000 ? `${n} words` : `${(n / 1000).toFixed(1)}k words`;
 
 function tickAll(list: HTMLElement): void {
   for (const i of Array.from(list.querySelectorAll<HTMLInputElement>('input'))) {

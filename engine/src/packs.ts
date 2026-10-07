@@ -100,6 +100,16 @@ export interface CorePack {
 
 export const words = (b64: string): number[] => wordsLE(fromBase64(b64));
 
+/**
+ * DSP memory a model takes on its own, in words: its code, its tables and the shared tables it
+ * asks for. A selection can take less (identical tables and shared tables are placed once).
+ */
+export function modelWords(m: PackModel, shared: PackTable[] = []): number {
+  const n = (b64: string): number => fromBase64(b64).length / 3;
+  return n(m.code.words) + m.tables.reduce((s, t) => s + n(t.words), 0) +
+    shared.filter((t) => m.wants_shared.includes(t.name)).reduce((s, t) => s + n(t.words), 0);
+}
+
 export function checkPack(p: Pack | CorePack): void {
   if (p.format !== PACK_FORMAT) throw new Error(`pack ${p.family}: format ${p.format}, this engine reads ${PACK_FORMAT}`);
   if ('models' in p) for (const m of p.models) {

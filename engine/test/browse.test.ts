@@ -27,3 +27,11 @@ test('checkPack refuses malformed browse data', () => {
     assert.throws(() => checkPack(pack(bad)), /invalid browse data/, JSON.stringify(bad));
   checkPack(pack({ category: 'Synths & textures' }));   // a pack from before the synth split still loads
 });
+
+test('a model\'s size counts its code, its tables and the shared tables it asks for', async () => {
+  const { modelWords } = await import('../src/packs.js');
+  const b64 = (words: number): string => Buffer.alloc(words * 3).toString('base64');
+  const m = { code: { words: b64(10) }, tables: [{ name: 't', words: b64(5) }], wants_shared: ['s'] } as unknown as PackModel;
+  assert.equal(modelWords(m), 15);
+  assert.equal(modelWords(m, [{ name: 's', words: b64(7) }, { name: 'other', words: b64(100) }]), 22);
+});

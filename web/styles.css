@@ -749,6 +749,11 @@ h2 {
 .machine-heading .mname {
   margin-bottom: 0;
 }
+.model-size {
+  color: var(--muted);
+  font: 500 11px/1.5 var(--mono);
+  white-space: nowrap;
+}
 .uw-badge {
   padding: 1px 6px;
   border: 1px solid var(--line);
