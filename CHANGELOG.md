@@ -11,7 +11,9 @@ All notable changes to Kitbasher are recorded here. The format follows
   0 is MIDI 24 (C0) and raw 127 is MIDI 87.5, in quarter-tone steps with every even
   value a semitone; MIDI 60 is named C3. OSCAC, WAVSP, FMS4O, VADBD, VADSD, VADRC,
   VADPC and VADSY moved to it (major version 2.0.0, new PTCH defaults that play the
-  old default note), and OSCSP, VOXFR and PHYKS already used it. VADHH and VADCY
+  old default note), and OSCSP, VOXFR and PHYKS already used it. The eleven compiled
+  synths (FMS2O, FMS3O, FMSSW, OSCSW, OSCPW, WAVTB, VOXVO, OSC8B, WAVCH, OSCCH, WAVMR)
+  moved from raw = MIDI to it too (their PTCH 48 still plays MIDI 48). VADHH and VADCY
   keep their own law, one semitone a step about raw 64, and only gain the pitch
   metadata (1.1.0; their code is unchanged). **No backward compatibility:** saved kits
   and pattern P-locks on these machines play different notes, and nothing converts
