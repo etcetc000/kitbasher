@@ -38,7 +38,7 @@ On OS 1.63, X.13, X.14 and both DEV releases this gives the same map:
 | E12CH | 55 | 4 | | E12BC | 63 | 6 + 5 |
 
 Every one of the 21 samples is played by at least one machine. Sample 12 is the main sample of
-both E12SD and E12RS, so replacing it changes both; the page says so on its row.
+both E12SD and E12RS, so replacing it changes both; both pads show a link icon.
 
 Nothing else assumes where a sample is or how long it is. A scan of every word of the DSP2
 upload (P, X and Y records), DSP1 and the ColdFire code finds no other reference to the table, a
@@ -50,7 +50,7 @@ is and its pad follows.
 ## Rules for a swap
 
 - **Never longer than the stock sample.** The cap is the stock sample's length in samples. A
-  longer file is cut to it with a 256-sample fade, and the page says so. The bank therefore never
+  longer file is cut to it with a 256-sample fade, and the pad shows a warning icon. The bank therefore never
   grows past its stock footprint, and every model memory figure stays an upper bound.
 - **Two-sample machines.** Playback advances one position for both samples and stops at the
   main sample's length; the layer is read while the position is inside it. If the main sample

@@ -11,7 +11,7 @@
 // step use the swapped bank (app.ts passes `edits()` to every plan and build).
 
 import type { TrimEntry } from '../../engine/src/e12.js';
-import { seconds, wordCost, type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
+import { seconds, type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
 import { PROJECT_FORMAT } from '../../engine/src/project.js';
 import { bufferFor, convertFile, play, primeAudio, stopPlaying, warmAudio, type ConvertOptions } from './convert.js';
 import { AUDIO_EXT, fillInOrder } from './sample-fill.js';
@@ -241,9 +241,8 @@ export class SamplesStep {
     fill.style.width = f ? `${Math.min(100, (100 * f.used) / f.stock)}%` : '0';
     const swapped = this.state.swaps.size;
     return el('div', { class: 'meter sample-meter', 'data-state': f ? 'ok' : 'pending', ...(f ? { title: `${fmt(f.used)} / ${fmt(f.stock)} words` } : {}) },
-      el('div', { class: 'top' }, el('span', {}, `Sample memory after trimming${swapped ? ` · ${swapped} of ${this.bank!.entries.length} replaced` : ''}`),
-        el('span', { class: 'num', id: 'sample-summary' }, !f ? 'Calculated with your models' : `${fmt(f.used)} of ${fmt(f.stock)} words` +
-          (f.used < f.stock ? ` · ${fmt(f.stock - f.used)} freed for models` : ''))),
+      el('div', { class: 'top' }, el('span', {}, `Sample memory${swapped ? ` · ${swapped} replaced` : ''}`),
+        el('span', { class: 'num', id: 'sample-summary' }, !f ? '' : `${Math.round((100 * f.used) / f.stock)}%`)),
       el('div', { class: 'bar' }, fill));
   }
 
@@ -261,7 +260,7 @@ export class SamplesStep {
       this.pending.clear();
       this.review = null;
       this.state = emptyState();
-      this.say('All samples are the stock ones again.', 'ok');
+      this.say('');
       this.changed();
     });
     const save = el('button', { type: 'button', class: 'sample-btn', id: 'sample-save-kit' }, 'Save kit');
@@ -269,8 +268,8 @@ export class SamplesStep {
     const loadIn = el('input', { type: 'file', accept: '.json,application/json', class: 'sample-file', id: 'sample-load-kit', 'aria-label': 'Load kit (a .kitbasher.json project file)' }) as HTMLInputElement;
     loadIn.addEventListener('change', () => { if (loadIn.files?.[0]) this.host.loadKit(loadIn.files[0]); loadIn.value = ''; });
     return el('div', { class: 'sample-toolbar' },
-      el('div', { class: 'sample-options' }, check('sample-normalise', 'Normalise new samples', 'normalise'),
-        check('sample-trim-silence', 'Trim silence at the start and end', 'trimSilence')),
+      el('div', { class: 'sample-options' }, check('sample-normalise', 'Normalise', 'normalise'),
+        check('sample-trim-silence', 'Trim silence', 'trimSilence')),
       el('div', { class: 'sample-actions' }, revertAll, save, el('label', { class: 'sample-btn sample-replace' }, loadIn, 'Load kit…')));
   }
 
@@ -309,7 +308,7 @@ export class SamplesStep {
       type: 'button', class: 'pad-target', 'data-key': key, 'data-entry': String(t.entry), 'data-state': swap ? 'mine' : 'stock',
       'aria-label': this.describe(t), tabindex: sel ? '0' : '-1', ...(sel ? { 'aria-current': 'true' } : {}),
       ...(this.playingEntry === t.entry ? { 'data-playing': '' } : {}),
-      title: 'Click to play; drop a WAV or AIFF file here to replace it',
+      title: 'Click to play, drop to replace',
     }) as HTMLButtonElement;
     const canvas = el('canvas', { class: 'pad-wave', width: '160', height: t.part ? '44' : '96', 'aria-hidden': 'true' }) as HTMLCanvasElement;
     requestAnimationFrame(() => drawWave(canvas, data, e.samples, !!swap));
@@ -317,7 +316,7 @@ export class SamplesStep {
     fill.style.width = `${Math.min(100, (100 * data.length) / e.samples)}%`;
     const badges = el('span', { class: 'pad-badges' }, ...this.badges(t));
     btn.append(
-      el('span', { class: 'pad-head' }, el('span', { class: 'pad-part' }, t.part ?? `sample ${t.entry}`), badges),
+      el('span', { class: 'pad-head' }, el('span', { class: 'pad-part' }, t.part ?? ''), badges),
       canvas,
       el('span', { class: 'pad-len' }, secs(data.length)),
       el('span', { class: 'pad-bar', 'aria-hidden': 'true' }, fill));
@@ -360,9 +359,9 @@ export class SamplesStep {
     if (others.length) out.push(badge('shared', ICON.link, `Shared with ${others.join(', ')}`));
     const pad = this.paddedFor(e);
     const short = this.cutFor(e);
-    if (pad !== null) out.push(badge('warn', ICON.warn, `Padded with silence (to sample ${pad}'s length)`));
-    else if (short !== null) out.push(badge('warn', ICON.warn, `Shortened to match sample ${short}`));
-    else if (this.cut(t.entry)) out.push(badge('warn', ICON.warn, 'Cut to stock length'));
+    if (pad !== null) out.push(badge('warn', ICON.warn, 'Padded'));
+    else if (short !== null) out.push(badge('warn', ICON.warn, 'Shortened'));
+    else if (this.cut(t.entry)) out.push(badge('warn', ICON.warn, 'Cut to fit'));
     if (this.state.noTrim.has(t.entry)) out.push(badge('lock', ICON.lock, "Won't be trimmed"));
     return out;
   }
@@ -391,29 +390,14 @@ export class SamplesStep {
       input.value = '';
       if (f) void this.replace(t.entry, f).then((ok) => { if (ok) this.changed(); });
     });
-    const notes: string[] = [];
-    if (swap) notes.push(`${this.state.sources.get(t.entry) ?? 'Your sample'}: ${secs(swap.length)} of at most ${secs(e.samples)}.`, ...(this.state.notes.get(t.entry) ?? []));
-    else notes.push(`Stock sample, ${secs(e.samples)}.`);
-    const others = e.machines.filter((x) => x.id !== t.m.id).map((x) => x.name);
-    if (others.length) notes.push(`Also played by ${others.join(', ')}: replacing it changes both.`);
-    for (const p of e.pairs.filter((q) => t.m.entries.includes(q.partner))) {
-      notes.push(p.first ? `Main sample: its layer (sample ${p.partner}) plays only while this one does.` : `Layer: plays only while the main sample (sample ${p.partner}) does.`);
-    }
-    const pad = this.paddedFor(e);
-    if (pad !== null) notes.push(`Shorter than sample ${pad}: padded with silence to its length so the layer does not repeat as a tone.`);
-    const short = this.cutFor(e);
-    if (short !== null) notes.push(`Shortened to match sample ${short}, its main sample, which the trim cut.`);
-    const row = this.laidRow(t.entry);
-    if (row && row.kept < row.seconds && pad === null && short === null) notes.push(`Trimmed to ${row.kept.toFixed(3)} s in the build.`);
     return el('section', { class: 'pad-detail', 'aria-label': 'Selected pad' },
       el('div', { class: 'pad-detail-head' },
         el('h3', {}, `${t.m.name}${t.part ? ` · ${t.part}` : ''}`),
-        el('span', { class: 'fine' }, `Sample ${t.entry} · ${secs(data.length)} · ${fmt(wordCost(data.length))} words`)),
+        el('span', { class: 'fine' }, `${swap ? `${this.state.sources.get(t.entry) ?? 'Your sample'} · ` : ''}${secs(data.length)}`)),
       canvas,
       el('div', { class: 'sample-actions' }, playBtn,
         el('label', { class: 'sample-btn sample-replace' }, input, 'Replace…'), revert,
-        el('label', { class: 'sample-notrim', for: 'detail-no-trim' }, noTrim, "Don't trim")),
-      el('ul', { class: 'pad-notes fine' }, ...notes.map((n) => el('li', {}, n))));
+        el('label', { class: 'sample-notrim', for: 'detail-no-trim' }, noTrim, "Don't trim")));
   }
 
   private reviewEl(): HTMLElement {
@@ -423,7 +407,7 @@ export class SamplesStep {
     const chip = (i: ReviewItem): HTMLElement => {
       const k = items.indexOf(i);
       const c = el('span', { class: 'review-chip', draggable: 'true', 'data-assigned': String(i.target !== null),
-        title: i.target !== null ? 'Drag onto another pad to put it there instead' : 'Not placed: drag onto a pad' },
+        title: 'Drag onto a pad' },
         ...(i.pad ? [el('b', {}, `${i.pad} ← `)] : []), i.file.name);
       c.addEventListener('dragstart', (ev) => { ev.dataTransfer?.setData(DRAG_CHIP, String(k)); if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'; });
       return c;
@@ -432,14 +416,13 @@ export class SamplesStep {
     if (!placed.length || this.applying) apply.setAttribute('disabled', '');
     apply.addEventListener('click', () => void this.applyReview());
     const cancel = el('button', { type: 'button', class: 'sample-btn', id: 'review-cancel' }, 'Cancel');
-    cancel.addEventListener('click', () => { this.review = null; this.say('Nothing was changed.'); this.render(); });
+    cancel.addEventListener('click', () => { this.review = null; this.say(''); this.render(); });
     return el('section', { class: 'review-bar', id: 'review-bar', 'aria-label': 'Files to apply' },
       el('div', { class: 'review-head' },
-        el('strong', {}, `${placed.length} placed in order` + (extra.length ? `, ${extra.length} not placed` : '')),
-        el('span', { class: 'fine' }, 'Sorted by name, filling the pads from where you dropped them. Drag a file onto another pad to move it.'),
+        el('strong', {}, `${placed.length} files`),
         el('span', { class: 'review-actions' }, cancel, apply)),
       el('div', { class: 'review-chips' }, ...placed.map(chip)),
-      extra.length ? el('div', { class: 'review-chips', 'data-unmatched': '' }, el('span', { class: 'fine' }, 'Not placed:'), ...extra.map(chip)) : '');
+      extra.length ? el('div', { class: 'review-chips', 'data-unmatched': '' }, el('span', { class: 'fine' }, 'Left over:'), ...extra.map(chip)) : '');
   }
 
   // ---- actions
@@ -511,9 +494,9 @@ export class SamplesStep {
 
   private revert(entry: number): void {
     this.pending.delete(entry);                   // a conversion still running for it is dropped
-    if (!this.state.swaps.has(entry)) { this.say(`Sample ${entry} is already the stock sample.`); return; }
+    if (!this.state.swaps.has(entry)) { return; }
     this.state.swaps.delete(entry); this.state.sources.delete(entry); this.state.notes.delete(entry);
-    this.say(`Sample ${entry} is the stock sample again.`, 'ok');
+    this.say('');
     this.changed();
   }
 
@@ -535,8 +518,7 @@ export class SamplesStep {
       this.state.swaps.set(entry, r.data);
       this.state.sources.set(entry, f.name);
       this.state.notes.set(entry, r.notes.filter((n) => !n.startsWith('quantised')));
-      this.say(`Sample ${entry} replaced with ${f.name} (${secs(r.data.length)})` +
-        (r.cut ? `: it was longer than the stock sample, so it was cut to ${secs(e.samples)} with a short fade.` : '.'), r.cut ? 'info' : 'ok');
+      this.say(r.cut ? `${f.name} cut to ${secs(e.samples)}.` : '', 'info');
       return true;
     } catch (err) {
       if (this.pending.get(entry) === req) this.pending.delete(entry);
@@ -554,7 +536,7 @@ export class SamplesStep {
     if (gen !== this.gen) return;
     if (kit) { this.host.loadKit(kit); return; }
     const audio = files.filter((f) => AUDIO_EXT.test(f.name));
-    if (!audio.length) { this.say(files.length ? 'Only WAV and AIFF files can be used.' : 'Nothing to use in that drop.', 'error'); return; }
+    if (!audio.length) { this.say('Only WAV and AIFF files work.', 'error'); return; }
     if (t && audio.length === 1) {
       this.selected = t;
       if (await this.replace(t.entry, audio[0], gen)) this.changed();
@@ -615,7 +597,7 @@ export class SamplesStep {
     } finally { this.applying = false; }
     if (gen !== this.gen) return;            // a new OS, project or Revert all: nothing more to do
     this.review = null;
-    this.say(`${ok} of ${items.length} sample${items.length === 1 ? '' : 's'} replaced.`, ok === items.length ? 'ok' : 'error');
+    this.say(ok === items.length ? '' : `${items.length - ok} of ${items.length} files could not be used.`, 'error');
     this.changed();
   }
 

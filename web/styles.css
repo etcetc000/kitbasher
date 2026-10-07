@@ -1833,8 +1833,6 @@ body.wizard .lay-grid{grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr)}
 .pad-detail-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin-bottom:8px}
 .pad-detail-head h3{font:600 15px var(--mono)}
 .detail-wave{height:90px;margin-bottom:8px}
-.pad-notes{margin:8px 0 0;padding-left:18px;font-size:12px}
-.pad-notes li{margin:2px 0;overflow-wrap:anywhere}
 
 .review-bar{margin:0 0 10px;padding:10px 12px;border:1px solid #9fb6db;border-radius:4px;background:#f3f6fb}
 .review-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}

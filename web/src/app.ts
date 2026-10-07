@@ -228,7 +228,6 @@ function updateTrimControls(): void {
     ? 'not needed' : `${$<HTMLInputElement>('db').value} dB`;
   const cap = Number($<HTMLInputElement>('cap').value);
   $('cap-out').textContent = cap > 0 ? `${cap.toFixed(2)} s` : 'no cap';
-  $('trim-effect').hidden = keep || (mode === 'auto' && autoTrimOptions === keepSamples);
   $('trim-controls').toggleAttribute('data-disabled', keep);
   $('db').toggleAttribute('disabled', mode !== 'trim');
   $('cap').toggleAttribute('disabled', keep);
@@ -301,20 +300,18 @@ function refresh(minAutoDb = -40): void {
     : profileRequired ? 'Unsupported firmware'
     : d.demand > d.capacity || p.ram.bytes > p.ram.limit ? 'Not enough memory.' : 'Cannot continue — see details.';
   $('capacity-problems').textContent = p.problems.map(problem => problem.includes('runtime ABI not qualified')
-    ? 'These models need a supported original OS file. Trimming samples will not fix this.' : problem).join(' · ');
+    ? 'These models need a supported OS file.' : problem).join(' · ');
   $('capacity-problems').hidden = !p.problems.length;
-  $('room-needs').textContent = [...p.moves.map((m) => `${m.name} moves ${m.preferred}→${m.id} (${m.why}).`),
+  $('room-needs').textContent = [...p.moves.map((m) => `${m.name} moves ${m.preferred}→${m.id}.`),
     ...p.sel.flatMap((s) => needLines(s.m))].join(' ');
-  const trimming = p.trim.report.some(entry => entry.new_words < entry.words);
   $('make-room').hidden = false;
   $('make-room-help').hidden = p.ok || profileRequired;
   $('sample-options').hidden = false;
   $('make-room-help').textContent = !p.dsp2.fits
     ? trimMode() === 'auto' ? 'Still too large. Remove models or lower At most.' : 'Remove models or choose Auto trim.'
-    : 'Review the details or remove models. Trimming only frees sample memory.';
+    : 'Remove models.';
   const swapped = samples.state.swaps.size;
-  $('download-summary').textContent = `${p.sel.length} models. ${swapped ? `${swapped} E12 sample${swapped === 1 ? '' : 's'} replaced. ` : ''}` +
-    `${trimming ? 'E12 sample tails trimmed.' : swapped ? 'Sample tails are kept.' : 'Original E12 samples are kept.'}`;
+  $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
   $('download-needs').hidden = !needs.length;
   $('download-needs').replaceChildren(...(needs.length ? [

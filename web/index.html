@@ -34,12 +34,12 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <label id="drop"><input id="file" type="file" accept=".syx,.bin" aria-label="Choose firmware file"><strong>Drop your OS file here</strong>, or browse<span class="fine">.syx or .bin · <span id="bases">OS 1.63, X.13, X.14 and Em's DEV firmware</span></span></label>
     <details id="firmware-details" hidden><summary>Firmware compatibility details</summary><p class="fine" id="firmware-info"></p></details>
     <button type="button" id="firmware-next" class="wizard-primary" disabled>Samples →</button>
-    <div class="project-load"><label class="fine" for="project-file">Continue a saved project (.kitbasher.json): load it with the same OS file.</label> <input id="project-file" type="file" accept=".json,application/json"><p class="fine" id="project-status" role="status" aria-live="polite"></p></div>
+    <div class="project-load"><label class="fine" for="project-file">Load a saved project</label> <input id="project-file" type="file" accept=".json,application/json"><p class="fine" id="project-status" role="status" aria-live="polite"></p></div>
   </section>
 </section>
 <section id="step-2" class="wizard-page" aria-labelledby="samples-title" hidden>
   <section class="panel selection-panel samples-panel" id="samples-panel">
-    <div class="section-head"><h2 id="samples-title" tabindex="-1">E12 samples</h2><span>Click a pad to hear it. Drop a WAV or AIFF file on a pad to replace it. Drop several files or a folder to fill the pads in order: sorted by name, from the pad you drop on (or from BD), one file per pad. A sample can be as long as the one it replaces; a longer file is cut to that length with a short fade.</span></div>
+    <div class="section-head"><h2 id="samples-title" tabindex="-1">E12 samples</h2><span>Click a pad to hear it. Drop WAV or AIFF files on the pads to replace them.</span></div>
     <div id="sample-ui"></div>
   </section>
   <div class="wizard-actions"><button type="button" data-back="1">← Firmware</button><button type="button" id="samples-next" class="wizard-primary">Choose models →</button></div>
@@ -57,7 +57,7 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <div class="meters"><div class="meter" id="m-dsp2"><div class="top"><span>DSP memory</span><span class="num">Load firmware to calculate</span></div><div class="bar"><div class="fill"></div></div></div><div class="meter" id="m-ram"><div class="top"><span>Names & menus</span><span class="num">Load firmware to calculate</span></div><div class="bar"><div class="fill"></div></div></div><div class="meter" id="m-packed" data-state="pending"><div class="top"><span>Firmware storage</span><span class="num">Checked when you continue</span></div><div class="bar"><div class="fill"></div></div></div></div><details id="capacity-details"><summary>Details</summary><p class="fine">All three must fit.</p><p id="capacity-problems" class="fine" hidden></p><p class="fine" id="capacity-pending">Firmware storage is checked when you continue.</p></details>
   </div>
   <section id="make-room" class="panel trim-panel" hidden><p id="make-room-help">Remove models or trim E12 samples.</p>
-    <div id="sample-options"><p class="fine">Auto trims E12 samples to fit your models. Keep originals if you prefer, then remove models if needed.</p><div class="e12"><label><input type="radio" name="e12" value="auto" checked> Auto trim</label><label><input type="radio" name="e12" value="keep"> Keep originals</label><label><input type="radio" name="e12" value="trim"> Manual trim</label></div><p class="fine" id="trim-effect">Trimming shortens sample tails.</p><div id="trim-controls"><label for="db">Cut below</label><input id="db" type="range" min="-40" max="-10" step="0.1" value="-17"><span id="db-out"></span><label for="cap">At most</label><input id="cap" type="range" min="0" max="1.3" step="0.05" value="1"><span id="cap-out"></span></div></div>
+    <div id="sample-options"><div class="e12"><label><input type="radio" name="e12" value="auto" checked> Auto trim</label><label><input type="radio" name="e12" value="keep"> Keep originals</label><label><input type="radio" name="e12" value="trim"> Manual trim</label></div><div id="trim-controls"><label for="db">Cut below</label><input id="db" type="range" min="-40" max="-10" step="0.1" value="-17"><span id="db-out"></span><label for="cap">At most</label><input id="cap" type="range" min="0" max="1.3" step="0.05" value="1"><span id="cap-out"></span></div></div>
   </section>
   <div class="wizard-actions"><button type="button" data-back="2">← Samples</button><button type="button" id="models-next" class="wizard-primary" disabled>Arrange categories →</button></div>
 </section>
@@ -72,7 +72,7 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
   <div id="result" aria-live="polite"></div>
   <div id="download-needs" class="uw-next" hidden></div>
   <details class="help"><summary>Installation & compatibility</summary><ul class="fine"><li><strong>Use at your own risk.</strong> Installing modified firmware can make your Machinedrum unusable; Kitbasher comes with no warranty.</li><li>Back up first: GLOBAL › SYSEX SEND › ALL into a SysEx recorder. Send the new file from the boot menu (hold FUNCTION at power-on, then [5 LT] MIDI UPGRADE), slowly: a 20 ms gap between messages.</li><li>A failed or unwanted update is recovered the same way, by sending your original file again. The boot menu is never rewritten.</li><li>Kits store machine IDs. Keep your saved layout when rebuilding firmware for existing kits.</li></ul></details>
-  <div class="project-save"><button type="button" id="project-save" class="wizard-secondary">Save project</button> <span class="fine">A .kitbasher.json file with your samples, models, trim and layout. Load it later with the same OS file to build the same firmware.</span></div>
+  <div class="project-save"><button type="button" id="project-save" class="wizard-secondary">Save project</button> </div>
   <div class="wizard-actions"><button type="button" data-back="4">← Categories</button></div>
 </section>
 <p class="footer-note">Unofficial and unsupported. Use at your own risk; provided as is, without warranty. Stock machines are retained. Not affiliated with Elektron. <a href="https://github.com/etcetc000/kitbasher">Source code</a> · <a href="COPYING.txt">GPL v3</a>.</p>
