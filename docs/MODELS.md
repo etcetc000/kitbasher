@@ -8,7 +8,7 @@ assigned machine ID; none replaces a stock machine.
 | Family | Directory | Machines | License |
 |---|---|---|---|
 | Analog recreations | [`examples/analog`](../examples/analog/README.md) | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | GPL v3 or later |
-| Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP | GPL v3 or later |
+| Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP (archived: not on the site) | GPL v3 or later |
 | Noise Plethora | [`examples/noise-plethora`](../examples/noise-plethora/README.md) | NZEPL (30 programs) | GPL-3.0-or-later; Teensy Audio parts MIT |
 | Physical models | [`examples/physical`](../examples/physical/README.md) | PHYKS | MIT |
 | Scaffold | [`examples/scaffold`](../examples/scaffold/README.md) | A silent starting point for your own model | GPL v3 or later |

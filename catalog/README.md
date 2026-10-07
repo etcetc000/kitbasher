@@ -8,6 +8,9 @@ Each file must be an `md-pack/1` model pack, and a catalog holds at most one cor
 pack (`"family": "CORE"`). Visitors can also load pack files of their own into
 the page. See [Model packs](../docs/MODEL-PACKS.md).
 
+`archive/` holds packs taken out of the site for now (WAVSP). The build skips it; move a
+pack back up a level to bundle it again.
+
 `uw/` holds the UW sample files some models read (listed in
 `web/uw-assets.json`). The build serves them next to the page as `uw-data/`.
 
@@ -16,7 +19,7 @@ the page. See [Model packs](../docs/MODEL-PACKS.md).
 | `core.json` | Shared runtime: knob callback, dynamic labels, DSP1 drive | Compiled; source not included |
 | `synths.json` | FMS2O, FMS3O, FMSSW, OSCSW, OSCPW, WAVTB, VOXVO, OSC8B, WAVCH, OSCCH, WAVMR | Compiled; source not included |
 | `np.json` | NZEPL | [`examples/noise-plethora`](../examples/noise-plethora/README.md) |
-| `community-*.json` | FMS4O, VOXFR, OSCSP, OSCAC, WAVSP | [`examples/community`](../examples/community/README.md) |
+| `community-*.json` | FMS4O, VOXFR, OSCSP, OSCAC | [`examples/community`](../examples/community/README.md) |
 | `analog-*.json` | VADBD, VADSD, VADRC, VADPC, VADHH, VADCY, VADSY | [`examples/analog`](../examples/analog/README.md) |
 | `physical-ks.json` | PHYKS | [`examples/physical`](../examples/physical/README.md) |
 
