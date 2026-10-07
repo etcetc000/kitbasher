@@ -1,7 +1,7 @@
 # Project file
 
 **Save project** on the page's Download step writes a `.kitbasher.json` file with your choices.
-Load it on the Firmware step (before or after the OS file) to pick up where you left off; every machine keeps its ID ([Machine IDs](BASES.md#machine-ids)). With the
+Load it on the Firmware step, under *Restore an earlier layout* (before or after the OS file), to pick up where you left off; every machine keeps its ID ([Machine IDs](BASES.md#machine-ids)). With the
 same OS file and the same model packs, the page builds the same `.syx`, byte for byte.
 
 The file holds your choices only: never the OS, and never the stock E12 samples. The code is

@@ -21,8 +21,10 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    firmware: if it has ROM and RAM categories, you have UW. The page waits for a
    Yes or a No, remembers it, and saves it with your layout.
 
-   **Built with Kitbasher before?** Drop the `.syx` you flashed (or your project
-   or layout file) in the same step, so your kits keep finding their machines:
+   **Built with Kitbasher before?** Open *Restore an earlier layout* below the
+   drop zone and drop the `.syx` you flashed (or your project or layout file),
+   so your kits keep finding their machines (a Kitbasher `.syx` dropped as the OS
+   file restores the same way; the page then asks for the stock OS):
    machine IDs are now given from the lowest free one (the same selection, OS,
    UW answer and menu layout always get the same IDs), and earlier builds used
    others. See [Machine IDs](docs/BASES.md#machine-ids).
@@ -91,7 +93,8 @@ Machinedrum, and the hardware test to run before you share an image, is in
 [docs/FIRMWARE-SAFETY.md](docs/FIRMWARE-SAFETY.md).
 
 Saved kits refer to machines by ID. When you rebuild for existing kits, drop
-your previous Kitbasher `.syx`, project or layout file on the first step so every
+your previous Kitbasher `.syx`, project or layout file under *Restore an earlier
+layout* on the first step so every
 machine keeps its ID ([Machine IDs](docs/BASES.md#machine-ids)).
 
 ## Development

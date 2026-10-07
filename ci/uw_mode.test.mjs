@@ -85,12 +85,25 @@ test('ID map without UW: 128 and up unusable with the reason, moves and UW-only 
   assert.match(wav.title, /plays a UW sample/);
 });
 
-test('the first step offers to restore a previous session, a Kitbasher .syx included, and the earlier IDs', () => {
+test('step 1: one OS drop zone; restoring sits in a collapsed "Restore an earlier layout" with one drop zone and the preset', () => {
   const step1 = html.slice(html.indexOf('<section id="step-1"'), html.indexOf('<section id="step-2"'));
-  assert.match(step1, /id="restore"/);
-  assert.match(step1, /id="project-file" type="file" accept="[^"]*\.syx/);
-  assert.match(step1, /id="legacy-ids"/);
-  assert.match(html, /id="ids-warning"/);
+  assert.equal((step1.match(/type="file"/g) ?? []).length, 2);              // the OS, and the restore drop
+  const restore = step1.match(/<details id="restore"[^>]*>([\s\S]*?)<\/details>/);
+  assert.ok(restore, 'a disclosure');
+  assert.doesNotMatch(restore[0], /<details[^>]* open/);                     // collapsed by default
+  assert.match(restore[1], /<summary>Restore an earlier layout<\/summary>/);
+  assert.match(restore[1], /id="project-file" type="file" accept="\.syx,\.bin,\.json/);
+  assert.match(restore[1], /id="legacy-ids"/);
+  assert.doesNotMatch(step1, /Keep your kits/);                              // no big box
+  // the UW question: one row, no always-on effect line, the hint hidden until Not sure
+  const q = step1.match(/<fieldset id="uw-question"[\s\S]*?<\/fieldset>/)[0];
+  assert.doesNotMatch(q, /uw-effect/);
+  assert.match(q, /<p class="fine" id="uw-help" hidden><\/p>/);
+  // a Kitbasher build dropped as the OS is not built on: its layout comes back and the stock OS is asked for
+  assert.match(app, /That's a Kitbasher build: layout restored\. Now drop the stock \$\{want\?\.name \?\? 'OS'\} it was built on\./);
+  // the Download note: one quiet line, hidden once something is restored
+  assert.match(html, /<p id="ids-warning" class="fine" hidden><\/p>/);
+  assert.match(app, /Machine IDs are assigned fresh\./);
   // a restored project never ticks a model this unit cannot play (it would plan with it first)
   assert.match(app, /want\.has\(i\.dataset\.module!\) && !i\.disabled/);
   const refresh = app.slice(app.indexOf('function refresh('), app.indexOf('function refresh(') + 300);

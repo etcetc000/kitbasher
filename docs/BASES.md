@@ -164,7 +164,9 @@ longer fixes its ID.
 **This changed in October 2026.** Earlier builds put some models on fixed IDs
 (OSCPW 175, WAVTB 124, OSC8B 126, VOXVO 127, WAVCH 6, FMSSW 10, FMS2O 11,
 FMS3O 12, OSCSW 13, OSCCH 14, WAVMR 30) and the rest after them. To keep kits
-made with an earlier build working, restore that build's IDs on the first step:
+made with an earlier build working, restore that build's IDs on the first
+step, under *Restore an earlier layout* (a Kitbasher build dropped as the OS
+file is read the same way; the page then asks for the stock OS it was built on):
 
 - drop the **.syx you flashed** (or the .bin): Kitbasher reads the layout table
   every build carries, or, failing that, the machines it added, matched to the

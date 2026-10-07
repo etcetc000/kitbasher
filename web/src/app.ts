@@ -150,9 +150,6 @@ function setUwAnswer(a: UwAnswer, remember = true): void {
   if (remember && (a === 'yes' || a === 'no')) { try { localStorage.setItem(UW_STORAGE_KEY, a); } catch { /* storage unavailable */ } }
   $('uw-help').hidden = a !== 'unsure';
   $('uw-help').textContent = a === 'unsure' ? `${HOW_TO_CHECK} Then choose Yes or No to continue.` : '';
-  $('uw-effect').textContent = a === 'no'
-    ? 'Models that play UW samples are unavailable, every machine gets an ID below 128, and the ROM and RAM categories make room for yours.'
-    : a === 'yes' ? 'All models and IDs are available.' : '';
   const uw = uwOf(a);
   layoutEd.uw = uw;
   if (layoutEd.map && layoutEd.map.uw !== uw) {
@@ -182,6 +179,7 @@ function fileAnswer(uw: boolean | undefined, from: string): void {
 }
 
 // ---- restoring a previous session: the machine IDs saved kits rely on
+const RESTORE_OPEN_KEY = 'kitbasher.restoreOpen';
 const catalogModels = (): PackModel[] => select(data.packs, {}).fams.flatMap((f) => f.models);
 
 /** A layout from a file, a patched OS or the earlier-IDs preset becomes the user's map. */
@@ -426,8 +424,7 @@ function refresh(minAutoDb: number | null = null): void {
   $('download-needs').hidden = !needs.length;
   // nothing restored: a kit made with an earlier Kitbasher build may not find its machines
   $('ids-warning').hidden = layoutEd.restoredFrom !== null;
-  $('ids-warning').textContent = 'No earlier session restored. If you built with Kitbasher before, machine IDs may differ from that build (IDs are now given from the lowest free one), and kits made with it may play the wrong machines. ' +
-    'Go back to the first step and drop that build\'s .syx (or your project or layout file), or use the IDs Kitbasher gave before October 2026.';
+  $('ids-warning').textContent = 'Machine IDs are assigned fresh. To keep your kits\' machines, drop your previous Kitbasher .syx under "Restore an earlier layout" on step 1.';
   $('download-needs').replaceChildren(...(needs.length ? [
     el('h3', {}, 'UW sample data: a separate step'),
     el('p', {}, needs.join(' ')),
@@ -475,11 +472,16 @@ async function onFile(f: File): Promise<void> {
         b = (await identify(parsed, data.bases)).base;
       } else {
         // an OS this page patched: not a base, but it carries its layout, which comes back
+        // a Kitbasher build is not built on: its layout comes back, and the stock OS is asked for
         const got = findLayout(parsed);
         if (request !== fileRequest) return;
         if (!(await restoreFromOs(bytes, f.name))) throw e;
-        const want = got && data.bases.profiles.find((x) => x.id === got.layout.base);
-        status(`${f.name} is an OS Kitbasher built: its machine IDs are restored. Now load the original ${want?.name ?? 'OS'} file to patch it again.`, 'ok');
+        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63)
+        const profile = (id: string | undefined) => data.bases.profiles.find((x) => x.id === id);
+        const built = profile(got?.layout.base);
+        const want = profile((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
+        status(`That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
+        refresh();
         return;
       }
     }
@@ -820,7 +822,6 @@ async function main(): Promise<void> {
       if (!r.checked) return;
       setUwAnswer(r.value as UwAnswer);
       refresh();
-      if (uwAnswer === 'unsure') status(`${HOW_TO_CHECK} Then choose Yes or No.`, 'info');
     });
   }
   setUwAnswer(readStored((k) => localStorage.getItem(k)), false);
@@ -876,6 +877,18 @@ async function main(): Promise<void> {
     const f = e.dataTransfer?.files[0];
     if (f) void onFile(f);
   });
+  const rdrop = $('restore-drop');
+  rdrop.addEventListener('dragover', (e) => { e.preventDefault(); rdrop.classList.add('over'); });
+  rdrop.addEventListener('dragleave', () => rdrop.classList.remove('over'));
+  rdrop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    rdrop.classList.remove('over');
+    const f = e.dataTransfer?.files[0];
+    if (f) void onProjectFile(f);
+  });
+  const restore = $<HTMLDetailsElement>('restore');
+  try { restore.open = localStorage.getItem(RESTORE_OPEN_KEY) === '1'; } catch { /* storage unavailable */ }
+  restore.addEventListener('toggle', () => { try { localStorage.setItem(RESTORE_OPEN_KEY, restore.open ? '1' : '0'); } catch { /* storage unavailable */ } });
   // the trim is the expensive part of a plan: re-plan when a slider is let go, label while moving
   for (const id of ['db', 'cap']) {
     $(id).addEventListener('input', () => {
