@@ -109,6 +109,12 @@ export function fromWordsLE(w: number[]): Uint8Array {
   return out;
 }
 
+export function toBase64(b: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
 export function fromBase64(s: string): Uint8Array {
   const bin = atob(s);
   const out = new Uint8Array(bin.length);

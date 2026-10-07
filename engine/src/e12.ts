@@ -16,7 +16,13 @@ export interface TrimOptions {
   pairs?: boolean;     // pair-aware trim (default on): see e12Pairs
 }
 
-export interface TrimEntry { entry: number; seconds: number; kept: number; words: number; new_words: number; for_partner?: number }
+export interface TrimEntry {
+  entry: number; seconds: number; kept: number; words: number; new_words: number;
+  /** shortened to this first sample's kept length (the pair rule) */
+  for_partner?: number;
+  /** a first sample padded with silence to this partner's length (see trimBank) */
+  padded_for?: number;
+}
 
 /**
  * The E12 machines that play two samples at once (a body and a ring/noise layer) load them as a
@@ -40,7 +46,8 @@ export function e12Pairs(seg: number[], segBase: number, table: number, count: n
   return pairs;
 }
 
-function unpack12(ws: number[]): number[] {
+/** The 12-bit samples of packed bank words, two per word (high half first), as signed values. */
+export function unpack12(ws: ArrayLike<number>): number[] {
   const x = new Array<number>(2 * ws.length);
   for (let i = 0; i < ws.length; i++) {
     const hi = (ws[i] >> 12) & 0xfff;
@@ -51,14 +58,16 @@ function unpack12(ws: number[]): number[] {
   return x;
 }
 
-function pack12(x: number[]): number[] {
-  const y = x.length % 2 ? [...x, 0] : x;
+/** Two 12-bit samples per word, high half first; an odd count gets one silent sample. */
+export function pack12(x: ArrayLike<number>): number[] {
+  x = Array.from(x);
+  const y = x.length % 2 ? [...(x as number[]), 0] : x as number[];
   const out: number[] = [];
   for (let i = 0; i < y.length; i += 2) out.push(((y[i] & 0xfff) << 12) | (y[i + 1] & 0xfff));
   return out;
 }
 
-function roundHalfEven(v: number): number {
+export function roundHalfEven(v: number): number {
   const f = Math.floor(v);
   const d = v - f;
   if (d < 0.5) return f;
@@ -72,9 +81,18 @@ const r3 = (v: number): number => Math.round(v * 1000) / 1000;
 /**
  * seg: the P words of the bank's upload record, starting at `segBase`.
  * Returns the new words, a report, and where the bank now ends.
+ *
+ * `noTrim`: entries left whole whatever the options say (a swapped sample the user wants kept as
+ * is); the pair rule does not shorten them either. `swapped`: entries holding the user's samples.
+ * The pair rule (a trimmed first sample shortens its partner) applies to stock first samples only:
+ * a swapped first sample never cuts its partner. With pairs on, a first sample that ends up shorter
+ * than its partner -- a swapped first, or one whose partner is kept whole -- is padded with silence
+ * to the partner's length instead: the partner is what the user hears, the padding only costs
+ * words, and a swapped first is never longer than its stock entry, which is longer than the
+ * partner's. With neither set given, this is the stock trim, word for word.
  */
 export function trimBank(seg: number[], segBase: number, table: number, count: number, bankEnd: number,
-  opt: TrimOptions): { words: number[]; report: TrimEntry[]; end: number } {
+  opt: TrimOptions, noTrim: ReadonlySet<number> = new Set(), swapped: ReadonlySet<number> = new Set()): { words: number[]; report: TrimEntry[]; end: number } {
   const fade = opt.fade ?? 256;
   const at = (a: number): number => a - segBase;
   const entries = Array.from({ length: count }, (_, i) => [seg[at(table + 3 * i)], seg[at(table + 3 * i + 1)], seg[at(table + 3 * i + 2)]]);
@@ -96,7 +114,7 @@ export function trimBank(seg: number[], segBase: number, table: number, count: n
     const x = unpack12(seg.slice(at(st), at(st + nw)));
     const n = x.length;
     let keep = n;
-    if (n / SR >= opt.minSeconds) {
+    if (!noTrim.has(i) && n / SR >= opt.minSeconds) {
       let peak = 0;
       for (const v of x) peak = Math.max(peak, Math.abs(v));
       const limit = peak * thr;
@@ -117,14 +135,21 @@ export function trimBank(seg: number[], segBase: number, table: number, count: n
   const wordsOf = (k: number): number => Math.ceil(k / 2);
   const plainEnd = starts[0] + keeps.reduce((n, k) => n + wordsOf(k) + PAD, 0);
   const forPartner: (number | undefined)[] = new Array(count).fill(undefined);
+  const padTo: number[] = new Array(count).fill(0);
+  const paddedFor: (number | undefined)[] = new Array(count).fill(undefined);
   if (opt.pairs !== false) {
     const pairs = e12Pairs(seg, segBase, table, count);
     for (let changed = true; changed;) {
       changed = false;
       for (const [a, b] of pairs) {
         if (keeps[a] >= xs[a].length) continue;               // first sample untrimmed: stock behaviour
+        if (swapped.has(a)) continue;                         // the user's first sample: padded below
+        if (noTrim.has(b)) continue;                          // kept whole: the first is padded below
         if (wordsOf(keeps[b]) > wordsOf(keeps[a])) { keeps[b] = keeps[a]; forPartner[b] = a; changed = true; }
       }
+    }
+    for (const [a, b] of pairs) {
+      if (wordsOf(keeps[b]) > wordsOf(Math.max(keeps[a], padTo[a]))) { padTo[a] = 2 * wordsOf(keeps[b]); paddedFor[a] = b; }
     }
   }
   for (let i = 0; i < count; i++) {
@@ -138,6 +163,7 @@ export function trimBank(seg: number[], segBase: number, table: number, count: n
         y[j] = roundHalfEven(y[j] * (k * step + 1));
       }
     }
+    while (y.length < padTo[i]) y.push(0);
     const nwords = pack12(y);
     out[at(table + 3 * i)] = pos;
     out[at(table + 3 * i + 1)] = 2 * nwords.length + LEN_EXTRA;
@@ -145,6 +171,7 @@ export function trimBank(seg: number[], segBase: number, table: number, count: n
     for (let k = 0; k < PAD; k++) out.push(0);
     const row: TrimEntry = { entry: i, seconds: r3(n / SR), kept: r3(y.length / SR), words: nw, new_words: nwords.length };
     if (forPartner[i] !== undefined) row.for_partner = forPartner[i];
+    if (paddedFor[i] !== undefined) row.padded_for = paddedFor[i];
     report.push(row);
     pos += nwords.length + PAD;
   }

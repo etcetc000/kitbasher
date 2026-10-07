@@ -21,9 +21,10 @@
 b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('kitbasher-theme',r.dataset.theme)}catch(e){}sync();});sync();})();</script>
 <nav class="wizard-steps" aria-label="Build progress">
   <button type="button" data-step="1" aria-current="step">1. Firmware</button>
-  <button type="button" data-step="2" disabled>2. Models</button>
-  <button type="button" data-step="3" disabled>3. Categories</button>
-  <button type="button" data-step="4" disabled>4. Download</button>
+  <button type="button" data-step="2" disabled>2. Samples</button>
+  <button type="button" data-step="3" disabled>3. Models</button>
+  <button type="button" data-step="4" disabled>4. Categories</button>
+  <button type="button" data-step="5" disabled>5. Download</button>
 </nav>
 <div id="status" role="status" aria-live="polite">Loading machine packs…</div>
 <section id="step-1" class="wizard-page" aria-labelledby="firmware-title">
@@ -32,10 +33,18 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <p>Choose your original OS 1.63, X.13, X.14 or Em's DEV firmware. Everything runs in this browser; your file stays on your computer.</p>
     <label id="drop"><input id="file" type="file" accept=".syx,.bin" aria-label="Choose firmware file"><strong>Drop your OS file here</strong>, or browse<span class="fine">.syx or .bin · <span id="bases">OS 1.63, X.13, X.14 and Em's DEV firmware</span></span></label>
     <details id="firmware-details" hidden><summary>Firmware compatibility details</summary><p class="fine" id="firmware-info"></p></details>
-    <button type="button" id="firmware-next" class="wizard-primary" disabled>Choose models →</button>
+    <button type="button" id="firmware-next" class="wizard-primary" disabled>Samples →</button>
+    <div class="project-load"><label class="fine" for="project-file">Continue a saved project (.kitbasher.json): load it with the same OS file.</label> <input id="project-file" type="file" accept=".json,application/json"><p class="fine" id="project-status" role="status" aria-live="polite"></p></div>
   </section>
 </section>
-<section id="step-2" class="wizard-page" aria-labelledby="models-title" hidden>
+<section id="step-2" class="wizard-page" aria-labelledby="samples-title" hidden>
+  <section class="panel selection-panel samples-panel" id="samples-panel">
+    <div class="section-head"><h2 id="samples-title" tabindex="-1">E12 samples</h2><span>Click a pad to hear it. Drop a WAV or AIFF file on a pad to replace it. Drop several files or a folder to fill the pads in order: sorted by name, from the pad you drop on (or from BD), one file per pad. A sample can be as long as the one it replaces; a longer file is cut to that length with a short fade.</span></div>
+    <div id="sample-ui"></div>
+  </section>
+  <div class="wizard-actions"><button type="button" data-back="1">← Firmware</button><button type="button" id="samples-next" class="wizard-primary">Choose models →</button></div>
+</section>
+<section id="step-3" class="wizard-page" aria-labelledby="models-title" hidden>
   <div class="workspace">
     <section class="panel selection-panel"><div class="section-head"><h2 id="models-title" tabindex="-1">Choose models</h2><span>Select to include. Click a name for details.</span></div><div id="machines"></div>
       <details class="pack-loader"><summary>Load model packs</summary><label class="fine">Catalog <select id="pack-mode" aria-label="Pack loading mode"><option value="add">Add to current catalog</option><option value="replace">Replace catalog</option></select></label><p class="fine">Replacing a catalog? Load core.json and its family packs together.</p><label class="fine" id="packs-load">Pack file(s) <input id="pack-files" type="file" accept=".json,application/json" multiple aria-label="Load pack files"></label><p class="fine" id="packs-status"></p></details>
@@ -50,20 +59,21 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
   <section id="make-room" class="panel trim-panel" hidden><p id="make-room-help">Remove models or trim E12 samples.</p>
     <div id="sample-options"><p class="fine">Auto trims E12 samples to fit your models. Keep originals if you prefer, then remove models if needed.</p><div class="e12"><label><input type="radio" name="e12" value="auto" checked> Auto trim</label><label><input type="radio" name="e12" value="keep"> Keep originals</label><label><input type="radio" name="e12" value="trim"> Manual trim</label></div><p class="fine" id="trim-effect">Trimming shortens sample tails.</p><div id="trim-controls"><label for="db">Cut below</label><input id="db" type="range" min="-40" max="-10" step="0.1" value="-17"><span id="db-out"></span><label for="cap">At most</label><input id="cap" type="range" min="0" max="1.3" step="0.05" value="1"><span id="cap-out"></span></div></div>
   </section>
-  <div class="wizard-actions"><button type="button" data-back="1">← Firmware</button><button type="button" id="models-next" class="wizard-primary" disabled>Arrange categories →</button></div>
+  <div class="wizard-actions"><button type="button" data-back="2">← Samples</button><button type="button" id="models-next" class="wizard-primary" disabled>Arrange categories →</button></div>
 </section>
-<section id="step-3" class="wizard-page" aria-label="Arrange categories" hidden>
+<section id="step-4" class="wizard-page" aria-label="Arrange categories" hidden>
   <div id="layout-anchor"></div>
-  <div class="wizard-actions"><button type="button" data-back="2">← Models</button><button type="button" id="categories-next" class="wizard-primary">Download →</button></div>
+  <div class="wizard-actions"><button type="button" data-back="3">← Models</button><button type="button" id="categories-next" class="wizard-primary">Download →</button></div>
 </section>
-<section id="step-4" class="wizard-page" aria-labelledby="download-title" hidden>
+<section id="step-5" class="wizard-page" aria-labelledby="download-title" hidden>
   <h2 id="download-title" tabindex="-1">Download firmware</h2>
   <p id="download-summary"></p>
   <button id="build" type="button" class="wizard-primary" disabled>Create SysEx</button>
   <div id="result" aria-live="polite"></div>
   <div id="download-needs" class="uw-next" hidden></div>
   <details class="help"><summary>Installation & compatibility</summary><ul class="fine"><li><strong>Use at your own risk.</strong> Installing modified firmware can make your Machinedrum unusable; Kitbasher comes with no warranty.</li><li>Back up first: GLOBAL › SYSEX SEND › ALL into a SysEx recorder. Send the new file from the boot menu (hold FUNCTION at power-on, then [5 LT] MIDI UPGRADE), slowly: a 20 ms gap between messages.</li><li>A failed or unwanted update is recovered the same way, by sending your original file again. The boot menu is never rewritten.</li><li>Kits store machine IDs. Keep your saved layout when rebuilding firmware for existing kits.</li></ul></details>
-  <div class="wizard-actions"><button type="button" data-back="3">← Categories</button></div>
+  <div class="project-save"><button type="button" id="project-save" class="wizard-secondary">Save project</button> <span class="fine">A .kitbasher.json file with your samples, models, trim and layout. Load it later with the same OS file to build the same firmware.</span></div>
+  <div class="wizard-actions"><button type="button" data-back="4">← Categories</button></div>
 </section>
 <p class="footer-note">Unofficial and unsupported. Use at your own risk; provided as is, without warranty. Stock machines are retained. Not affiliated with Elektron. <a href="https://github.com/etcetc000/kitbasher">Source code</a> · <a href="COPYING.txt">GPL v3</a>.</p>
 </main><dialog id="screen-dialog" aria-label="Enlarged screen preview"><form method="dialog"><button>Close preview</button></form><div class="screen"><div class="lcd-glass"><canvas id="large-lcd" width="128" height="64" role="img" aria-label="Enlarged machine screen"></canvas></div></div><p>Screen reconstruction, not a live emulator.</p></dialog><script type="module" src="app.js"></script></body></html>

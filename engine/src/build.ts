@@ -86,7 +86,9 @@ export interface BuildReport {
   machines: { key: string; name: string; id: number; preferred: number; family: string; org: string; words: number;
                /** the cache offset this origin was put on, the words skipped for it, and the sectors it saves */
                align?: { offset: number; pad: number; sectors: [number, number] } }[];
-  e12: { threshold_db: number; min_seconds: number; cap: number | null; bank_end: string; freed_words: number; samples: TrimEntry[] };
+  e12: { threshold_db: number; min_seconds: number; cap: number | null; bank_end: string; freed_words: number; samples: TrimEntry[];
+         /** present only with sample edits: the swapped entries, those cut to their stock length, those kept whole, and firsts padded for a partner */
+         edits?: { swapped: number[]; capped: number[]; no_trim: number[]; padded: { entry: number; for: number }[] } };
   dsp2: { packed: number; base_packed: number; packed_capacity: number | null; raw: number; regions: [string, string][]; machine_words: number; free_words: number;
           /** words spent on instruction-cache alignment that nothing else took (0 with --no-align) */
           align_padding: number; aligned: number };
@@ -632,7 +634,10 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     machines: pl.dsp2.machines.map((m) => ({ key: m.key, name: m.name, id: m.id, preferred: m.preferred, family: m.family,
                                               org: h(m.org), words: m.words, ...(m.align ? { align: m.align } : {}) })),
     e12: { threshold_db: opt.trim.db, min_seconds: opt.trim.minSeconds, cap: opt.trim.cap, bank_end: h(trim.end),
-           freed_words: D.bankEnd - trim.end, samples: trim.report.filter((r) => r.kept < r.seconds) },
+           freed_words: D.bankEnd - trim.end, samples: trim.report.filter((r) => r.kept < r.seconds),
+           ...(trim.edits ? { edits: { swapped: [...trim.edits.swaps.keys()].sort((a, b) => a - b), capped: trim.capped,
+             no_trim: [...trim.edits.noTrim].sort((a, b) => a - b),
+             padded: trim.report.filter((r) => r.padded_for !== undefined).map((r) => ({ entry: r.entry, for: r.padded_for! })) } } : {}) },
     dsp2: { packed: comp.length - (keep ? pad : 0), base_packed: d2.length, packed_capacity: keep ? room - (reclaimTail ? payloadEnd - streamEnd : 0) : null, raw: newDsp2.length, regions: regions.map(([a, b]) => [h(a), h(b)]),
             machine_words: pl.dsp2.capacity - pl.dsp2.free, free_words: pl.dsp2.free,
             align_padding: pl.dsp2.padding, aligned: pl.dsp2.machines.filter((m) => m.align).length },

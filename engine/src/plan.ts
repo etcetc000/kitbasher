@@ -15,6 +15,7 @@ import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
 import { trimBank, type TrimEntry, type TrimOptions } from './e12.js';
+import { applySwaps, bankRun, type SampleEdits } from './samples.js';
 import { codeImages } from './bases.js';
 import { handlerAt } from './recover.js';
 import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js';
@@ -93,6 +94,11 @@ export interface Selection extends ModelFilter {
   dsp1Watchdog?: number;
   /** --ctr-control-all (build.ts BuildOptions): here so the plan can refuse it on a base without its sites */
   ctrControlAll?: boolean;
+  /**
+   * The user's E12 samples (engine/src/samples.ts): swapped entries, and entries the trim leaves
+   * whole. Absent or empty: the stock bank, and every output byte-identical to a build without it.
+   */
+  samples?: SampleEdits;
 }
 
 // Which descriptors 'auto' moves to flash first is the packs' `flash_rank` (the ones hardware has
@@ -106,6 +112,9 @@ export interface Trimmed {
   words: number[];                 // the re-laid bank
   end: number;                     // where the bank now ends
   report: TrimEntry[];
+  /** the sample edits this bank was laid with (null: stock), and swaps cut to their stock length */
+  edits: SampleEdits | null;
+  capped: number[];
 }
 
 export interface Placement {
@@ -213,30 +222,34 @@ export function baseCtrCoverage(fw: Firmware, base: Base): CtrCoverage {
  * memory loads what one record over the same words loads, so the run is re-recorded as one
  * (X.13's own upload is 1.63's re-recorded this way). Nothing else in the upload may write there.
  */
-export function trimFor(fw: Firmware, base: Base, opt: TrimOptions): Trimmed {
+export function trimFor(fw: Firmware, base: Base, opt: TrimOptions, samples?: SampleEdits): Trimmed {
   const D = base.dsp2;
-  const w = wordsLE(fw.slots[1].raw);
-  const { recs } = records(w);
-  const first = recs.findIndex((r) => r.addr === D.bankRecord && r.tag === 0);
-  if (first < 0 || recs.filter((r) => r.addr === D.bankRecord && r.tag === 0).length !== 1) {
-    throw new Error(`expected one upload record starting the E12 bank at ${h(D.bankRecord)}`);
+  const run = bankRun(fw, base);
+  const edited = !!samples && (samples.swaps.size > 0 || samples.noTrim.size > 0);
+  let bank = run.bank, bankEnd = D.bankEnd, capped: number[] = [], changed: number[] = [];
+  if (samples && samples.swaps.size) {
+    const s = swappedBank(fw, base, run.bank, samples);
+    bank = s.words; bankEnd = s.end; capped = s.capped; changed = s.changed;
   }
-  let last = first;
-  while (D.bankRecord + recs.slice(first, last + 1).reduce((n, r) => n + r.count, 0) < D.bankEnd) {
-    const r = recs[last + 1];
-    const at = recs[last].addr + recs[last].count;
-    if (!r || r.tag !== 0 || r.addr !== at) throw new Error(`the E12 bank's records break off at ${h(at)} before ${h(D.bankEnd)}`);
-    last++;
-  }
-  const run = recs.slice(first, last + 1);
-  if (run[run.length - 1].addr + run[run.length - 1].count !== D.bankEnd) throw new Error('E12 bank record does not end where the bank does');
-  const other = recs.filter((r, i) => (i < first || i > last) && r.tag === 0 && r.addr < D.bankEnd && r.addr + r.count > D.bankRecord);
-  if (other.length) throw new Error(`another upload record writes into the E12 bank at ${h(other[0].addr)}`);
-  const bank = run.flatMap((r) => w.slice(r.index + 3, r.index + 3 + r.count));
-  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, opt);
-  const end = run[run.length - 1];
-  return { opt, bankIndex: run[0].index, bankEndIndex: end.index + 3 + end.count, bankRecords: run.length,
-           words: t.words, end: t.end, report: t.report };
+  // only samples that differ from the stock ones are the user's: a swap equal to stock is stock
+  const t = trimBank(bank, D.bankRecord, D.e12Table, D.e12Count, bankEnd, opt, samples?.noTrim, new Set(changed));
+  // a copy of the edits, so the report says exactly what was laid even if the caller's change later
+  const edits = edited ? { swaps: new Map(samples!.swaps), noTrim: new Set(samples!.noTrim) } : null;
+  return { opt, bankIndex: run.bankIndex, bankEndIndex: run.bankEndIndex, bankRecords: run.bankRecords,
+           words: t.words, end: t.end, report: t.report, edits, capped };
+}
+
+// The swapped bank, laid once per edits object and firmware: the page's auto trim calls trimFor for
+// up to ~40 thresholds with the same edits. Callers pass a fresh SampleEdits object whenever the
+// edits change (the page snapshots them per revision); one changed in place is not seen here.
+const swapCache = new WeakMap<SampleEdits, WeakMap<Uint8Array, ReturnType<typeof applySwaps>>>();
+function swappedBank(fw: Firmware, base: Base, bank: number[], samples: SampleEdits): ReturnType<typeof applySwaps> {
+  const D = base.dsp2;
+  let byFw = swapCache.get(samples);
+  if (!byFw) { byFw = new WeakMap(); swapCache.set(samples, byFw); }
+  let s = byFw.get(fw.slots[1].raw);
+  if (!s) { s = applySwaps(bank, D.bankRecord, D.e12Table, D.e12Count, D.bankEnd, samples.swaps); byFw.set(fw.slots[1].raw, s); }
+  return s;
 }
 
 /**
@@ -540,7 +553,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const needs = sel.filter((s) => s.m.needs?.length).map((s) => ({ name: s.m.name.trim(), needs: s.m.needs! }));
   const commits = [...new Set(packs.map((p) => p.source?.commit).filter(Boolean))];
   if (commits.length > 1) notes.push(`packs built from ${commits.length} different source commits: ${commits.map((c) => c.slice(0, 7)).join(', ')}`);
-  const trim = trimmed ?? trimFor(fw, base, opt.trim);
+  const trim = trimmed ?? trimFor(fw, base, opt.trim, opt.samples);
   const workspace = sel.some((s) => s.m.workspace);
   const wsNames = sel.filter((s) => s.m.workspace).map((s) => s.m.name.trim()).join(', ');
   if (workspace && trim.end > D.workspace.base) {
