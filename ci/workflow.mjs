@@ -6,7 +6,7 @@
 //   build       typecheck, then bundle the site into web/dist
 //   check       typecheck, unit suites and build: the full gate CI runs
 //   assembly    instruction-encoding tests; needs the native assembler
-//   community-check  export examples/community, examples/analog and examples/physical and check
+//   community-check  export examples/community, examples/analog, examples/physical and examples/effects and check
 //               each pack holds exactly its model; needs the native assembler
 //   ksstr       run PHYKS from catalog/ on the DSP instruction host against its integer model;
 //               needs dspHost

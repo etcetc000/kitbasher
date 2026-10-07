@@ -1,0 +1,79 @@
+{
+  "format": "md-model/1",
+  "key": "NFX/4P",
+  "version": "1.0.0",
+  "kit_abi": 1,
+  "injection": {
+    "mode": "add"
+  },
+  "panel": {
+    "name": "NFX4P",
+    "category": "FX",
+    "knobs": [
+      {
+        "label": "FREQ",
+        "default": 64
+      },
+      {
+        "label": "RESO",
+        "default": 0
+      },
+      {
+        "label": "MODE",
+        "default": 0
+      },
+      {
+        "label": "ENVA",
+        "default": 64
+      },
+      {
+        "label": "ATK",
+        "default": 0
+      },
+      {
+        "label": "DEC",
+        "default": 64
+      },
+      {
+        "label": "GAIN",
+        "default": 64
+      },
+      {
+        "label": "VCA",
+        "default": 127
+      }
+    ],
+    "modes": []
+  },
+  "components": {
+    "dsp2": {
+      "source": "dsp2.asm",
+      "tables": "tables.asm",
+      "abi": "md-voice/1"
+    }
+  },
+  "memory": [
+    {
+      "kind": "voice",
+      "space": "XY",
+      "words": 64,
+      "alignment": 64,
+      "lifetime": "track-assignment",
+      "init": "model",
+      "release": "successor-init"
+    }
+  ],
+  "samples": [],
+  "budget": {
+    "render_cps": 142,
+    "trigger_cycles": 130,
+    "init_cycles": 40
+  },
+  "provenance": [
+    {
+      "origin": "NFX-4P v6 neighbour ladder filter by janne808",
+      "license": "GPL-3.0-or-later",
+      "reference": "Ladder after Kocmoc uLADR (janne808/kocmoc-rack-modules, src/uLADR.cpp); formula-generated tables (make_tables.py)"
+    }
+  ]
+}

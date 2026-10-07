@@ -48,7 +48,7 @@ Values must be absolute paths. Only `packDir` has a default.
 | `npm run build` | Bundle the site into `web/dist` |
 | `npm run dev -- [PACK_DIR] [PORT]` | Build and serve the site on `127.0.0.1` (default port 8767), rebuilding as you edit |
 | `npm run test:assembly` | Instruction-encoding tests; needs the native assembler |
-| `npm run test:community` | Export every model in `examples/community`, `examples/analog` and `examples/physical`; needs the native assembler |
+| `npm run test:community` | Export every model in `examples/community`, `examples/analog`, `examples/physical` and `examples/effects`; needs the native assembler |
 | `npm run test:ksstr` | Run PHYKS on the DSP instruction host and compare every sample with its integer model; needs `dspHost` |
 | `npm run doctor` | Check your toolchain and local paths |
 

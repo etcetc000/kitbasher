@@ -50,9 +50,9 @@ Details per base are in [docs/BASES.md](docs/BASES.md).
 
 ## Models
 
-Sources for four model families live in [`examples/`](examples/): seven analog
+Sources for five model families live in [`examples/`](examples/): seven analog
 drum and synth recreations, five community synth voices, a 30-program port of
-Befaco's Noise Plethora and a Karplus–Strong string. [docs/MODELS.md](docs/MODELS.md) describes them, with
+Befaco's Noise Plethora, a Karplus–Strong string and a ladder filter effect. [docs/MODELS.md](docs/MODELS.md) describes them, with
 their credits and licenses.
 
 ## Safety

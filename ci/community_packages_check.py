@@ -1,4 +1,4 @@
-"""Export every model in examples/community, examples/analog and examples/physical with the native assembler.
+"""Export every model in examples/community, examples/analog, examples/physical and examples/effects with the native assembler.
 
 Each directory listed in examples/<collection>/catalog.json is exported (the exporter checks
 eight relocation placements per code block), and the resulting pack must hold exactly the listed
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'packs'))
 from assembly_export import export
 
-COLLECTIONS = ('community', 'analog', 'physical')
+COLLECTIONS = ('community', 'analog', 'physical', 'effects')
 
 
 def main():

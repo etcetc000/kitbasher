@@ -75,6 +75,11 @@ const overrides: Record<string, Record<string, Help>> = {
  OSC8B:{NOTE:['Note','Sets the oscillator pitch.'],PWAD:['Pulse-width movement','Sets the amount of pulse-width movement after a hit.'],PWRS:['Pulse-width rate','Sets how quickly pulse width moves.'],MOD:['Modulation mode','Selects the sync and ring-modulation behavior.'],MFRQ:['Modulator frequency','Tunes the modulation oscillator; 127 makes it follow the note.']},
  PHYKS:{DEC:['String decay','Sets how long the string rings, from a short pluck to a long sustain.'],DAMP:['Damping','Softens the string as it rings: higher values fade the upper harmonics faster.'],LEVL:['Level','Sets the output level. At 0 the voice is silent.'],HAMR:['Hammer','Blends the excitation from a noise pluck to a single hammer strike.'],PICK:['Pick brightness','Sets the brightness of the pluck or strike; low values give a softer attack.'],BEND:['Pitch bend','Starts each hit up to about an octave sharp, then falls back to the set pitch. At 0 there is no bend.'],BDEC:['Bend time','Sets how quickly the pitch bend falls back, from 1 ms to 250 ms. It has no effect while BEND is at 0.']},
  VOXVO:{VOIC:['Voicing / breath','Blends pitched vocal pulses with breath noise.']},
+ NFX4P:{FREQ:['Cutoff','Sets the ladder filter cutoff applied to the previous track.'],RESO:['Resonance','Feeds the fourth pole back to the input; above about 100 the filter self-oscillates.'],
+  MODE:['Filter slope','0-63 takes the fourth pole (24 dB/oct low-pass), 64-127 the second (12 dB/oct).'],ENVA:['Envelope amount','Sets how far each trig\'s envelope moves the cutoff: 64 for none, higher sweeps up, lower sweeps down.'],
+  ATK:['Envelope attack','Sets how quickly the envelope rises after a trig, from 1 ms to 10 s.'],DEC:['Envelope decay','Sets how quickly the envelope falls after its peak, from 1 ms to 10 s.'],
+  GAIN:['Input drive','Drives the previous track into the ladder: higher values saturate harder and raise the level.'],
+  VCA:['Output VCA','127 passes the filter through; 64-126 shapes the level with the envelope; 0-63 opens a gate for a fixed time on each trig.']},
 };
 export function parameterHelp(model: PackModel): {label: string; name: string; description: string}[] {
  return model.labels.flatMap(label => {

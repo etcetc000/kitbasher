@@ -23,7 +23,7 @@ the encoder first (see the [scaffold example](../examples/scaffold/README.md)) a
 set `assembler` in `.local/config.json` or `MD_ASSEMBLER`.
 
 `npm run test:community` uses the same encoder to export every model in
-`examples/community`, `examples/analog` and `examples/physical`, checking each at
+`examples/community`, `examples/analog`, `examples/physical` and `examples/effects`, checking each at
 eight relocation placements. The packs and a `result.json` go to a new directory
 under `build/`.
 

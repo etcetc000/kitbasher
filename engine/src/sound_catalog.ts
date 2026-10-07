@@ -44,6 +44,7 @@ export const catalog: Record<string, Entry> = {
   OSCPW: entry('Synths', 'A pulse synth with pulse-width control, unison spread and sub oscillators.'),
   NZEPL: entry('Hi-hats & cymbals', 'Thirty noise and drone programs after the Befaco Noise Plethora: clusters, cross-modulation, filtered noise, walks and grains.'),
   PHYKS: entry('Physical modeling', 'A plucked or hammered string with decay, damping, pick brightness and a pitch bend that falls into the note.'),
+  NFX4P: entry('Effects', 'A resonant 4-pole ladder filter on the previous track, with a trig envelope on the cutoff and an envelope or gate VCA.'),
   VOXVO: entry('Vocal', 'A vocal synth with two vowel controls, voice selection, formant and resonance.'),
 };
 export function describe(name: string): { category: string; description: string } {
