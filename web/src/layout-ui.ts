@@ -21,6 +21,8 @@ import {
 import type { Plan } from '../../engine/src/plan.js';
 import { drawMenuLcd } from './lcd.js';
 import { describeModel } from './catalog.js';
+import { needsUwSamples } from '../../engine/src/packs.js';
+import { idCell, menuLimit, shownStock, usableId } from './uw-mode.js';
 
 const CSS = `
 .layout-panel{margin-top:20px;padding:16px 20px}
@@ -73,6 +75,8 @@ const CSS = `
 .lay-ids .cell[data-state=ours][data-moved]{background:#dbe7ff;border-color:#1e3f8a}
 .lay-ids .cell[data-state=base]{background:var(--chip);color:#a7b0b6}
 .lay-ids .cell[data-state=dead]{background:repeating-linear-gradient(135deg,#f3f4f5 0 3px,#e6e9eb 3px 6px);color:#b5bcc1}
+.lay-ids .cell[data-state=nouw]{background:repeating-linear-gradient(45deg,#f6efe9 0 3px,#eadbd0 3px 6px);color:#b59a86}
+.lay-stock span[data-hidden]{text-decoration:line-through;opacity:.6}
 .lay-ids .cell[data-over]{outline:2px solid #467fa9}
 .lay-ids .cell[data-refuse]{outline:2px solid var(--err)}
 .lay-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin:8px 0 0}
@@ -94,6 +98,12 @@ const el = (tag: string, props: Record<string, string> = {}, ...kids: (Node | st
 export class LayoutEditor {
   /** the user's map; null until they change something (then the build gets it) */
   map: Layout | null = null;
+  /** the answer to the page's UW question (true, false, or unanswered): saved with the layout */
+  uw: boolean | undefined = undefined;
+  private get noUw(): boolean { return this.uw === false; }
+  /** why each machine the build moved is off its usual ID, by key */
+  private moveWhy = new Map<string, string>();
+  private needsUw = new Set<string>();
   private base: Base | null = null;
   private slots: IdSlot[] = [];
   private stock: BaseFamily[] = [];
@@ -148,6 +158,8 @@ export class LayoutEditor {
     this.names = new Map(p.sel.map((s) => [s.m.key, s.m.name.trim()]));
     this.blurbs = new Map(p.sel.map((s) => [s.m.key, describeModel(s.m).description]));
     this.preferred = new Map(p.sel.map((s) => [s.m.key, s.preferred]));
+    this.moveWhy = new Map(p.moves.flatMap((mv) => p.sel.filter((s) => s.m.name.trim() === mv.name.trim()).map((s) => [s.m.key, mv.why] as [string, string])));
+    this.needsUw = new Set(p.sel.filter((s) => needsUwSamples(s.m)).map((s) => s.m.key));
     this.eff = p.layout ?? defaultLayout(this.base, p.menus, (k) => placed.get(k)!);
     this.draw();
   }
@@ -192,7 +204,7 @@ export class LayoutEditor {
 
   private setId(key: string, id: number): void {
     const s = this.slots[id];
-    if (!s || s.state !== 'free') { this.say(`${this.names.get(key)} cannot take ID ${id}: ${s?.why ?? 'outside 0..191'}.`, 'error'); return; }
+    if (!s || !usableId(s, this.noUw)) { this.say(`${this.names.get(key)} cannot take ID ${id}: ${s && s.state === 'free' ? 'a Machinedrum without UW cannot use IDs 128 and up' : s?.why ?? 'outside 0..191'}.`, 'error'); return; }
     this.edit((l) => {
       const other = Object.keys(l.machines).find((k) => k !== key && this.names.has(k) && l.machines[k].id === id);
       const was = l.machines[key].id;
@@ -246,14 +258,17 @@ export class LayoutEditor {
     // categories
     const menu = el('div', { class: 'lay-menu' },
       el('h3', {}, 'Built-in categories (read-only)'),
-      el('div', { class: 'lay-stock' }, ...this.stock.map((f) => el('span', { title: f.machines.map((m) => m.name).join(' ') }, `${f.name} ${f.machines.length}`))),
+      el('div', { class: 'lay-stock' }, ...this.stock.map((f) => shownStock(this.stock, this.noUw).includes(f)
+        ? el('span', { title: f.machines.map((m) => m.name).join(' ') }, `${f.name} ${f.machines.length}`)
+        : el('span', { 'data-hidden': '', title: `${f.name}: hidden on a Machinedrum without UW; your categories take its place` }, `${f.name} ${f.machines.length}`))),
       el('h3', {}, 'Your categories, in menu order'));
     l.categories.forEach((c, ci) => menu.append(this.catCard(l, c, ci)));
     const add = el('button', { type: 'button', class: 'lay-add', id: 'lay-new' }, '+ New category');
     add.addEventListener('click', () => this.edit((x) => {
       let n = 1;
       while (x.categories.includes(`NW${n}`)) n++;
-      if (this.stock.length + x.categories.length >= lim.maxFamilies) return `!The menu takes ${lim.maxFamilies} categories.`;
+      const max = menuLimit(lim.maxFamilies, this.noUw);
+      if (shownStock(this.stock, this.noUw).length + x.categories.length >= max) return `!The menu takes ${max} categories.`;
       x.categories.push(`NW${n}`);
       this.previewCategory = `NW${n}`;
       return `Category NW${n} added: rename it, then drag machines into it.`;
@@ -265,18 +280,14 @@ export class LayoutEditor {
     const ids = el('div', { class: 'lay-ids', role: 'grid', 'aria-label': 'Machine IDs 0 to 191' });
     for (const s of this.slots) {
       const k = byId.get(s.id);
-      const state = k ? 'ours' : s.state;
-      const moved = k && this.preferred.get(k) !== s.id;
-      const title = k ? `${s.id}: ${this.names.get(k)}${moved ? ` (its usual ID is ${this.preferred.get(k)})` : ''}` +
-        (s.id >= 124 && s.id <= 127 ? ' — the CTR-range fix is applied for this ID' : '')
-        : s.state === 'free' ? `${s.id}: free — drop a machine here` : `${s.id}: ${s.why}`;
-      const cell = el('div', { class: 'cell', role: 'gridcell', 'data-id': String(s.id), 'data-state': state, title, ...(moved ? { 'data-moved': '' } : {}) },
-        el('span', {}, String(s.id)), k ? el('b', {}, this.names.get(k)!) : s.state === 'base' ? el('span', {}, s.name ?? '') : '');
+      const c = idCell(s, this.noUw, k ? { name: this.names.get(k)!, usual: this.preferred.get(k)!, why: this.moveWhy.get(k), needsUw: this.needsUw.has(k) } : undefined);
+      const cell = el('div', { class: 'cell', role: 'gridcell', 'data-id': String(s.id), 'data-state': c.state, title: c.title, ...(c.moved ? { 'data-moved': '' } : {}) },
+        el('span', {}, String(s.id)), k ? el('b', {}, c.label) : c.label ? el('span', {}, c.label) : '');
       if (k) { cell.draggable = true; cell.addEventListener('dragstart', (e) => this.start(e, k)); }
       cell.addEventListener('dragover', (e) => {
         if (!this.drag) return;
         e.preventDefault();
-        cell.toggleAttribute(s.state === 'free' ? 'data-over' : 'data-refuse', true);
+        cell.toggleAttribute(usableId(s, this.noUw) ? 'data-over' : 'data-refuse', true);
       });
       cell.addEventListener('dragleave', () => { cell.removeAttribute('data-over'); cell.removeAttribute('data-refuse'); });
       cell.addEventListener('drop', (e) => { e.preventDefault(); const d = this.drag; this.drag = null; if (d) this.setId(d, s.id); });
@@ -286,7 +297,8 @@ export class LayoutEditor {
       el('span', {}, el('i', { style: 'background:#fff' }), 'free'), el('span', {}, el('i', { style: 'background:#e8eef7' }), 'yours'),
       el('span', {}, el('i', { style: 'background:#dbe7ff;border-color:#1e3f8a' }), 'yours, off its usual ID'),
       el('span', {}, el('i', { style: 'background:var(--chip)' }), `${this.base!.name}'s own`),
-      el('span', {}, el('i', { style: 'background:repeating-linear-gradient(135deg,#f3f4f5 0 3px,#e6e9eb 3px 6px)' }), 'MIDI range, no sound'));
+      el('span', {}, el('i', { style: 'background:repeating-linear-gradient(135deg,#f3f4f5 0 3px,#e6e9eb 3px 6px)' }), 'MIDI range, no sound'),
+      this.noUw ? el('span', {}, el('i', { style: 'background:repeating-linear-gradient(45deg,#f6efe9 0 3px,#eadbd0 3px 6px)' }), '128 and up: not usable without UW') : '');
     const grid = el('div', { class: 'lay-grid' }, menu, this.menuPreview(l));
     const advanced = el('details', { class: 'lay-advanced', id: 'lay-advanced' }) as HTMLDetailsElement;
     advanced.open = this.advancedOpen;
@@ -304,7 +316,8 @@ export class LayoutEditor {
   }
 
   private menuPreview(l: Layout): HTMLElement {
-    const categories = [...this.stock.map(f => ({ key: `stock:${f.name}`, name: f.name, machines: f.machines.map(m => m.name.trim()) })),
+    // without UW the unit hides ROM and RAM and shows ours in their place (engine/src/uw_menu.ts)
+    const categories = [...shownStock(this.stock, this.noUw).map(f => ({ key: `stock:${f.name}`, name: f.name, machines: f.machines.map(m => m.name.trim()) })),
       ...l.categories.map(c => ({ key: c, name: c, machines: this.inCat(l, c).map(k => this.names.get(k)!) }))];
     if (!categories.some(c => c.key === this.previewCategory)) this.previewCategory = l.categories[0] ?? categories[0]?.key ?? null;
     const select = el('select', { id: 'lay-preview-category', 'aria-label': 'Preview category' }) as HTMLSelectElement;
@@ -408,8 +421,8 @@ export class LayoutEditor {
     const owner = new Map(Object.entries(l.machines).filter(([x]) => this.names.has(x)).map(([x, v]) => [v.id, x]));
     for (const s of this.slots) {
       const o = owner.get(s.id);
-      const usable = s.state === 'free';
-      const label = !usable ? `${s.id} — ${s.why}` : o && o !== k ? `${s.id} — swap with ${this.names.get(o)}` : `${s.id}${s.id === this.preferred.get(k) ? ' (usual)' : ''}`;
+      const usable = usableId(s, this.noUw);
+      const label = !usable ? `${s.id} — ${s.state === 'free' ? 'not usable without UW' : s.why}` : o && o !== k ? `${s.id} — swap with ${this.names.get(o)}` : `${s.id}${s.id === this.preferred.get(k) ? ' (usual)' : ''}`;
       const opt = el('option', { value: String(s.id) }, label) as HTMLOptionElement;
       if (!usable) opt.disabled = true;
       if (s.id === m.id) opt.selected = true;
@@ -445,7 +458,7 @@ export class LayoutEditor {
   private async exportMap(): Promise<void> {
     if (!this.eff) return;
     const fp = await fingerprint(this.eff);
-    const text = JSON.stringify({ ...this.eff, fingerprint: fp }, null, 1);
+    const text = JSON.stringify({ ...this.eff, ...(this.uw === undefined ? {} : { uw: this.uw }), fingerprint: fp }, null, 1);
     const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: `md-layout-${this.eff.base}-${fp}.json` }) as HTMLAnchorElement;
     document.body.append(a);
     a.click();

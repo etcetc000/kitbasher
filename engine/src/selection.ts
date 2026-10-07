@@ -2,7 +2,10 @@
 import type { Base } from './bases.js';
 import type { Layout } from './layout.js';
 import { u32 } from './bytes.js';
-import { checkPack, type Pack, type PackModel, type PackTable } from './packs.js';
+import { checkPack, needsUwSamples, type Pack, type PackModel, type PackTable } from './packs.js';
+
+/** Machine IDs a Machinedrum without UW can use: below 128 (it takes 128 off any higher one). */
+export const NO_UW_ID_LIMIT = 128;
 
 export interface ModelFilter {
   modelKeys?: string[];
@@ -97,7 +100,7 @@ export function resolveLayout(l: Layout, aliases: Map<string, string>): Layout {
     from.set(key, k);
     machines[key] = p;
   }
-  return { format: l.format, base: l.base, categories: l.categories, machines };
+  return { format: l.format, base: l.base, categories: l.categories, machines, ...(l.uw === undefined ? {} : { uw: l.uw }) };
 }
 
 export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; shared: PackTable[]; aliases: Map<string, string> } {
@@ -132,13 +135,22 @@ export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; share
  * Every machine on its preferred ID. Saved kits address machines by ID, so an ID that is not
  * free is an error naming why; only with `allowMove` does the machine take the next free ID up,
  * and every such move is returned.
+ *
+ * `noUw` (a Machinedrum without UW, which takes 128 off any machine ID of 128 or more): no
+ * machine goes on 128 and up. A machine pinned there (its preferred ID, or the map's) moves to the
+ * lowest free ID below 128, reported as a move whether or not `allowMove` is set; automatic IDs
+ * stay below 128; a model that plays a UW sample is refused.
  */
 export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowMove: boolean, layout: Layout | undefined,
-  listed: Map<number, string>): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
+  listed: Map<number, string>, opt: { noUw?: boolean } = {}): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
   const o = base.os;
+  const noUw = !!opt.noUw;
+  const top = noUw ? NO_UW_ID_LIMIT : 192;
+  const HIGH = 'an ID a Machinedrum without UW cannot use (128 and up)';
   const taken = new Map<number, string>();
   const why = (id: number): string | null => {
     if (!Number.isInteger(id) || id < 0 || id >= 192) return 'outside 0..191';
+    if (id >= top) return HIGH;
     if (listed.has(id)) return `${base.name}'s own ${listed.get(id)} (its menu lists it)`;
     if (id >= o.deadIds[0] && id <= o.deadIds[1]) return 'in the MIDI range with no parameter packet';
     if (taken.has(id)) return `taken by ${taken.get(id)}`;
@@ -156,10 +168,20 @@ export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowM
   // Place existing/pinned models before unassigned contributions. Otherwise an
   // earlier category's automatic model can steal a later model's existing ID.
   // Menu order is restored below; it is independent of placement priority.
-  const allocationOrder = [...ordered].sort((a, b) => Number(automaticId(a.m)) - Number(automaticId(b.m)));
+  // Without UW, a machine pinned on 128+ moves to the lowest ID still free once every other machine
+  // has its own, so the rest get the IDs they get with UW.
+  const rank = (m: PackModel): number => noUw && !automaticId(m) && (layout?.machines[m.key]?.id ?? m.id) >= top ? 2
+    : automaticId(m) ? 1 : 0;
+  const allocationOrder = [...ordered].sort((a, b) => rank(a.m) - rank(b.m));
+  if (noUw) {
+    for (const { m } of ordered) {
+      if (needsUwSamples(m)) problems.push(`${m.name.trim()} plays a sample from UW sample memory, which a Machinedrum without UW does not have: leave it out`);
+    }
+  }
   for (const { m } of ordered) {
     const p = layout?.machines[m.key];
     if (!p) continue;
+    if (p.id >= top) continue;                       // without UW: moved below, like a pinned ID
     const w = why(p.id);
     if (w) { problems.push(`the map puts ${m.name.trim()} on ID ${p.id}, which is ${w}`); continue; }
     taken.set(p.id, m.name.trim());
@@ -170,6 +192,16 @@ export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowM
     const want = m.id;
     const automatic = automaticId(m);
     const p = layout?.machines[m.key];
+    const lowest = (): number => { let v = 0; while (v < top && why(v)) v++; return v; };
+    if (p && p.id >= top) {
+      // the map pins it on 128+, which this unit cannot use: the lowest free ID below 128
+      const id = lowest();
+      if (id >= top) { problems.push(`no free machine ID below ${top} left for ${name} (the map puts it on ${p.id}, and a Machinedrum without UW cannot use 128 and up): remove a selected model`); continue; }
+      moves.push({ name, module: m.module, preferred: p.id, id, why: HIGH });
+      taken.set(id, name);
+      sel.push({ m, family: p.category, id, preferred: p.id, mapped: true });
+      continue;
+    }
     if (p) {
       if (mapOk.has(m.key)) sel.push({ m, family: p.category, id: p.id, preferred: want, mapped: true });
       continue;
@@ -177,20 +209,24 @@ export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowM
     const w = why(want);
     let id = want;
     if (automatic) {
-      id = 0;
-      while (id < 192 && why(id)) id++;
-      if (id >= 192) { problems.push(`no free machine ID left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
+      id = lowest();
+      if (id >= top) { problems.push(`no free machine ID ${noUw ? 'below 128 ' : ''}left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
       taken.set(id, name);
       sel.push({ m, family: f.name, id, preferred: id, mapped: false });
       continue;
     }
-    if (w) {
+    if (w && noUw && want >= top) {
+      // pinned on 128+: without UW it moves to the lowest free ID below 128, allowed or not
+      id = lowest();
+      if (id >= top) { problems.push(`no free machine ID below ${top} left for ${name} (its ID is ${want}, and a Machinedrum without UW cannot use 128 and up): remove a selected model`); continue; }
+      moves.push({ name, module: m.module, preferred: want, id, why: w });
+    } else if (w) {
       if (!allowMove) {
         blocked.push(`${name} (ID ${want}, ${w})`);
         continue;
       }
-      while (id < 192 && why(id)) id++;
-      if (id >= 192) { problems.push(`no free machine ID left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
+      while (id < top && why(id)) id++;
+      if (id >= top) { problems.push(`no free machine ID ${noUw ? 'below 128 ' : ''}left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
       moves.push({ name, module: m.module, preferred: want, id, why: w });
     }
     taken.set(id, name);

@@ -27,6 +27,12 @@ export interface Layout {
   base: string;
   categories: string[];
   machines: Record<string, MachinePlace>;
+  /**
+   * The answer to "does your Machinedrum have the UW option?": true, false (then no machine on IDs
+   * 128 and up: plan's `noUw`), or absent when the file does not say (a layout from before the
+   * question; the page asks again).
+   */
+  uw?: boolean;
 }
 
 /**
@@ -176,7 +182,8 @@ export function checkLayout(l: Layout, base: Base, stock: BaseFamily[]): string[
 /** Canonical JSON: category order kept, machines sorted by key, fixed field order. */
 export function canonical(l: Layout): string {
   const machines = Object.keys(l.machines).sort().map((k) => [k, l.machines[k].id, l.machines[k].category, l.machines[k].order]);
-  return JSON.stringify({ format: l.format, base: l.base, categories: l.categories, machines });
+  // uw only when answered, so a layout without it keeps the fingerprint it always had
+  return JSON.stringify({ format: l.format, base: l.base, categories: l.categories, machines, ...(l.uw === undefined ? {} : { uw: l.uw }) });
 }
 
 /** A short fingerprint two users can read to each other: same layout, same fingerprint. */
@@ -193,7 +200,8 @@ export function parseLayout(json: string): Layout {
   for (const [k, m] of Object.entries(o.machines)) {
     if (!Number.isInteger(m.id) || typeof m.category !== 'string' || !Number.isInteger(m.order)) throw new Error(`map file: ${k} needs an integer id and order and a category`);
   }
-  return { format: o.format, base: o.base, categories: o.categories.map(String), machines: o.machines };
+  if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('map file: uw must be true or false');
+  return { format: o.format, base: o.base, categories: o.categories.map(String), machines: o.machines, ...(o.uw === undefined ? {} : { uw: o.uw }) };
 }
 
 // ---- the table in flash --------------------------------------------------------------------------

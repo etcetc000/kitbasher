@@ -79,5 +79,9 @@ All notable changes to Kitbasher are recorded here. The format follows
   category and hides ROM and RAM, as on stock. Before, OS 1.63 and DEV builds hid
   the last two added categories and showed ROM and RAM (which load GND--), and
   X.13 builds hung at the boot screen.
-- The page and the build report name any machine on ID 128 or above, which a
-  Machinedrum without UW cannot select.
+- The page now asks whether your Machinedrum has the UW option before you go on,
+  remembers the answer and saves it in layout and project files. With No,
+  models that play UW samples are not selectable, machines that normally sit on
+  ID 128 or above (OSCPW) move to a free ID below 128, the ID map marks 128 and
+  up as unusable, and the menu preview shows your categories in place of ROM
+  and RAM. `--no-uw` does the same on the command line.

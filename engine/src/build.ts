@@ -209,8 +209,12 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   // Every machine on its own ID, or the one the user's map gives it, unless moves were allowed:
   // saved kits depend on it.
   const mapped = sel.filter((s) => s.mapped && s.id !== s.preferred);
-  gate('machine-ids', sel.every((s) => s.id === s.preferred || s.mapped) || !!opt.allowIdMove,
-       (pl.moves.length ? `moved (allowed): ${pl.moves.map((m) => `${m.name} ${m.preferred}->${m.id}`).join(', ')}`
+  // Without UW a machine whose ID is 128 or more must move below 128 (selection.ts allocateIds):
+  // that move is the point of the answer, not a liberty taken with a saved kit.
+  const noUw = !!opt.noUw || opt.layout?.uw === false;
+  const uwMove = new Set(pl.moves.filter((m) => noUw && m.preferred >= 128 && m.id < 128).map((m) => m.name.trim()));
+  gate('machine-ids', sel.every((s) => s.id === s.preferred || s.mapped || uwMove.has(s.m.name.trim())) || !!opt.allowIdMove,
+       (pl.moves.length ? `moved (${pl.moves.every((m) => uwMove.has(m.name.trim())) ? 'no IDs of 128 and up without UW' : 'allowed'}): ${pl.moves.map((m) => `${m.name} ${m.preferred}->${m.id}`).join(', ')}`
                         : `${sel.length} machines, each on its preferred ID${mapped.length ? ' or its map ID' : ''}`) +
        (mapped.length ? `; on the map's ID: ${mapped.map((s) => `${s.m.name.trim()} ${s.preferred}->${s.id}`).join(', ')}` : ''));
   // The base's own CTR-range tests, found in its code, against what the profile patches.

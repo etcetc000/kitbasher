@@ -754,6 +754,10 @@ h2 {
   font: 500 11px/1.5 var(--mono);
   white-space: nowrap;
 }
+.machine.unavailable { opacity: .5; }
+.uw-question { margin: 14px 0; border: 1px solid var(--line); border-radius: 5px; padding: 8px 12px; }
+.uw-question legend { font-weight: 600; padding: 0 4px; }
+.uw-question label { margin-right: 16px; }
 .uw-badge {
   padding: 1px 6px;
   border: 1px solid var(--line);

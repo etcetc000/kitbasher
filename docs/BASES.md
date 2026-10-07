@@ -124,13 +124,25 @@ rule. On X.13 the build points the end of X.13's own move at the new menu table;
 without that, a unit without UW would hang at the boot screen. X.14 needs
 nothing. The `uw-menu` check in the build report says which case applies.
 
-Two things still need a UW Machinedrum:
+Two things need a UW Machinedrum, so the page asks first: *Does your
+Machinedrum have the UW option?* It does not go on without a Yes or a No (Not
+sure explains how to check: a UW unit's machine menu has ROM and RAM). The
+answer is remembered in the browser and saved in layout and project files as
+`uw`; a file from before the question has no answer, and the page asks again.
+With a No:
 
-- **Machine IDs 128 and up.** Without UW the OS takes 128 off any machine ID of
-  128 or more, so a machine there is selected as an empty one. The page and the
-  build report name any such machine; give it an ID below 128 in the layout if
-  your Machinedrum has no UW.
-- **Models that play a UW sample** (marked *requires UW* on the page).
+- **No machine IDs of 128 and up.** Without UW the OS takes 128 off any machine
+  ID of 128 or more, so a machine there would be selected as another, empty one.
+  A machine whose usual ID is 128 or above (OSCPW, 175) moves to the lowest free
+  ID below 128; the page, the ID map and the build report show the move and why.
+  Automatic IDs stay below 128. The build fails, saying so, only if no ID below
+  128 is left. On the command line: `--no-uw`.
+- **No models that play a UW sample** (marked *needs UW* on the page; WAVTB,
+  WAVCH and WAVMR today). They cannot be selected.
+- The ID map hatches 128 and up as unusable, and the menu preview shows your
+  categories where ROM and RAM would be, with room for two more categories.
+
+With a Yes nothing changes: every model and ID is available as before.
 
 ## Adding a base
 

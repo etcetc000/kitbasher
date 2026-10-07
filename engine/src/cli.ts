@@ -58,6 +58,8 @@
 //                        On by default; --no-align gives plain first-fit placement, which the parity
 //                        tests compare against
 //   --no-align           turn it off
+//   --no-uw              the Machinedrum has no UW option: no machine on IDs 128 and up (a pinned one
+//                        moves to the lowest free ID below 128, reported), no model that plays a UW sample
 //   --family-menus       menu categories by pack family in pack order (the layout the parity tests
 //                        use) instead of the sound categories (KIK, SNR, HAT, ...)
 //   --map <file>         the user's layout (md-layout/1: IDs and menu categories); the build honours
@@ -84,7 +86,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
-                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim']);
+                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -157,6 +159,7 @@ async function main(): Promise<void> {
   const cap = a['trim-cap'] === undefined ? 0.55 : Number(a['trim-cap']);
   const { output, report, gateReport } = await build(input, base, packs, core, {
     allowIdMove: !!a['allow-id-move'],
+    noUw: !!a['no-uw'],
     ctrControlAll: !!a['ctr-control-all'] || !!a['clean-recovery'],
     layout: a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined,
     align: a['no-align'] ? false : a['cache-align'] ? true : undefined,

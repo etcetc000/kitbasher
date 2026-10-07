@@ -79,6 +79,12 @@ export interface Selection extends ModelFilter {
    */
   layout?: Layout;
   /**
+   * The Machinedrum has no UW option (or the layout says so): no machine on IDs 128 and up (a
+   * pinned one moves below 128 and the move is reported), and no model that plays a UW sample
+   * (engine/src/selection.ts allocateIds).
+   */
+  noUw?: boolean;
+  /**
    * Default menu categories: 'sound' (the default) files each machine under its browsing
    * category's menu code (engine/src/sound_catalog.ts: KIK, SNR, ... in browsing order);
    * 'family' uses the pack families in pack order (the layout the parity tests compare against).
@@ -520,16 +526,19 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const problems: string[] = [];
   // a map saved before a model was renamed names it by its former key
   const lay = opt.layout && resolveLayout(opt.layout, aliases);
-  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base));
+  const noUw = !!opt.noUw || lay?.uw === false;
+  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base), { noUw });
   problems.push(...idProblems);
   const byFamily = opt.menus === 'family';
   const menus = lay ? menusFor(sel, lay, byFamily) : byFamily ? fams : soundMenus(sel);
   const stock = baseFamilies(fw, base);
   if (lay) problems.push(...checkLayout(lay, base, stock));
   const lim = menuLimits(base);
-  if (stock.length + menus.length > lim.maxFamilies) {
-    problems.push(`the machine-select menu takes ${lim.maxFamilies} categories and this build has ${stock.length + menus.length} ` +
-                  `(${stock.length} of ${base.name}'s own): merge or delete ${stock.length + menus.length - lim.maxFamilies}`);
+  // without UW the unit shows two fewer of the base's own (ROM and RAM): their places are ours
+  const shown = stock.length - (noUw ? 2 : 0);
+  if (shown + menus.length > lim.maxFamilies) {
+    problems.push(`the machine-select menu takes ${lim.maxFamilies} categories and this build has ${shown + menus.length} ` +
+                  `(${shown} of ${base.name}'s own): merge or delete ${shown + menus.length - lim.maxFamilies}`);
   }
   for (const f of menus) {
     const n = f.models.filter((m) => sel.some((s) => s.m.key === m.key)).length;
@@ -718,7 +727,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const { ram, feats } = placeRam(base, main, core, driveLaws(core, packs), menus, sel, opt.features ?? {}, flashAt ?? base.features.descFlash?.alias ?? 0);
   problems.push(...feats.problems);
   return {
-    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
+    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel, noUw) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
     dsp2: { fits: !overflow && (!workspace || trim.end <= D.workspace.base),
       regions, capacity, demand, free, padding: overflow ? 0 : capacity - demand - free, records: problems.length ? [] : recs, machines },
     ram, features: { dynLabels: feats.dyn, dsp1Drive: feats.dsp1, hostReorder: feats.host, descFlash: feats.descFlash, notes: feats.notes },
@@ -756,7 +765,7 @@ function soundMenus(sel: Selected[]): Family[] {
 }
 
 /** The layout this build has: the map, with every selected machine where the build put it. */
-function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[]): Layout {
+function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], noUw = false): Layout {
   const machines = { ...l.machines };
   const cats = [...l.categories];
   for (const f of menus) {
@@ -766,6 +775,6 @@ function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[]
       machines[m.key] = { id: s.id, category: f.name, order: i };
     });
   }
-  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines };
+  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines, ...(noUw ? { uw: false } : l.uw === undefined ? {} : { uw: l.uw }) };
 }
 

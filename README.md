@@ -15,8 +15,11 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 1. **Back up.** Keep the OS file you have installed now, and save your kits and
    patterns (GLOBAL › SYSEX SEND › ALL into a SysEx recorder). Sending that OS
    file again restores your machine.
-2. **Load your OS.** Open [kitbasher.xyz](https://kitbasher.xyz) and drop in your
-   OS file (`.syx` or `.bin`).
+2. **Load your OS and answer the UW question.** Open [kitbasher.xyz](https://kitbasher.xyz),
+   drop in your OS file (`.syx` or `.bin`), and say whether your Machinedrum has
+   the UW option. Not sure? Open the machine menu of any track on your current
+   firmware: if it has ROM and RAM categories, you have UW. The page waits for a
+   Yes or a No, remembers it, and saves it with your layout.
 3. **Swap samples (optional).** The E12 machines appear as a grid of pads: click
    one to hear it, drop a WAV or AIFF file on it to replace it, or drop several
    files or a folder to fill the pads in order. A new sample can be as long as the
@@ -36,9 +39,12 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 Some models use a sample in UW memory; the page lists those and offers the
 sample files with instructions.
 
-A Machinedrum without the UW option takes the same OS update; a few models and
-machine IDs need UW, and the page says which (see
-[Machinedrum without UW](docs/BASES.md#machinedrum-without-uw)).
+A Machinedrum without the UW option takes the same OS update. Answer No to the UW
+question and the page leaves out what such a unit cannot use: models that play
+UW samples (marked *needs UW*) and machine IDs of 128 and up (a machine that
+normally sits there, such as OSCPW on 175, moves to a free ID below 128 and the
+page says so). The machine menu then shows your categories where ROM and RAM
+would be. See [Machinedrum without UW](docs/BASES.md#machinedrum-without-uw).
 
 ## Supported bases
 
