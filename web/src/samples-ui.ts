@@ -10,9 +10,10 @@
 // the loaded OS (engine/src/samples.ts readBank); the trim and the memory meters in the Models
 // step use the swapped bank (app.ts passes `edits()` to every plan and build).
 
-import { PAD } from '../../engine/src/e12.js';
-import { type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
-import { bufferFor, convertFile, play, primeAudio, stopPlaying, warmAudio, SAMPLE_RATE, type ConvertOptions } from './convert.js';
+import type { TrimEntry } from '../../engine/src/e12.js';
+import { seconds, wordCost, type BankEntry, type E12Bank, type E12Machine, type SampleEdits } from '../../engine/src/samples.js';
+import { PROJECT_FORMAT } from '../../engine/src/project.js';
+import { bufferFor, convertFile, play, primeAudio, stopPlaying, warmAudio, type ConvertOptions } from './convert.js';
 import { AUDIO_EXT, fillInOrder } from './sample-fill.js';
 
 const el = (tag: string, props: Record<string, string> = {}, ...kids: (Node | string)[]): HTMLElement => {
@@ -36,8 +37,7 @@ const ICON = {
   lock: '<rect x="3" y="7" width="10" height="7.5" rx="1.2" fill="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
 };
 const fmt = (n: number): string => n.toLocaleString('en');
-const secs = (n: number): string => `${(n / SAMPLE_RATE).toFixed(3)} s`;
-const words = (samples: number): number => Math.ceil(samples / 2) + PAD;
+const secs = (n: number): string => `${seconds(n).toFixed(3)} s`;
 const codeOf = (m: E12Machine): string => m.name.replace(/^E12/, '');
 const DRAG_CHIP = 'application/x-kitbasher-chip';
 
@@ -55,6 +55,8 @@ export interface SamplesHost {
   onChange(): void;                  // the edits changed: re-plan
   saveKit(): void;                   // the project file (app.ts saveProject)
   loadKit(f: File): void;            // a project file chosen or dropped (app.ts onProjectFile)
+  /** the bank as the current plan lays it (trimmed, padded): what the badges and the meter show */
+  laid(): { report: TrimEntry[]; end: number } | null;
 }
 
 /** One pad: a machine's sample, or one half of a two-sample machine. */
@@ -79,8 +81,36 @@ export class SamplesStep {
     for (const k of ['pointerdown', 'keydown']) document.addEventListener(k, primeAudio, { capture: true, passive: true });
   }
 
-  /** The edits the engine plans and builds with. */
-  edits(): SampleEdits { return { swaps: this.state.swaps, noTrim: this.state.noTrim }; }
+  /**
+   * The edits' signature: which sample data sits on which entry, and the don't-trim set. Anything
+   * that changes the state changes it, so a cache keyed on it cannot hand back a stale bank.
+   */
+  revision(): string {
+    const ids = [...this.state.swaps].sort((a, b) => a[0] - b[0]).map(([e, d]) => `${e}:${dataId(d)}`);
+    return `${ids.join(',')}|${[...this.state.noTrim].sort((a, b) => a - b).join(',')}`;
+  }
+
+  private snapshot: { rev: string; edits: SampleEdits } | null = null;
+  /** The edits the engine plans and builds with: a copy per revision (the engine caches by it). */
+  edits(): SampleEdits {
+    const rev = this.revision();
+    if (this.snapshot?.rev !== rev) this.snapshot = { rev, edits: { swaps: new Map(this.state.swaps), noTrim: new Set(this.state.noTrim) } };
+    return this.snapshot.edits;
+  }
+
+  /** A project's samples (app.ts applyProject): conversions still running for the old state are dropped. */
+  setState(state: SampleState): void {
+    this.gen++;
+    this.review = null;
+    this.state = state;
+  }
+
+  // Bumped whenever the state is replaced wholesale (a new OS, a project, Revert all): a
+  // conversion that started before is discarded when it finishes.
+  private gen = 0;
+  private pending = new Map<number, number>();
+  private requests = 0;
+  private applying = false;
 
   private opts: ConvertOptions = { normalise: true, trimSilence: true };
   private options(): ConvertOptions { return this.opts; }
@@ -91,6 +121,7 @@ export class SamplesStep {
     this.playingEntry = null;
     this.bank = bank;
     if (bank) warmAudio();
+    this.gen++;
     this.state = emptyState();
     this.review = null;
     this.selected = null;
@@ -107,26 +138,23 @@ export class SamplesStep {
     if (m) { m.textContent = text; m.dataset.kind = kind; m.hidden = !text; }
   }
 
-  private lengthOf(e: BankEntry): number { return this.state.swaps.get(e.entry)?.length ?? e.samples; }
-
-  /** Data words of every entry as the bank will hold them before any trim, firsts padded to their partners. */
-  footprint(): { used: number; stock: number } {
-    const b = this.bank!;
-    const len = b.entries.map((e) => 2 * Math.ceil(this.lengthOf(e) / 2));
-    for (const [a, p] of b.pairs) len[a] = Math.max(len[a], len[p]);
-    return { used: len.reduce((n, k) => n + words(k), 0), stock: b.stockWords };
+  /** The engine's row for an entry in the bank the current plan lays, if that plan has these edits. */
+  private laidRow(entry: number): TrimEntry | null {
+    const l = this.host.laid();
+    return l?.report.find((r) => r.entry === entry) ?? null;
   }
 
-  /** The partner a first sample is padded for: shorter than its partner after a swap. */
-  private paddedFor(e: BankEntry): number | null {
-    let pad: number | null = null;
-    for (const p of e.pairs) {
-      if (!p.first) continue;
-      const partner = this.bank!.entries[p.partner];
-      if (Math.ceil(this.lengthOf(e) / 2) < Math.ceil(this.lengthOf(partner) / 2)) pad = p.partner;
-    }
-    return pad;
+  /** The sample words as laid (after trimming and padding), against the stock bank's. */
+  footprint(): { used: number; stock: number } | null {
+    const l = this.host.laid();
+    return l ? { used: l.end - this.bank!.entries[0].start, stock: this.bank!.stockWords } : null;
   }
+
+  /** The partner a first sample is padded for, as the engine laid it. */
+  private paddedFor(e: BankEntry): number | null { return this.laidRow(e.entry)?.padded_for ?? null; }
+
+  /** The first sample a partner was shortened for (the stock pair rule), as the engine laid it. */
+  private cutFor(e: BankEntry): number | null { return this.laidRow(e.entry)?.for_partner ?? null; }
 
   private cut(entry: number): boolean { return (this.state.notes.get(entry) ?? []).some((n) => /^cut /.test(n)); }
 
@@ -148,6 +176,7 @@ export class SamplesStep {
     const others = e.machines.filter((x) => x.id !== t.m.id).map((x) => x.name);
     if (others.length) bits.push(`shared with ${others.join(', ')}`);
     if (this.paddedFor(e) !== null) bits.push(`padded with silence to sample ${this.paddedFor(e)}'s length`);
+    else if (this.cutFor(e) !== null) bits.push(`shortened to match sample ${this.cutFor(e)}`);
     else if (this.cut(t.entry)) bits.push('cut to stock length');
     if (this.state.noTrim.has(t.entry)) bits.push("won't be trimmed");
     if (this.playingEntry === t.entry) bits.push('playing');
@@ -208,13 +237,12 @@ export class SamplesStep {
 
   private meterEl(): HTMLElement {
     const f = this.footprint();
-    const pct = Math.min(100, (100 * f.used) / f.stock);
     const fill = el('div', { class: 'fill' });
-    fill.style.width = `${pct}%`;
+    fill.style.width = f ? `${Math.min(100, (100 * f.used) / f.stock)}%` : '0';
     const swapped = this.state.swaps.size;
-    return el('div', { class: 'meter sample-meter', 'data-state': 'ok', title: `${fmt(f.used)} / ${fmt(f.stock)} words` },
-      el('div', { class: 'top' }, el('span', {}, `Sample memory${swapped ? ` · ${swapped} of ${this.bank!.entries.length} replaced` : ''}`),
-        el('span', { class: 'num', id: 'sample-summary' }, `${fmt(f.used)} of ${fmt(f.stock)} words` +
+    return el('div', { class: 'meter sample-meter', 'data-state': f ? 'ok' : 'pending', ...(f ? { title: `${fmt(f.used)} / ${fmt(f.stock)} words` } : {}) },
+      el('div', { class: 'top' }, el('span', {}, `Sample memory after trimming${swapped ? ` · ${swapped} of ${this.bank!.entries.length} replaced` : ''}`),
+        el('span', { class: 'num', id: 'sample-summary' }, !f ? 'Calculated with your models' : `${fmt(f.used)} of ${fmt(f.stock)} words` +
           (f.used < f.stock ? ` · ${fmt(f.stock - f.used)} freed for models` : ''))),
       el('div', { class: 'bar' }, fill));
   }
@@ -229,6 +257,9 @@ export class SamplesStep {
     const revertAll = el('button', { type: 'button', class: 'sample-btn', id: 'sample-revert-all' }, 'Revert all');
     if (!this.state.swaps.size && !this.state.noTrim.size) revertAll.setAttribute('disabled', '');
     revertAll.addEventListener('click', () => {
+      this.gen++;
+      this.pending.clear();
+      this.review = null;
       this.state = emptyState();
       this.say('All samples are the stock ones again.', 'ok');
       this.changed();
@@ -328,7 +359,9 @@ export class SamplesStep {
     const others = e.machines.filter((x) => x.id !== t.m.id).map((x) => x.name);
     if (others.length) out.push(badge('shared', ICON.link, `Shared with ${others.join(', ')}`));
     const pad = this.paddedFor(e);
+    const short = this.cutFor(e);
     if (pad !== null) out.push(badge('warn', ICON.warn, `Padded with silence (to sample ${pad}'s length)`));
+    else if (short !== null) out.push(badge('warn', ICON.warn, `Shortened to match sample ${short}`));
     else if (this.cut(t.entry)) out.push(badge('warn', ICON.warn, 'Cut to stock length'));
     if (this.state.noTrim.has(t.entry)) out.push(badge('lock', ICON.lock, "Won't be trimmed"));
     return out;
@@ -353,7 +386,11 @@ export class SamplesStep {
       this.changed();
     });
     const input = el('input', { type: 'file', accept: 'audio/*,.wav,.aif,.aiff', class: 'sample-file', id: 'detail-file', 'aria-label': `Replace ${t.m.name}${t.part ? ` ${t.part}` : ''} with an audio file` }) as HTMLInputElement;
-    input.addEventListener('change', () => { if (input.files?.[0]) void this.replace(t.entry, input.files[0]); input.value = ''; });
+    input.addEventListener('change', () => {
+      const f = input.files?.[0];
+      input.value = '';
+      if (f) void this.replace(t.entry, f).then((ok) => { if (ok) this.changed(); });
+    });
     const notes: string[] = [];
     if (swap) notes.push(`${this.state.sources.get(t.entry) ?? 'Your sample'}: ${secs(swap.length)} of at most ${secs(e.samples)}.`, ...(this.state.notes.get(t.entry) ?? []));
     else notes.push(`Stock sample, ${secs(e.samples)}.`);
@@ -364,10 +401,14 @@ export class SamplesStep {
     }
     const pad = this.paddedFor(e);
     if (pad !== null) notes.push(`Shorter than sample ${pad}: padded with silence to its length so the layer does not repeat as a tone.`);
+    const short = this.cutFor(e);
+    if (short !== null) notes.push(`Shortened to match sample ${short}, its main sample, which the trim cut.`);
+    const row = this.laidRow(t.entry);
+    if (row && row.kept < row.seconds && pad === null && short === null) notes.push(`Trimmed to ${row.kept.toFixed(3)} s in the build.`);
     return el('section', { class: 'pad-detail', 'aria-label': 'Selected pad' },
       el('div', { class: 'pad-detail-head' },
         el('h3', {}, `${t.m.name}${t.part ? ` · ${t.part}` : ''}`),
-        el('span', { class: 'fine' }, `Sample ${t.entry} · ${secs(data.length)} · ${fmt(words(data.length))} words`)),
+        el('span', { class: 'fine' }, `Sample ${t.entry} · ${secs(data.length)} · ${fmt(wordCost(data.length))} words`)),
       canvas,
       el('div', { class: 'sample-actions' }, playBtn,
         el('label', { class: 'sample-btn sample-replace' }, input, 'Replace…'), revert,
@@ -388,7 +429,7 @@ export class SamplesStep {
       return c;
     };
     const apply = el('button', { type: 'button', class: 'wizard-primary', id: 'review-apply' }, `Apply ${placed.length}`);
-    if (!placed.length) apply.setAttribute('disabled', '');
+    if (!placed.length || this.applying) apply.setAttribute('disabled', '');
     apply.addEventListener('click', () => void this.applyReview());
     const cancel = el('button', { type: 'button', class: 'sample-btn', id: 'review-cancel' }, 'Cancel');
     cancel.addEventListener('click', () => { this.review = null; this.say('Nothing was changed.'); this.render(); });
@@ -451,7 +492,7 @@ export class SamplesStep {
     } else if (ev.key === 'Enter') {
       ev.preventDefault();
       this.selected = t;
-      this.render();
+      this.marks();
       this.ui.querySelector<HTMLInputElement>('#detail-file')?.click();
       return;
     } else if (ev.key === 'Backspace' || ev.key === 'Delete') {
@@ -463,24 +504,34 @@ export class SamplesStep {
     ev.preventDefault();
     if (next < 0 || next === here) return;
     const key = pads[next].dataset.key!;
-    const target = this.targets().find((x) => `${x.m.id}-${x.entry}` === key)!;
-    this.selected = target;
-    this.render();
-    this.ui.querySelector<HTMLElement>(`.pad-target[data-key="${key}"]`)?.focus();
+    this.selected = this.targets().find((x) => `${x.m.id}-${x.entry}` === key)!;
+    this.marks();
+    pads[next].focus();
   }
 
   private revert(entry: number): void {
+    this.pending.delete(entry);                   // a conversion still running for it is dropped
     if (!this.state.swaps.has(entry)) { this.say(`Sample ${entry} is already the stock sample.`); return; }
     this.state.swaps.delete(entry); this.state.sources.delete(entry); this.state.notes.delete(entry);
     this.say(`Sample ${entry} is the stock sample again.`, 'ok');
     this.changed();
   }
 
-  private async replace(entry: number, f: File): Promise<boolean> {
-    const e = this.bank!.entries[entry];
+  /**
+   * Convert a file onto an entry. False, and nothing changed, when it fails or when the state moved
+   * on while it ran (a new OS or project, Revert all, a revert or a newer file for this entry).
+   */
+  private async replace(entry: number, f: File, gen = this.gen): Promise<boolean> {
+    const bank = this.bank;
+    if (!bank || gen !== this.gen) return false;
+    const e = bank.entries[entry];
+    const req = ++this.requests;
+    this.pending.set(entry, req);
     this.say(`Converting ${f.name}…`);
     try {
       const r = await convertFile(f, e.samples, this.options());
+      if (gen !== this.gen || this.bank !== bank || this.pending.get(entry) !== req) return false;
+      this.pending.delete(entry);
       this.state.swaps.set(entry, r.data);
       this.state.sources.set(entry, f.name);
       this.state.notes.set(entry, r.notes.filter((n) => !n.startsWith('quantised')));
@@ -488,21 +539,25 @@ export class SamplesStep {
         (r.cut ? `: it was longer than the stock sample, so it was cut to ${secs(e.samples)} with a short fade.` : '.'), r.cut ? 'info' : 'ok');
       return true;
     } catch (err) {
-      this.say(`${f.name} not used: ${(err as Error).message}`, 'error');
+      if (this.pending.get(entry) === req) this.pending.delete(entry);
+      if (gen === this.gen) this.say(`${f.name} not used: ${(err as Error).message}`, 'error');
       return false;
     }
   }
 
   /** Files dropped on a pad (`t`) or on the grid (null): one audio file on a pad replaces it, a project loads, anything else goes to review. */
   private async onFilesDropped(dt: DataTransfer, t: Target | null): Promise<void> {
+    const gen = this.gen;                       // a drop made before Revert all, a new OS or a project is dropped too
     const files = await droppedFiles(dt);
-    const kit = files.find((f) => /\.json$/i.test(f.name));
+    if (gen !== this.gen) return;
+    const kit = await projectIn(files);
+    if (gen !== this.gen) return;
     if (kit) { this.host.loadKit(kit); return; }
     const audio = files.filter((f) => AUDIO_EXT.test(f.name));
     if (!audio.length) { this.say(files.length ? 'Only WAV and AIFF files can be used.' : 'Nothing to use in that drop.', 'error'); return; }
     if (t && audio.length === 1) {
       this.selected = t;
-      if (await this.replace(t.entry, audio[0])) this.changed();
+      if (await this.replace(t.entry, audio[0], gen)) this.changed();
       return;
     }
     this.startReview(audio, t);
@@ -544,19 +599,53 @@ export class SamplesStep {
     this.render();
   }
 
+  /** Convert and place every placed file; runs once (Apply is disabled while it does). */
   private async applyReview(): Promise<void> {
+    if (this.applying) return;
     const items = (this.review ?? []).filter((i) => i.target !== null);
+    const gen = this.gen;
+    this.applying = true;
+    this.ui.querySelector('#review-apply')?.setAttribute('disabled', '');
     let ok = 0;
-    for (const i of items) if (await this.replace(i.target!, i.file)) ok++;
+    try {
+      for (const i of items) {
+        if (gen !== this.gen) break;
+        if (await this.replace(i.target!, i.file)) ok++;
+      }
+    } finally { this.applying = false; }
+    if (gen !== this.gen) return;            // a new OS, project or Revert all: nothing more to do
     this.review = null;
     this.say(`${ok} of ${items.length} sample${items.length === 1 ? '' : 's'} replaced.`, ok === items.length ? 'ok' : 'error');
     this.changed();
   }
 
+  /** The state changed: re-plan first, so the pads show what the engine now lays. */
   private changed(): void {
-    this.render();
     this.host.onChange();
+    this.render();
   }
+}
+
+/**
+ * The project file in a drop: one .json file on its own, or any .json whose content is a
+ * kitbasher-project/1 file. Anything else that is not audio is ignored.
+ */
+async function projectIn(files: File[]): Promise<File | null> {
+  const json = files.filter((f) => /\.json$/i.test(f.name));
+  if (files.length === 1 && json.length === 1) return json[0];
+  for (const f of json) {
+    try { if ((JSON.parse(await f.text()) as { format?: unknown }).format === PROJECT_FORMAT) return f; } catch { /* not JSON */ }
+  }
+  return null;
+}
+
+// a stable id per sample array, for the edits' signature
+const ids = new WeakMap<Int16Array, number>();
+let nextId = 0;
+function dataId(d: Int16Array): number {
+  let id = ids.get(d);
+  if (id === undefined) { id = ++nextId; ids.set(d, id); }
+  return id;
 }
 
 /** Every file in a drop, folders walked (webkitGetAsEntry); read before the drop event ends. */

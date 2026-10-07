@@ -2,12 +2,17 @@
 // 12-bit TPDF quantisation, and reading the source rate from WAV and AIFF headers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
-const source = readFileSync(new URL('../web/src/convert.ts', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
-const { processAudio, headerRate, CUT_FADE } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString('base64')}`);
+// bundled, since the cut and its fade come from engine/src/samples.ts
+const out = await build({
+  entryPoints: [fileURLToPath(new URL('../web/src/convert.ts', import.meta.url))], bundle: true, format: 'esm', platform: 'neutral',
+  write: false, logLevel: 'silent', external: ['module', 'fs', 'path', 'url', 'node:*'],
+  plugins: [{ name: 'ucl', setup(b) { b.onResolve({ filter: /ucl\.mjs$/ }, () => ({ path: fileURLToPath(new URL('../engine/wasm/ucl.mjs', import.meta.url)) })); } }],
+});
+const { processAudio, headerRate } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].contents).toString('base64')}`);
+const CUT_FADE = 256;            // engine/src/samples.ts CAP_FADE
 
 const half = () => 0.5;          // no dither: random() - random() = 0
 const ramp = (n, a = 0.5) => Float32Array.from({ length: n }, (_, i) => a * Math.sin(i / 5));
@@ -37,7 +42,8 @@ test('longer than the stock entry: cut to it with a fade to silence, and said so
   assert.equal(c.data.length, 1000);
   assert.equal(c.cut, true);
   assert.equal(c.data[1000 - CUT_FADE - 1], 1024);
-  assert.equal(c.data[999], 0);
+  assert.equal(c.data[1000 - CUT_FADE], 1024, 'the fade starts at full level');
+  assert.equal(c.data[999], 4, 'and ends one step of 256 above silence (engine capSamples)');
   assert.ok(c.data[1000 - CUT_FADE / 2] < 1024 && c.data[1000 - CUT_FADE / 2] > 0);
   assert.ok(c.notes.some((n) => /cut from 0\.113 s to 0\.023 s/.test(n)), c.notes.join('; '));
 });

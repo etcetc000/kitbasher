@@ -2,12 +2,13 @@
 // decoder reads), resample to 44.1 kHz, mix to mono, optionally trim leading and trailing silence
 // and normalise, cut to the entry's stock length with a short fade, then quantise to 12 bits with
 // TPDF dither. Everything runs in the browser; `processAudio` is the pure part (tested in
-// ci/convert.test.mjs) and has no imports so the test can load it alone.
+// ci/convert.test.mjs). The cut and its fade are the engine's (engine/src/samples.ts capSamples),
+// the same one a build applies, so there is one cut-and-fade in the code base.
+
+import { CAP_FADE, capSamples } from '../../engine/src/samples.js';
 
 export const SAMPLE_RATE = 44100;
 export const FULL_12 = 2047;
-/** samples of linear fade where a sample is cut to the cap */
-export const CUT_FADE = 256;
 /** leading and trailing audio quieter than this, relative to the peak, counts as silence */
 export const SILENCE_DB = -60;
 
@@ -55,24 +56,21 @@ export function processAudio(channels: Float32Array[], cap: number, opt: Convert
     gain = (FULL_12 - 1) / FULL_12 / peak;        // one step of headroom for the dither
     if (Math.abs(gain - 1) > 1e-6) notes.push(`normalised (${gain > 1 ? '+' : ''}${db(gain)})`);
   }
-  let cut = false;
-  if (x.length > cap) {
-    notes.push(`cut from ${(x.length / SAMPLE_RATE).toFixed(3)} s to ${(cap / SAMPLE_RATE).toFixed(3)} s, the stock sample's length, with a ${ms(Math.min(CUT_FADE, cap), SAMPLE_RATE)} fade`);
-    x = x.slice(0, cap);
-    const f = Math.min(CUT_FADE, cap);
-    for (let k = 0; k < f; k++) x[cap - f + k] *= 1 - (k + 1) / f;
-    cut = true;
-  }
-  const out = new Int16Array(x.length);
+  const long = x.length > cap;
+  if (long) notes.push(`cut from ${(x.length / SAMPLE_RATE).toFixed(3)} s to ${(cap / SAMPLE_RATE).toFixed(3)} s, the stock sample's length, with a ${ms(Math.min(CAP_FADE, cap), SAMPLE_RATE)} fade`);
+  // quantise what is kept (one sample past the cap tells capSamples to cut), then cut and fade
+  const kept = long ? cap + 1 : x.length;
+  const q = new Array<number>(kept);
   let clipped = 0;
-  for (let i = 0; i < x.length; i++) {
+  for (let i = 0; i < kept; i++) {
     const v = Math.round(x[i] * gain * FULL_12 + (random() - random()));
-    out[i] = Math.max(-2048, Math.min(FULL_12, v));
-    if (out[i] !== v) clipped++;
+    q[i] = Math.max(-2048, Math.min(FULL_12, v));
+    if (q[i] !== v) clipped++;
   }
+  const out = Int16Array.from(long ? capSamples(q, cap).data : q);
   if (clipped) notes.push(`${clipped} sample${clipped === 1 ? '' : 's'} clipped`);
   notes.push('quantised to 12 bits with TPDF dither');
-  return { data: out, notes, cut, seconds: out.length / SAMPLE_RATE };
+  return { data: out, notes, cut: long, seconds: out.length / SAMPLE_RATE };
 }
 
 /** The source's own sample rate, from a WAV 'fmt ' or AIFF 'COMM' chunk; null when not found. */

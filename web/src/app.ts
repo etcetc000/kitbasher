@@ -107,6 +107,7 @@ function showStep(n: number): void {
   if (step <= 3 && n > 3 && !cachedBuild) { void onBuild(n === 4 ? 'categories' : 'download'); return; }
   step = n;
   for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== n;
+  if (n === 2) samples.render();             // the pads show the bank as the current plan lays it
   syncWizard();
   const heading = $(`step-${n}`).querySelector<HTMLElement>('h2');
   heading?.setAttribute('tabindex', '-1');
@@ -193,7 +194,8 @@ function trimOptions(): TrimOptions {
 }
 
 function trimmed(opt = trimOptions()): Trimmed {
-  const key = `${opt.db}|${opt.minSeconds}|${opt.cap}`;
+  // the samples' revision is part of the key: a missed clear cannot hand back a stale bank
+  const key = `${opt.db}|${opt.minSeconds}|${opt.cap}|${samples.revision()}`;
   let t = trims.get(key);
   if (!t) { t = trimFor(fw!, base!, opt, samples.edits()); trims.set(key, t); }
   return t;
@@ -527,6 +529,13 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
   }
 }
 
+/** Whether a plan's bank was laid with these edits (the same sample data on the same entries). */
+function sameEdits(laid: Trimmed['edits'], now: { swaps: ReadonlyMap<number, ArrayLike<number>>; noTrim: ReadonlySet<number> }): boolean {
+  const swaps = laid?.swaps ?? new Map<number, ArrayLike<number>>(), noTrim = laid?.noTrim ?? new Set<number>();
+  return swaps.size === now.swaps.size && noTrim.size === now.noTrim.size &&
+    [...now.swaps].every(([e, d]) => swaps.get(e) === d) && [...now.noTrim].every((e) => noTrim.has(e));
+}
+
 // ---- the project file (engine/src/project.ts, docs/PROJECT-FILE.md)
 
 function projectNow(): Project {
@@ -576,16 +585,17 @@ async function onProjectFile(f: File): Promise<void> {
 function applyProject(p: Project, name: string): boolean {
   pendingProject = null;
   const problem = osProblem(p.os, base!);
-  const count = samples.bank!.entries.length;
+  const count = samples.bank?.entries.length ?? 0;
   const bad = [...p.swaps.keys(), ...p.noTrim].filter((e) => e >= count);
-  const why = problem ?? (bad.length ? `this OS has no E12 sample ${bad[0]}` : null);
+  const why = problem ?? (!samples.bank && (p.swaps.size || p.noTrim.size)
+    ? "this OS's E12 samples could not be read, so a project with sample changes cannot be used with it"
+    : bad.length ? `this OS has no E12 sample ${bad[0]}` : null);
   if (why) {
     $('project-status').textContent = `Project not loaded: ${why}.`;
     status(`${name} not loaded: ${why}.`, 'error');
     return false;
   }
-  samples.state = { swaps: new Map(p.swaps), noTrim: new Set(p.noTrim), sources: new Map(p.sources), notes: new Map() };
-  samples.render();
+  samples.setState({ swaps: new Map(p.swaps), noTrim: new Set(p.noTrim), sources: new Map(p.sources), notes: new Map() });
   trims.clear();
   const radio = document.querySelector<HTMLInputElement>(`input[name=e12][value=${p.trim.mode === 'manual' ? 'trim' : p.trim.mode}]`);
   if (radio) radio.checked = true;
@@ -621,6 +631,7 @@ async function main(): Promise<void> {
     onChange: () => { trims.clear(); refresh(); },
     saveKit: () => void saveProject(),
     loadKit: (f) => void onProjectFile(f),
+    laid: () => (current && fw && sameEdits(current.trim.edits, samples.edits()) ? { report: current.trim.report, end: current.trim.end } : null),
   });
   samples.render();
   const projectFile = $<HTMLInputElement>('project-file');
