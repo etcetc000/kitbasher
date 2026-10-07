@@ -12,9 +12,12 @@ const cents = (a: number, b: number): number => 1200 * Math.log2(a / b);
 const packs: Pack[] = readdirSync('catalog').filter(f => f.endsWith('.json') && f !== 'core.json')
   .map(f => JSON.parse(readFileSync(`catalog/${f}`, 'utf8')) as Pack);
 const models: PackModel[] = packs.flatMap(p => p.models);
+const shared = new Map(packs.flatMap(p => p.shared.map(t => [t.name, t] as const)));
 const byKey = (key: string): PackModel => models.find(m => m.key === key) ?? assert.fail(`no ${key} in catalog`);
+// a model's own table, or a family shared table its code reads (OSCSW / OSCPW / VOXVO: sw_pinc)
 const table = (m: PackModel, name: string): number[] =>
-  words((m.tables.find(t => t.name === name) ?? assert.fail(`${m.key}: no table ${name}`)).words);
+  words((m.tables.find(t => t.name === name) ?? (m.uses_shared.includes(name) ? shared.get(name) : undefined)
+    ?? assert.fail(`${m.key}: no table ${name}`)).words);
 
 test('raw <-> note: raw = 2 (MIDI - 24), C3 = 60, clamped ranges, relative and by_mode', () => {
   assert.equal(rawToNote(0, QUARTER), 24);
@@ -63,19 +66,10 @@ test('every bundled pack, pitch included, passes the pack checks', () => {
   for (const p of packs) checkPack(p);
 });
 
-// The eleven compiled Monomachine ports in synths.json are re-exported with their pitch metadata
-// by md-firmware-mod / md-hotswap; until that pack lands they are the only exception, and this
-// list must be emptied when it does (the test below fails once one of them carries pitch).
-const COMPILED_PENDING = new Set(['FMS2O', 'FMS3O', 'FMSSW', 'OSCSW', 'OSCPW', 'WAVTB', 'VOXVO', 'OSC8B', 'WAVCH', 'OSCCH', 'WAVMR']);
-
 test('every synth, FM, wavetable, vocal and physical model declares a pitch law', () => {
   const tonal = ['Synths', 'FM synthesis', 'Wavetables', 'Vocal', 'Physical modeling'];
   for (const m of models) {
     if (!tonal.includes(describeModel(m).category)) continue;
-    if (COMPILED_PENDING.has(m.name.trim())) {
-      assert.equal(m.pitch, undefined, `${m.name}: carries pitch now; remove it from COMPILED_PENDING`);
-      continue;
-    }
     assert.ok(m.pitch && m.pitch.law !== 'none', `${m.name}: no pitch law`);
   }
 });
@@ -87,22 +81,6 @@ test('every absolute-pitch model uses the shared quarter law', () => {
     assert.equal(m.pitch.steps, 2, m.name);
     assert.equal(m.pitch.base_note, 24, m.name);
     assert.equal(m.defaults[m.pitch.knob!] % 2, 0, `${m.name}: default PTCH is not a semitone`);
-  }
-});
-
-test('a declared pitch table steps by the law: 50 c a raw inside the range, held outside it', () => {
-  for (const m of models) {
-    if (!m.pitch?.table) continue;
-    const w = table(m, m.pitch.table);
-    const [lo, hi] = m.pitch.range ?? [0, 127];
-    const tol = m.pitch.tolerance_cents ?? 2;
-    // PHYKS's table holds a delay, not a frequency: its step is the inverse.
-    const sign = m.key === 'PHY/KS' ? -1 : 1;
-    for (let r = 0; r < 127; r++) {
-      const step = sign * cents(w[r + 1], w[r]);
-      if (r >= lo && r < hi) assert.ok(Math.abs(step - 100 / m.pitch.steps!) <= tol, `${m.name} raw ${r}: ${step.toFixed(2)} c`);
-      else assert.equal(w[r + 1], w[r], `${m.name}: raw ${r + 1} is outside the range and must hold`);
-    }
   }
 });
 
@@ -130,7 +108,36 @@ const DECODE: Record<string, Decoder> = {
     return interp(table(m, 'e0_finc'), 24 + ofs + r / 2) / 2 ** 24 * SR;
   },
   'VAD/SY': (m, r) => interp(table(m, 'e0_osc_pitch'), 24 + r / 2) / 2 ** 24 * SR,
+  // The compiled Monomachine ports (synths.json), with md-firmware-mod's PITCH_TABLE_HZ scales.
+  'FMS/2O': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,                // 2 f / (2 SR) at 2x oversampling
+  'FMS/3O': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,
+  'FMS/SW': (m, r) => table(m, 'pinc')[r] / 2 ** 23 * SR,
+  'OSC/SW': (m, r) => table(m, 'sw_pinc')[r] / 2 ** 23 * SR,
+  'OSC/PW': (m, r) => table(m, 'sw_pinc')[r] / 2 ** 23 * SR,
+  'VOX/VO': (m, r) => table(m, 'sw_pinc')[r] / 2 ** 23 * SR,
+  'WAV/TB': (m, r) => table(m, 'wv_inc')[r] / 2 ** 22 * SR,
+  'WAV/CH': (m, r) => table(m, 'dn_inc')[r] / 2 ** 24 * SR,
+  'OSC/CH': (m, r) => 2 * table(m, 'en_inc')[r] / 2 ** 23 * SR,
+  // OSC8B and WAVMR hold the Monomachine's own pitch word, 2048 a octave from MIDI -2: decoded in
+  // the word domain (the native exponent table adds at most 0.7 c, held by md-firmware-mod's gate)
+  'OSC/8B': (m, r) => midiHz(table(m, 'sid_note')[r] * 12 / 2048 - 2),
+  'WAV/MR': (m, r) => midiHz(table(m, 'dw_note')[r] * 12 / 2048 - 2),
 };
+
+test('a declared pitch table steps by the law: 50 c a raw inside the range, held outside it', () => {
+  for (const m of models) {
+    if (!m.pitch?.table || m.pitch.by_mode) continue;
+    const [lo, hi] = m.pitch.range ?? [0, 127];
+    const tol = m.pitch.tolerance_cents ?? 2;
+    // decoded through the model's own word -> Hz law (PHYKS holds a delay, OSC8B / WAVMR a pitch word)
+    const hz = (r: number): number => (DECODE[m.key] ?? assert.fail(`${m.key}: no decoder`))(m, r);
+    for (let r = 0; r < 127; r++) {
+      const step = cents(hz(r + 1), hz(r));
+      if (r >= lo && r < hi) assert.ok(Math.abs(step - 100 / m.pitch.steps!) <= tol, `${m.name} raw ${r}: ${step.toFixed(2)} c`);
+      else assert.ok(Math.abs(step) < 1e-9, `${m.name}: raw ${r + 1} is outside the range and must hold`);
+    }
+  }
+});
 
 test('every note of every pitched model: noteToRaw lands within 2 cents of the note', () => {
   const report: string[] = [];
