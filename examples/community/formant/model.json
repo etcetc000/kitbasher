@@ -4,7 +4,7 @@
   "aliases": [
     "COMM/PIMG"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
@@ -46,7 +46,14 @@
         "default": 0
       }
     ],
-    "modes": []
+    "modes": [],
+    "pitch": {
+      "knob": 0,
+      "law": "quarter",
+      "steps": 2,
+      "base_note": 24,
+      "table": "pitch"
+    }
   },
   "components": {
     "dsp2": {

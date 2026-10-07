@@ -4,7 +4,7 @@
   "aliases": [
     "COMM/E12AC"
   ],
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
@@ -15,7 +15,7 @@
     "knobs": [
       {
         "label": "PTCH",
-        "default": 48
+        "default": 46
       },
       {
         "label": "DEC",
@@ -46,7 +46,14 @@
         "default": 64
       }
     ],
-    "modes": []
+    "modes": [],
+    "pitch": {
+      "knob": 0,
+      "law": "quarter",
+      "steps": 2,
+      "base_note": 24,
+      "table": "pitch"
+    }
   },
   "components": {
     "dsp2": {

@@ -4,7 +4,7 @@
   "aliases": [
     "AN/SD"
   ],
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kit_abi": 1,
   "injection": {
     "mode": "add"
@@ -15,7 +15,7 @@
     "knobs": [
       {
         "label": "PTCH",
-        "default": 64
+        "default": 80
       },
       {
         "label": "DEC",
@@ -97,7 +97,14 @@
           }
         ]
       }
-    ]
+    ],
+    "pitch": {
+      "knob": 0,
+      "law": "quarter",
+      "steps": 2,
+      "base_note": 24,
+      "table": "e0_finc"
+    }
   },
   "components": {
     "dsp2": {

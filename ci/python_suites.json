@@ -5,6 +5,7 @@
     "live_reload_test",
     "local_catalog_test",
     "manifest_test",
+    "pitch_test",
     "uw_asset_test"
   ],
   "assembly": [

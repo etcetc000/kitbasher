@@ -6,7 +6,7 @@ harmonics and at most two waveform cycles per render.
 
 | Control | Range |
 |---|---|
-| PTCH | About 43 to 673 Hz |
+| PTCH | raw = 2 × (MIDI − 24): MIDI 24 (C0, 32.7 Hz) at 0 to 76.5 (689 Hz) at 105, held above; quarter-tone steps, even values are semitones (72 = C3) |
 | DEC | Amp decay, 10 ms to 10 s |
 | ARRY | All 128 spectral arrays |
 | TILT | Spectral tilt, the original 0 to 2047 law |
@@ -22,6 +22,7 @@ harmonic amplitudes. It declares them in its manifest (`kind: "private"`) and
 `init` clears the whole span, so no other model's memory is borrowed; see
 [Model packs](../../../docs/MODEL-PACKS.md#memory-a-model-can-declare).
 
-The original's pitch-to-tilt lookup adds an octave offset to its note-table
+The pitch-to-tilt lookup searches the note table with the pitch word itself, so it follows the
+sounding pitch whatever the PTCH law. The original's lookup adds an octave offset to its note-table
 index and can read past the end of the 32-word table. Here the table repeats
 across four octaves (128 words), so the lookup stays inside it. The synthesis instructions are otherwise unchanged.

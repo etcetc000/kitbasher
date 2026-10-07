@@ -185,6 +185,126 @@
               }
             }
           }
+        },
+        "pitch": {
+          "description": "What the pitch knob means (engine/src/pitch.ts). The shared law for absolute-pitch models is quarter: raw = 2 (MIDI - 24), base_note 24, steps 2, so raw 0 = MIDI 24 and raw 127 = MIDI 87.5. MIDI 60 is named C3.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "knob",
+            "law"
+          ],
+          "properties": {
+            "knob": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 7
+            },
+            "law": {
+              "enum": [
+                "quarter",
+                "chromatic",
+                "continuous",
+                "relative",
+                "none"
+              ]
+            },
+            "steps": {
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "base_note": {
+              "type": "number"
+            },
+            "range": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 127
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "center": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "mode_knob": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "by_mode": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "zone"
+                ],
+                "properties": {
+                  "zone": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 127
+                  },
+                  "law": {
+                    "enum": [
+                      "quarter",
+                      "chromatic",
+                      "continuous",
+                      "relative",
+                      "none"
+                    ]
+                  },
+                  "steps": {
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "base_note": {
+                    "type": "number"
+                  },
+                  "range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "center": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 127
+                  }
+                }
+              }
+            },
+            "cents_per_step": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "tolerance_cents": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "table": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },
