@@ -93,7 +93,8 @@ is MIDI 24 (32.70 Hz), every even value is a semitone, every odd value the quart
 tone between, and raw 127 is MIDI 87.5. Notes are named as on the Machinedrum's
 own MIDI machine, MIDI 60 = C3, so raw 0 is C0 and raw 72 is C3. Models whose modes
 sit at different pitches keep each mode's base in `by_mode`; hats, cymbals and
-cowbells are `relative`, two raws per semitone about raw 64.
+cowbells are `relative` about raw 64, which is not a note (VADHH and VADCY: one raw
+per semitone, `steps: 1`).
 
 `engine/src/pitch.ts` holds the one mapping (`rawToNote`, `noteToRaw`, `noteName`)
 and checks the object against the panel: the knob must be captioned `PTCH`,

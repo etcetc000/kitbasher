@@ -280,11 +280,11 @@ local_117:
     mpy y0,x0,a
     move a,y:(r6+$c)
     move y:(r6+$1),x0
-    move #>$2aaaab,y0
+    move #>$555555,y0
     mpy y0,x0,a
     move y:(r6+$c),x0
     add x0,a
-    add #>$3aaaaa,a
+    add #>$255555,a
     move a,y:(r6+$c)
     move x:(r6+$36),a
     move a,x0

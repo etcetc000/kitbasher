@@ -34,13 +34,13 @@ quarter tone between, and 127 is MIDI 87.5. Each manifest records it in
 | VADRC | The law on both rims; on CLAP knob 1 is TONE, not a note | 80 |
 | VADPC | The law with each mode's own offset: MIDI = 24 + offset + raw / 2, offsets BOOM −29, TOM1 −21, TOM2 −14, TOM3 −8, CNGA −4, PING −10; BOOM holds MIDI 0 below raw 10 | 80 (every mode plays the note raw 64 played) |
 | VADSY | The law, for both oscillators; DET, the sweep, drift and the arpeggio stay in semitones | 80 (MIDI 64) |
-| VADHH, VADCY | Relative: half a semitone a step about raw 64, which plays each mode's own voicing | 64 |
+| VADHH, VADCY | Unchanged and relative: one semitone a step about raw 64, which plays each mode's own voicing (not a note) | 64 |
 
 VADBD, VADSD and VADRC read a regenerated 129-entry table and cost nothing extra.
 VADPC and VADSY read their semitone table at the half step, interpolated (at most
 0.2 cent off at a quarter tone): two instructions per read, about +0.13 (VADPC) and
-+0.19 (VADSY) cycles a sample. VADHH and VADCY only change two constants. Every
-machine is at version 2.0.0. Saved kits and pattern P-locks made with the 1.x sources play different notes on 2.0.0; nothing converts them.
++0.19 (VADSY) cycles a sample. VADHH and VADCY keep their code and only gain the
+metadata (1.1.0); every other machine is at version 2.0.0. Saved kits and pattern P-locks made with the 1.x sources play different notes on 2.0.0; nothing converts them.
 
 ## Analog imperfections
 
