@@ -33,6 +33,13 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <p>Choose your original OS 1.63, X.13, X.14 or Em's DEV firmware. Everything runs in this browser; your file stays on your computer.</p>
     <label id="drop"><input id="file" type="file" accept=".syx,.bin" aria-label="Choose firmware file"><strong>Drop your OS file here</strong>, or browse<span class="fine">.syx or .bin · <span id="bases">OS 1.63, X.13, X.14 and Em's DEV firmware</span></span></label>
     <details id="firmware-details" hidden><summary>Firmware compatibility details</summary><p class="fine" id="firmware-info"></p></details>
+    <section class="restore" id="restore" aria-labelledby="restore-title">
+      <h3 id="restore-title">Built with Kitbasher before? Keep your kits</h3>
+      <p class="fine">Kits find machines by ID. Drop your previous Kitbasher <strong>.syx</strong> (the file you flashed), your project file or your layout file, and every machine in it keeps its ID; new models take free IDs.</p>
+      <label class="restore-drop"><input id="project-file" type="file" accept=".json,.syx,.bin,application/json" aria-label="Restore a previous session: Kitbasher .syx, project or layout file"><strong>Drop your previous Kitbasher .syx, project or layout file</strong>, or browse</label>
+      <button type="button" id="legacy-ids" class="link">No file? Use the IDs Kitbasher gave before October 2026</button>
+      <p class="fine" id="project-status" role="status" aria-live="polite"></p>
+    </section>
     <fieldset id="uw-question" class="uw-question"><legend>Does your Machinedrum have the UW option?</legend>
       <label><input type="radio" name="uw" value="yes"> Yes</label>
       <label><input type="radio" name="uw" value="no"> No</label>
@@ -41,7 +48,6 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
       <p class="fine" id="uw-effect"></p>
     </fieldset>
     <button type="button" id="firmware-next" class="wizard-primary" disabled>Samples →</button>
-    <div class="project-load"><label class="fine" for="project-file">Load a saved project</label> <input id="project-file" type="file" accept=".json,application/json"><p class="fine" id="project-status" role="status" aria-live="polite"></p></div>
   </section>
 </section>
 <section id="step-2" class="wizard-page" aria-labelledby="samples-title" hidden>
@@ -75,6 +81,7 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
 <section id="step-5" class="wizard-page" aria-labelledby="download-title" hidden>
   <h2 id="download-title" tabindex="-1">Download firmware</h2>
   <p id="download-summary"></p>
+  <p id="ids-warning" class="ids-warning" hidden></p>
   <button id="build" type="button" class="wizard-primary" disabled>Create SysEx</button>
   <div id="result" aria-live="polite"></div>
   <div id="download-needs" class="uw-next" hidden></div>

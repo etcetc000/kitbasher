@@ -5,6 +5,16 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ## Unreleased
 
+### Changed (breaking)
+
+- **Machine IDs are now given bottom-up.** Every selected model takes the lowest
+  free ID, in menu order; packs no longer pin IDs (OSCPW was on 175, WAVTB 124,
+  OSC8B 126, VOXVO 127, ...). Kits saved with an earlier build refer to the old
+  IDs: on the first step, drop the `.syx` you flashed (or your project or layout
+  file), or choose "the IDs Kitbasher gave before October 2026", and every
+  machine keeps its ID. The Download step warns when you built before and
+  restored nothing. On the command line: `--restore <file>` and `--legacy-ids`.
+
 ### Changed
 
 - One pitch law for every pitched public model: PTCH raw = 2 × (MIDI − 24), so raw
@@ -97,11 +107,13 @@ All notable changes to Kitbasher are recorded here. The format follows
 - On DEV 26A01, the kit editor draws a newly chosen category in full.
 - On a Machinedrum without UW, the machine-select menu shows every added
   category and hides ROM and RAM, as on stock. Before, OS 1.63 and DEV builds hid
-  the last two added categories and showed ROM and RAM (which load GND--), and
-  X.13 builds hung at the boot screen.
+  the last two added categories and showed ROM and RAM (which load GND--), X.13
+  and X.14 builds opened the machine menu on the wrong category for added
+  machines, and X.13 builds hung at the boot screen.
 - The page now asks whether your Machinedrum has the UW option before you go on,
   remembers the answer and saves it in layout and project files. With No,
   models that play UW samples are not selectable, machines that normally sit on
   ID 128 or above (OSCPW) move to a free ID below 128, the ID map marks 128 and
   up as unusable, and the menu preview shows your categories in place of ROM
-  and RAM. `--no-uw` does the same on the command line.
+  and RAM. `--no-uw` does the same on the command line, leaving out (and
+  naming) the models that play UW samples.

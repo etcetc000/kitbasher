@@ -35,9 +35,6 @@ export function readStored(get: (k: string) => string | null): UwAnswer {
   try { const v = get(UW_STORAGE_KEY); return v === 'yes' || v === 'no' ? v : null; } catch { return null; }
 }
 
-/** The menu's category limit: without UW, ROM's and RAM's places go to the added categories. */
-export const menuLimit = (max: number, noUw: boolean): number => max + (noUw ? UW_ONLY_CATEGORIES : 0);
-
 /** The base's categories a unit shows: without UW, all but its last two (ROM and RAM). */
 export function shownStock<T>(stock: T[], noUw: boolean): T[] {
   return noUw && stock.length >= UW_ONLY_CATEGORIES ? stock.slice(0, stock.length - UW_ONLY_CATEGORIES) : stock;

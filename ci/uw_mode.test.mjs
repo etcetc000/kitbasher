@@ -54,11 +54,10 @@ test('answers round-trip through files and storage; anything else is unanswered'
 
 const STOCK = ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM'];
 
-test('menu preview and limit: with UW unchanged, without UW no ROM/RAM and two more places', () => {
+test('menu preview: with UW unchanged, without UW no ROM and RAM (the limit counts what is shown, as plan.ts does)', () => {
   assert.deepEqual(U.shownStock(STOCK, false), STOCK);
   assert.deepEqual(U.shownStock(STOCK, true), STOCK.slice(0, 8));
-  assert.equal(U.menuLimit(256, false), 256);
-  assert.equal(U.menuLimit(256, true), 258);
+  assert.equal('menuLimit' in U, false);
 });
 
 test('ID map with UW: as before', () => {
@@ -84,4 +83,16 @@ test('ID map without UW: 128 and up unusable with the reason, moves and UW-only 
   assert.match(moved.title, /usual ID is 175: moved, an ID a Machinedrum without UW cannot use/);
   const wav = U.idCell({ id: 30, state: 'free' }, false, { name: 'WAVMR', usual: 30, needsUw: true });
   assert.match(wav.title, /plays a UW sample/);
+});
+
+test('the first step offers to restore a previous session, a Kitbasher .syx included, and the earlier IDs', () => {
+  const step1 = html.slice(html.indexOf('<section id="step-1"'), html.indexOf('<section id="step-2"'));
+  assert.match(step1, /id="restore"/);
+  assert.match(step1, /id="project-file" type="file" accept="[^"]*\.syx/);
+  assert.match(step1, /id="legacy-ids"/);
+  assert.match(html, /id="ids-warning"/);
+  // a restored project never ticks a model this unit cannot play (it would plan with it first)
+  assert.match(app, /want\.has\(i\.dataset\.module!\) && !i\.disabled/);
+  const refresh = app.slice(app.indexOf('function refresh('), app.indexOf('function refresh(') + 300);
+  assert.match(refresh, /applyNoUw\(\);/);
 });

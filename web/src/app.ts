@@ -33,6 +33,11 @@ import { readBank } from '../../engine/src/samples.js';
 import { decodeProject, encodeProject, osOf, osProblem, PROJECT_EXTENSION, type Project } from '../../engine/src/project.js';
 import { SamplesStep } from './samples-ui.js';
 import { answerOf, gate, HOW_TO_CHECK, noUwOf, readStored, UW_STORAGE_KEY, uwOf, type UwAnswer } from './uw-mode.js';
+import { recoverSession } from '../../engine/src/restore.js';
+import { legacyLayout, LEGACY_LAYOUT_NAME } from '../../engine/src/legacy_ids.js';
+import { listedFreeIds, parseLayout, type Layout } from '../../engine/src/layout.js';
+import { num } from '../../engine/src/bytes.js';
+import { select } from '../../engine/src/selection.js';
 
 interface Data { bases: BaseSet; packs: Pack[]; core: CorePack | null; source: { commit: string } }
 
@@ -157,6 +162,57 @@ function setUwAnswer(a: UwAnswer, remember = true): void {
   applyNoUw();
   syncWizard();
 }
+/**
+ * The UW answer a restored file records. It never replaces an answer the user gave: a different
+ * one is pointed out instead. With no answer yet it is taken for this visit, not remembered.
+ */
+function fileAnswer(uw: boolean | undefined, from: string): void {
+  const said = answerOf(uw);
+  if (!said) return;
+  if (uwAnswer === 'yes' || uwAnswer === 'no') {
+    if (said !== uwAnswer) {
+      // the user's answer stands; the restored layout follows it
+      setUwAnswer(uwAnswer, false);
+      status(`${from} was saved for a Machinedrum ${said === 'yes' ? 'with' : 'without'} UW; you answered ${uwAnswer === 'yes' ? 'Yes' : 'No'}, so that is what this build uses. Change your answer on the first step if ${from} is right.`, 'error');
+    }
+    return;
+  }
+  setUwAnswer(said, false);
+  status(`${from} was saved for a Machinedrum ${said === 'yes' ? 'with' : 'without'} UW, so the UW question is answered ${said === 'yes' ? 'Yes' : 'No'}. Change it on the first step if that is wrong.`, 'info');
+}
+
+// ---- restoring a previous session: the machine IDs saved kits rely on
+let sessionRestored = false;
+const BUILT_KEY = 'kitbasher.built';
+const catalogModels = (): PackModel[] => select(data.packs, {}).fams.flatMap((f) => f.models);
+
+/** A layout from a file, a patched OS or the earlier-IDs preset becomes the user's map. */
+function adoptLayout(l: Layout, from: string, extra = ''): void {
+  if (!l.base && base) l = { ...l, base: base.id };
+  layoutEd.adopt(l, from);
+  sessionRestored = true;
+  $('project-status').textContent = `Machine IDs restored from ${from}: ${Object.keys(l.machines).length} machines keep their IDs.${extra}`;
+  fileAnswer(l.uw, from);
+  refresh();
+}
+
+/** A Kitbasher-built OS (.syx or .bin): its layout table, or else its descriptors matched to the catalog. */
+async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> {
+  let parsed: Firmware;
+  try { parsed = readFirmware(bytes); } catch { return false; }
+  const r = recoverSession(parsed, catalogModels(), base?.os.descriptorTable ?? num(data.bases.lineage.anchors.descriptor_table));
+  if (!r) return false;
+  adoptLayout(r.layout, name, (r.how === 'descriptors' ? ' (read from its machines: it has no layout table)' : '') +
+    (r.unknown.length ? ` Not in this catalog, so not restored: ${r.unknown.map((u) => `${u.name} (ID ${u.id})`).join(', ')}.` : ''));
+  return true;
+}
+
+function useLegacyIds(): void {
+  if (!fw || !base) { status('Load your OS file first: the earlier IDs depend on it.', 'error'); return; }
+  const f = select(data.packs, {}).fams;
+  adoptLayout(legacyLayout(base, fw.slots[0].raw, f.flatMap((x) => x.models), f, listedFreeIds(fw, base)), LEGACY_LAYOUT_NAME);
+}
+
 /** Models that play a UW sample: "needs UW", and not selectable on a Machinedrum without UW. */
 function applyNoUw(): void {
   const on = noUw();
@@ -255,7 +311,7 @@ function trimmed(opt = trimOptions()): Trimmed {
 const allowIdMove = (): boolean => true;
 
 function planFor(exclude: string[], opt = trimOptions()): Plan {
-  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), noUw: noUw(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
+  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
@@ -297,6 +353,7 @@ function meter(id: string, used: number, cap: number, unit: string, over: boolea
 /** Re-plan and show it: the meters, the problems, which machines can still be added, Build. */
 function refresh(minAutoDb: number | null = null): void {
   revision++;
+  applyNoUw();                                      // before planning: no plan with a model this unit cannot play
   packedCapacityProblem = false;
   cachedBuild = null;
   $('room').hidden = !fw;
@@ -363,13 +420,14 @@ function refresh(minAutoDb: number | null = null): void {
   const swapped = samples.state.swaps.size;
   $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
-  // a Machinedrum without UW cannot select or load machine IDs 128 and up (it takes 128 off)
-  const high = noUw() ? [] : p.sel.filter((s) => s.id >= 128);
-  $('download-needs').hidden = !needs.length && !high.length;
-  $('download-needs').replaceChildren(...(high.length ? [
-    el('h3', {}, 'Machinedrum without UW'),
-    el('p', {}, `${high.map((s) => `${s.m.name.trim()} is on ID ${s.id}`).join(', ')}. A Machinedrum without the UW option cannot use machine IDs 128 and up: selecting ${high.length === 1 ? 'it' : 'one'} gives an empty machine. If yours has no UW, answer No to the UW question on the first step.`),
-  ] : []), ...(needs.length ? [
+  $('download-needs').hidden = !needs.length;
+  // built here before, and no earlier session restored: the IDs may not be the ones their kits use
+  let builtBefore = false;
+  try { builtBefore = localStorage.getItem(BUILT_KEY) === '1'; } catch { /* storage unavailable */ }
+  $('ids-warning').hidden = sessionRestored || !builtBefore;
+  $('ids-warning').textContent = 'Machine IDs may differ from your earlier build: Kitbasher now gives IDs from the lowest free one, and nothing was restored. ' +
+    'If your kits use machines from an earlier build, go back to the first step and drop that build\'s .syx (or your project or layout file), or use the IDs Kitbasher gave before October 2026.';
+  $('download-needs').replaceChildren(...(needs.length ? [
     el('h3', {}, 'UW sample data: a separate step'),
     el('p', {}, needs.join(' ')),
     el('p', {}, 'These sample-based features require a UW Machinedrum. After installing the firmware, load the matching sample/wavetable SysEx through the UW sample manager, not the firmware upgrade screen. Back up your UW samples first and check the destination slot.'),
@@ -417,14 +475,10 @@ async function onFile(f: File): Promise<void> {
       } else {
         // an OS this page patched: not a base, but it carries its layout, which comes back
         const got = findLayout(parsed);
-        if (!got) throw e;
         if (request !== fileRequest) return;
-        layoutEd.adopt(got.layout, f.name);
-        const fp = await fingerprint(got.layout);
-        const want = data.bases.profiles.find((x) => x.id === got.layout.base);
-        status(`${f.name} is an OS patched with a layout (${fp}, ${Object.keys(got.layout.machines).length} machines, ` +
-               `${got.layout.categories.length} categories): the layout is restored. Now load the original ${want?.name ?? got.layout.base} file to patch it again.`, 'ok');
-        refresh();
+        if (!(await restoreFromOs(bytes, f.name))) throw e;
+        const want = got && data.bases.profiles.find((x) => x.id === got.layout.base);
+        status(`${f.name} is an OS Kitbasher built: its machine IDs are restored. Now load the original ${want?.name ?? 'OS'} file to patch it again.`, 'ok');
         return;
       }
     }
@@ -513,7 +567,7 @@ const storageFull = (e: unknown): e is CompressedCapacityError | OsAreaCapacityE
 
 function buildWith(trim: TrimOptions): Promise<BuildResult> {
   return build(input!, base!, data.packs, data.core!,
-    { exclude: excludes(), trim, allowIdMove: allowIdMove(), noUw: noUw(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
 }
 
 function showStorage(report: BuildReport): void {
@@ -636,6 +690,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     const stem = inputName.replace(/\.(syx|bin)$/i, '');
     const name = `${stem}-models.syx`;
     downloadUrl = URL.createObjectURL(blob);
+    try { localStorage.setItem(BUILT_KEY, '1'); } catch { /* storage unavailable */ }
     const a = el('a', { class: 'download', href: downloadUrl, download: name }, `Download ${name}`);
     $('result').replaceChildren(a, el('details', {}, el('summary', {}, 'Build details and checks'), reportView(report)));
     status(`Built in ${((performance.now() - t) / 1000).toFixed(1)} s.`, 'ok');
@@ -691,7 +746,13 @@ async function saveProject(): Promise<void> {
 async function onProjectFile(f: File): Promise<void> {
   const note = $('project-status');
   try {
-    const p = await decodeProject(await f.text());
+    if (/\.(syx|bin)$/i.test(f.name)) {
+      if (!await restoreFromOs(new Uint8Array(await f.arrayBuffer()), f.name)) throw new Error(`${f.name} is not an OS Kitbasher built`);
+      return;
+    }
+    const text = await f.text();
+    if (JSON.parse(text)?.format !== 'kitbasher-project/1') { adoptLayout(parseLayout(text), f.name); return; }
+    const p = await decodeProject(text);
     if (fw && base) {
       const problem = osProblem(p.os, base);
       if (problem) throw new Error(`${problem}. Load the ${p.os.name || p.os.base} file it was made with first.`);
@@ -730,10 +791,12 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
-  for (const i of boxes()) i.checked = want.has(i.dataset.module!);
+  if (p.uw !== undefined) fileAnswer(p.uw, name);
+  applyNoUw();
+  // a model this Machinedrum cannot play stays unticked
+  for (const i of boxes()) i.checked = want.has(i.dataset.module!) && !i.disabled;
   const missing = p.models.filter((m) => !have.has(m));
-  if (p.layout) layoutEd.adopt(p.layout, name); else layoutEd.map = null;
-  if (p.uw !== undefined) setUwAnswer(answerOf(p.uw));
+  if (p.layout) { layoutEd.adopt(p.layout, name); sessionRestored = true; } else layoutEd.map = null;
   updateTrimControls();
   $('project-status').textContent = `Loaded ${name}.`;
   status(`Loaded project ${name}: ${p.swaps.size} sample${p.swaps.size === 1 ? '' : 's'} replaced, ${want.size - missing.length} models.` +
@@ -748,11 +811,10 @@ async function main(): Promise<void> {
   $('room').append(trimSlot);
   $('room').hidden = true;
   layoutEd = new LayoutEditor($('layout-anchor'), () => {
-    // a layout file that records the UW answer sets it; one from before the question leaves it
-    const said = answerOf(layoutEd.map?.uw);
-    if (said && said !== uwAnswer) setUwAnswer(said);
     refresh();
   });
+  layoutEd.onAdopt = (l, from) => { sessionRestored = true; fileAnswer(l.uw, from); };
+  $('legacy-ids').addEventListener('click', useLegacyIds);
   for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) {
     r.addEventListener('change', () => {
       if (!r.checked) return;

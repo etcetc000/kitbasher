@@ -22,7 +22,7 @@ import type { Plan } from '../../engine/src/plan.js';
 import { drawMenuLcd } from './lcd.js';
 import { describeModel } from './catalog.js';
 import { needsUwSamples } from '../../engine/src/packs.js';
-import { idCell, menuLimit, shownStock, usableId } from './uw-mode.js';
+import { idCell, shownStock, usableId } from './uw-mode.js';
 
 const CSS = `
 .layout-panel{margin-top:20px;padding:16px 20px}
@@ -129,6 +129,8 @@ export class LayoutEditor {
     this.base = base;
     this.slots = fw && base ? idSlots(fw, base) : [];
     this.stock = fw && base ? baseFamilies(fw, base) : [];
+    // a map read from an OS's machines names no base: it is for the one loaded now
+    if (this.map && base && !this.map.base) this.map = { ...this.map, base: base.id };
     if (this.map && base && this.map.base !== base.id) {
       this.say(`The map you had was made for base ${this.map.base}; this OS is ${base.name}, so it was set aside.`, 'error');
       this.map = null;
@@ -136,8 +138,12 @@ export class LayoutEditor {
   }
 
   /** A map read from a file or a patched OS: it becomes the user's. */
+  /** called when a map is adopted (a file, a patched OS, a project): the page handles its UW answer */
+  onAdopt: ((l: Layout, from: string) => void) | null = null;
+
   adopt(l: Layout, from: string): void {
     this.map = l;
+    this.onAdopt?.(l, from);
     void fingerprint(l).then((fp) => this.say(`Layout ${fp} restored from ${from}.`, 'ok'));
   }
 
@@ -267,8 +273,8 @@ export class LayoutEditor {
     add.addEventListener('click', () => this.edit((x) => {
       let n = 1;
       while (x.categories.includes(`NW${n}`)) n++;
-      const max = menuLimit(lim.maxFamilies, this.noUw);
-      if (shownStock(this.stock, this.noUw).length + x.categories.length >= max) return `!The menu takes ${max} categories.`;
+      // the engine's count (plan.ts): the categories the unit shows against the menu's limit
+      if (shownStock(this.stock, this.noUw).length + x.categories.length >= lim.maxFamilies) return `!The menu takes ${lim.maxFamilies} categories.`;
       x.categories.push(`NW${n}`);
       this.previewCategory = `NW${n}`;
       return `Category NW${n} added: rename it, then drag machines into it.`;
@@ -457,9 +463,11 @@ export class LayoutEditor {
 
   private async exportMap(): Promise<void> {
     if (!this.eff) return;
-    const fp = await fingerprint(this.eff);
-    const text = JSON.stringify({ ...this.eff, ...(this.uw === undefined ? {} : { uw: this.uw }), fingerprint: fp }, null, 1);
-    const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: `md-layout-${this.eff.base}-${fp}.json` }) as HTMLAnchorElement;
+    // the fingerprint of what the file holds, UW answer included
+    const out: Layout = { ...this.eff, ...(this.uw === undefined ? {} : { uw: this.uw }) };
+    const fp = await fingerprint(out);
+    const text = JSON.stringify({ ...out, fingerprint: fp }, null, 1);
+    const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'application/json' })), download: `md-layout-${out.base}-${fp}.json` }) as HTMLAnchorElement;
     document.body.append(a);
     a.click();
     a.remove();

@@ -112,37 +112,69 @@ finds the new patch sites; nothing is reused from the older DEV profile.
 
 The same OS files run on a Machinedrum with and without the UW option. At boot
 the OS reads which one it is on and, without UW, takes the ROM and RAM machine
-categories out of the machine-select menu. Stock 1.63 and the DEV builds do that
-by dropping the *last two* categories of the menu; X.13 and X.14 find the
-category named ROM and move the later ones down over ROM and RAM.
+categories out of the machine-select menu. The same boot step counts the
+categories and records, for every machine, which category and place the
+machine menu opens on.
 
-Added categories come after the base's own, so on 1.63 and DEV the stock rule
-would hide two of them and show ROM and RAM instead (which play nothing without
-UW). Every build therefore adds a short routine that, on a unit without UW,
-removes ROM and RAM from the menu the way X.13 does, and turns off the stock
-rule. On X.13 the build points the end of X.13's own move at the new menu table;
-without that, a unit without UW would hang at the boot screen. X.14 needs
-nothing. The `uw-menu` check in the build report says which case applies.
+- Stock 1.63 and the DEV builds drop the *last two* categories. With added
+  categories after the base's own, that would hide two of them and show ROM and
+  RAM, which play nothing without UW.
+- X.13 and X.14 move the categories after ROM and RAM down over them, but only
+  after recording where each machine is, so the menu would open on the wrong
+  category for every added machine (and NFX). X.13's move also ended on an
+  address that no longer matched once the menu table moved, which hung the unit
+  at the boot screen.
+
+Every build therefore adds a short routine that, on a unit without UW, removes
+ROM and RAM from its menu table *before* the base counts the categories, and
+turns the base's own step off. The menu then shows the base's categories
+without ROM and RAM followed by yours, and opens on the right one. The
+`uw-menu` check in the build report names the routine and the base's step it
+replaced; a build for a Machinedrum without UW fails if the base's step is not
+found.
 
 Two things need a UW Machinedrum, so the page asks first: *Does your
 Machinedrum have the UW option?* It does not go on without a Yes or a No (Not
 sure explains how to check: a UW unit's machine menu has ROM and RAM). The
-answer is remembered in the browser and saved in layout and project files as
-`uw`; a file from before the question has no answer, and the page asks again.
-With a No:
+answer is remembered in this browser and saved as `uw` in layout and project
+files and in the layout table of the OS it builds. Loading a file with a
+different answer does not change yours; the page says so. With a No:
 
 - **No machine IDs of 128 and up.** Without UW the OS takes 128 off any machine
   ID of 128 or more, so a machine there would be selected as another, empty one.
-  A machine whose usual ID is 128 or above (OSCPW, 175) moves to the lowest free
-  ID below 128; the page, the ID map and the build report show the move and why.
-  Automatic IDs stay below 128. The build fails, saying so, only if no ID below
-  128 is left. On the command line: `--no-uw`.
+  New IDs stay below 128; a machine a restored session puts at 128 or above
+  (OSCPW was on 175 in earlier builds) moves to the lowest free ID below 128, and
+  the page, the ID map and the build report show the move. The build fails,
+  saying so, only if no ID below 128 is left. On the command line: `--no-uw`.
 - **No models that play a UW sample** (marked *needs UW* on the page; WAVTB,
-  WAVCH and WAVMR today). They cannot be selected.
+  WAVCH and WAVMR today). They cannot be selected; `--no-uw` leaves them out and
+  names them.
 - The ID map hatches 128 and up as unusable, and the menu preview shows your
-  categories where ROM and RAM would be, with room for two more categories.
+  categories where ROM and RAM would be.
 
-With a Yes nothing changes: every model and ID is available as before.
+With a Yes nothing changes.
+
+## Machine IDs
+
+Saved kits find machines by ID. Kitbasher gives each selected model the lowest
+free ID, in menu order, so the same selection on the same OS always gets the
+same IDs. A model's pack no longer fixes its ID.
+
+**This changed in October 2026.** Earlier builds put some models on fixed IDs
+(OSCPW 175, WAVTB 124, OSC8B 126, VOXVO 127, WAVCH 6, FMSSW 10, FMS2O 11,
+FMS3O 12, OSCSW 13, OSCCH 14, WAVMR 30) and the rest after them. To keep kits
+made with an earlier build working, restore that build's IDs on the first step:
+
+- drop the **.syx you flashed** (or the .bin): Kitbasher reads the layout table
+  every build carries, or, failing that, the machines it added, matched to the
+  catalog by name (the page names any it does not know);
+- or your **project file** or **layout file**;
+- or choose **the IDs Kitbasher gave before October 2026**: every catalog model
+  on the ID an earlier build with everything selected gave it. A build of a
+  smaller selection gave some models lower IDs; the .syx is exact.
+
+Every machine the restored session names keeps its ID; models it does not name
+take free IDs. On the command line: `--restore <file>` or `--legacy-ids`.
 
 ## Adding a base
 

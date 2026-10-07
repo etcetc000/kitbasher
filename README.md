@@ -20,6 +20,11 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    the UW option. Not sure? Open the machine menu of any track on your current
    firmware: if it has ROM and RAM categories, you have UW. The page waits for a
    Yes or a No, remembers it, and saves it with your layout.
+
+   **Built with Kitbasher before?** Drop the `.syx` you flashed (or your project
+   or layout file) in the same step, so your kits keep finding their machines:
+   machine IDs are now given from the lowest free one, and earlier builds used
+   others. See [Machine IDs](docs/BASES.md#machine-ids).
 3. **Swap samples (optional).** The E12 machines appear as a grid of pads: click
    one to hear it, drop a WAV or AIFF file on it to replace it, or drop several
    files or a folder to fill the pads in order. A new sample can be as long as the
@@ -42,8 +47,8 @@ sample files with instructions.
 A Machinedrum without the UW option takes the same OS update. Answer No to the UW
 question and the page leaves out what such a unit cannot use: models that play
 UW samples (marked *needs UW*) and machine IDs of 128 and up (a machine that
-normally sits there, such as OSCPW on 175, moves to a free ID below 128 and the
-page says so). The machine menu then shows your categories where ROM and RAM
+a restored session puts there moves to a free ID below 128, and the page says
+so). The machine menu then shows your categories where ROM and RAM
 would be. See [Machinedrum without UW](docs/BASES.md#machinedrum-without-uw).
 
 ## Supported bases
@@ -84,8 +89,9 @@ Every rule that keeps a patched build from crashing or freezing the
 Machinedrum, and the hardware test to run before you share an image, is in
 [docs/FIRMWARE-SAFETY.md](docs/FIRMWARE-SAFETY.md).
 
-Saved kits refer to machines by ID. When you rebuild for existing kits, export
-your layout from the page and load it again so every machine keeps its ID.
+Saved kits refer to machines by ID. When you rebuild for existing kits, drop
+your previous Kitbasher `.syx`, project or layout file on the first step so every
+machine keeps its ID ([Machine IDs](docs/BASES.md#machine-ids)).
 
 ## Development
 

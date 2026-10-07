@@ -274,8 +274,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     // how a unit without UW hides ROM and RAM, which decides what it shows of our families
     const uw = findUwMenu(images, familyTable);
     note('non-UW menu', uw.menu !== null, uw.why);
-    if (uw.menu?.kind === 'count') { val('os.uw_menu.entry', uw.menu.entry); val('os.uw_menu.callers', uw.menu.callers); val('os.uw_menu.branch', uw.menu.branch); }
-    if (uw.menu?.kind === 'shift') val('os.uw_menu.end_sites', uw.menu.endSites);
+    if (uw.menu) { val('os.uw_menu.entry', uw.menu.entry); val('os.uw_menu.callers', uw.menu.callers); val('os.uw_menu.branch', uw.menu.branch); }
     // the machine IDs of the base's menu family with this name (the descriptor's ID byte at +4)
     const familyMembers = (table: number, name: string): number[] | null => {
       for (let n = 0; n < 256; n++) {

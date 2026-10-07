@@ -755,6 +755,10 @@ h2 {
   white-space: nowrap;
 }
 .machine.unavailable { opacity: .5; }
+.restore { margin: 16px 0; padding: 12px 14px; border: 2px solid #9fb6db; border-radius: 6px; background: #f3f7fd; }
+.restore h3 { margin: 0 0 4px; }
+.restore-drop { display: block; border: 1px dashed #9fb6db; border-radius: 5px; padding: 10px; margin: 8px 0; cursor: pointer; }
+.ids-warning { border-left: 4px solid var(--err); padding: 6px 10px; background: #fdf3f1; }
 .uw-question { margin: 14px 0; border: 1px solid var(--line); border-radius: 5px; padding: 8px 12px; }
 .uw-question legend { font-weight: 600; padding: 0 4px; }
 .uw-question label { margin-right: 16px; }

@@ -11,7 +11,7 @@ import { be32, Buf, fromBase64, h, wordsLE } from './bytes.js';
 import type { Base } from './bases.js';
 import { hostSendReorder, levBarStub } from './coldfire.js';
 import { menuRefreshSite, menuRefreshCode, type MenuRefreshSite } from './menu_refresh.js';
-import { recordName, uwMenuCode } from './uw_menu.js';
+import { hiddenIndex, recordName, uwMenuCode } from './uw_menu.js';
 import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
@@ -84,6 +84,8 @@ export interface Selection extends ModelFilter {
    * (engine/src/selection.ts allocateIds).
    */
   noUw?: boolean;
+  /** the user's answer to "does your Machinedrum have the UW option?" (false = noUw); recorded in the layout */
+  uw?: boolean;
   /**
    * Default menu categories: 'sound' (the default) files each machine under its browsing
    * category's menu code (engine/src/sound_catalog.ts: KIK, SNR, ... in browsing order);
@@ -330,12 +332,14 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
   });
   ext.push(new Uint8Array(8));
   ext.align(4, 0);
-  // on a unit without UW the base hides its last two families (ROM and RAM): on a base that does
-  // it by count, a routine of ours removes those two records from our copy instead
+  // on a unit without UW the base hides ROM and RAM: a routine of ours removes those two records
+  // from our copy before the base counts the families (engine/src/uw_menu.ts)
   let uwMenu: RamImage['uwMenu'] = null;
-  if (O.uwMenu?.kind === 'count' && nf >= 2) {
+  const names = Array.from({ length: nf }, (_, k) => String.fromCharCode(...Array.from(main.subarray(fo + 8 * k, fo + 8 * k + 4)).filter((c) => c)));
+  const hidden = O.uwMenu ? hiddenIndex(O.uwMenu, names) : null;
+  if (O.uwMenu && hidden !== null) {
     const entry = E + ext.length;
-    const code = uwMenuCode(O.uwMenu, family + 8 * (nf - 2), recordName(main, O.cfBase, O.familyTable, nf - 2));
+    const code = uwMenuCode(O.uwMenu, family + 8 * hidden, recordName(main, O.cfBase, O.familyTable, hidden));
     ext.push(code).align(4, 0);
     uwMenu = { entry, code };
   }
@@ -526,8 +530,10 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const problems: string[] = [];
   // a map saved before a model was renamed names it by its former key
   const lay = opt.layout && resolveLayout(opt.layout, aliases);
-  const noUw = !!opt.noUw || lay?.uw === false;
-  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base), { noUw });
+  const noUw = !!opt.noUw || opt.uw === false || (opt.uw === undefined && lay?.uw === false);
+  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base),
+    // bottom-up in menu order (the sound categories by default), so a selection always gets the same IDs
+    { noUw, rank: opt.menus === 'family' ? undefined : (m) => menuOrder(menuCategory(m)) });
   problems.push(...idProblems);
   const byFamily = opt.menus === 'family';
   const menus = lay ? menusFor(sel, lay, byFamily) : byFamily ? fams : soundMenus(sel);
@@ -727,7 +733,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const { ram, feats } = placeRam(base, main, core, driveLaws(core, packs), menus, sel, opt.features ?? {}, flashAt ?? base.features.descFlash?.alias ?? 0);
   problems.push(...feats.problems);
   return {
-    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel, noUw) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
+    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel, noUw ? false : opt.uw ?? lay.uw) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
     dsp2: { fits: !overflow && (!workspace || trim.end <= D.workspace.base),
       regions, capacity, demand, free, padding: overflow ? 0 : capacity - demand - free, records: problems.length ? [] : recs, machines },
     ram, features: { dynLabels: feats.dyn, dsp1Drive: feats.dsp1, hostReorder: feats.host, descFlash: feats.descFlash, notes: feats.notes },
@@ -765,7 +771,7 @@ function soundMenus(sel: Selected[]): Family[] {
 }
 
 /** The layout this build has: the map, with every selected machine where the build put it. */
-function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], noUw = false): Layout {
+function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], uw: boolean | undefined): Layout {
   const machines = { ...l.machines };
   const cats = [...l.categories];
   for (const f of menus) {
@@ -775,6 +781,6 @@ function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[]
       machines[m.key] = { id: s.id, category: f.name, order: i };
     });
   }
-  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines, ...(noUw ? { uw: false } : l.uw === undefined ? {} : { uw: l.uw }) };
+  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines, ...(uw === undefined ? {} : { uw }) };
 }
 
