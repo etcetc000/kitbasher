@@ -121,6 +121,8 @@ export interface Base {
     lcdFlush: import('./indicator.js').Site | null;
     /** the unmute-latency fix's sequencer sites (engine/src/unmute.ts); null: not found, or no label RAM range */
     unmute: import('./unmute.js').Unmute | null;
+    /** --midi-chroma: X.14's real-time MIDI path, verified byte for byte (engine/src/midi_chroma.ts) */
+    midiChroma: import('./midi_chroma.js').ChromaSite | null;
   };
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;

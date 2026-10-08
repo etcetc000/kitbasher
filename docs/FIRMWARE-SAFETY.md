@@ -91,7 +91,10 @@ this, so only hardware-proven ranges are used.
 
 **Enforced.** The `ext-ram` and `dyn-segment` gates, together with the
 `ram.window` in each `bases/*.json` profile. The CPU indicator stub is refused by
-name if it would end past the window. See [Supported bases](BASES.md).
+name if it would end past the window. With MIDI chromatic note input the whole RAM
+image must end inside the span earlier images ran from on hardware
+(`0x2bc000..0x2bce14`): descriptors move to flash first, and the `midi-chroma`
+gate refuses an image that still ends past it. See [Supported bases](BASES.md).
 
 **Rule.** Boot-time code must not use the stack before the OS sets one up: no
 register pushes as the boot routine's first action.
@@ -376,7 +379,7 @@ down before you flash, and let hardware decide.
    - `dsp2-records`, `dsp2-slot`, `stub-trim`, `cache-align`, `pi-clean`;
    - `dsp1-drive-layout`, `dsp1-recover`, `clean-recovery`, `cpu-indicator`;
    - `ctr-coverage`, `ctr-controlall`, `model-runtime`, `machine-ids`;
-   - `unmute-sites`, `unmute-fix`, `patch-list-unique`.
+   - `unmute-sites`, `unmute-fix`, `patch-list`.
 3. Independent image checks, re-derived from the base and the exact output
    rather than from the build's own plan: the boot block and bootstrap routine
    are identical, flash after the OS is erased, DSP records sit only in free

@@ -25,7 +25,8 @@
     "stub_trim_unit",
     "samples_unit",
     "pitch",
-    "unmute"
+    "unmute",
+    "midi_chroma"
   ],
   "legacy": [],
   "alignment": []

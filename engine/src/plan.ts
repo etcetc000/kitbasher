@@ -23,6 +23,7 @@ import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js
 import { callCode, drivePairs, dsp1Transport, dynSegment, linkDrive, type DriveLink, type Dsp1Law, type DynMachine } from './features.js';
 import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recovery.js';
 import { unmuteBlock, type UnmuteBlock } from './unmute.js';
+import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type ChromaSite, type ChromaTable } from './midi_chroma.js';
 import { linkCode, words, type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
 import { ctrCoverage, type CtrCoverage } from './scan.js';
 import { baseFamilies, checkLayout, listedFreeIds, LAYOUT_FORMAT, menuLimits, type Layout } from './layout.js';
@@ -66,12 +67,21 @@ export interface Features {
   cpuIndicator?: boolean;
   /**
    * An unmuted track plays its next trig instead of about two steps later (engine/src/unmute.ts):
-   * five sequencer instructions call a routine of ours in the label segment's RAM range. On by
-   * default wherever discovery finds the sequencer it is written against; false leaves the base's
-   * sequencer as it is.
+   * five sequencer instructions call routines of ours in the label segment's RAM range. On by
+   * default on the bases whose profile qualifies it; false leaves the base's sequencer as it is.
    */
   unmuteFix?: boolean;
+  /**
+   * MIDI chromatic note input (engine/src/midi_chroma.ts): a note on the chromatic channel plays
+   * the selected track at the note's pitch, using the selected models' pitch metadata. `true` uses
+   * the default channel, base+4; `{ channel }` names another ('base+4'..'base+15', 'ch:1'..'ch:16').
+   * Off by default: a build without it is byte-identical to one from before the option existed.
+   */
+  midiChroma?: boolean | { channel: string };
 }
+
+/** The default chromatic channel: the first one above the four base channels (channel 5 with base channel 1). */
+export const MIDI_CHROMA_CHANNEL = 'base+4';
 
 export interface Selection extends ModelFilter {
   features?: Features;
@@ -194,6 +204,8 @@ export interface RamImage {
    * (`segment`, copied by the boot routine in the label segment's place).
    */
   unmute: { block: UnmuteBlock; home: 'dyn' | 'own'; segment: Uint8Array | null; base: number; limit: number } | null;
+  /** --midi-chroma: the routines and their note table, at the end of the RAM image */
+  chroma: { at: number; code: ChromaCode; table: ChromaTable; site: ChromaSite; channel: string; cfg: number } | null;
 }
 
 /**
@@ -290,7 +302,7 @@ export const IND_EXT_SPAN = 0xe14;
 
 export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Family[], sel: Selected[],
   opt: { dyn: boolean; dsp1: DriveLink | null; host: boolean; toFlash: Set<string>; dynFlash: Set<string>; idSpace: number; flashAt: number;
-         redrawValues: number; ind: Site | null; unmute?: boolean }): RamImage {
+         redrawValues: number; ind: Site | null; chroma?: { site: ChromaSite; channel: string; cfg: number } | null; unmute?: boolean }): RamImage {
   const O = base.os;
   const E = base.ext.base;
   let cb = fromBase64(core.knob_callback);
@@ -438,8 +450,18 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     menuRefresh={site:menuSite,entry:E+ext.length,code:menuRefreshCode(menuSite)};
     ext.push(menuRefresh.code).align(4,0);
   }
+  // --midi-chroma: last in the image, so the rest of it is laid out exactly as without it
+  let chroma: RamImage['chroma'] = null;
+  if (opt.chroma) {
+    ext.align(4, 0);
+    const at = E + ext.length;
+    const table = chromaTable(sel.map((s) => ({ id: s.id, name: s.m.name.trim(), pitch: s.m.pitch, dyn_labels: s.m.dyn_labels })));
+    const code = chromaAssemble(at, opt.chroma.site, table, opt.chroma.cfg);
+    ext.push(code.bytes).align(4, 0);
+    chroma = { at, code, table, ...opt.chroma };
+  }
   return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh, uwMenu,
-           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, unmute };
+           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, unmute, chroma };
 }
 
 /**
@@ -509,37 +531,61 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
     else if (!base.features.lcdFlush) problems.push(`--cpu-indicator: not supported on ${base.name}: ${base.support.cpuIndicator?.why ?? 'the LCD flush was not found'}`);
     else ind = base.features.lcdFlush;
   }
+  // --midi-chroma: the base's real-time MIDI path, verified by discovery (engine/src/midi_chroma.ts)
+  let chroma: { site: ChromaSite; channel: string; cfg: number } | null = null;
+  if (f.midiChroma) {
+    const channel = typeof f.midiChroma === 'object' ? f.midiChroma.channel : MIDI_CHROMA_CHANNEL;
+    if (!base.features.midiChroma) problems.push(`MIDI chromatic note input: not supported on ${base.name}: ${base.support.midiChroma?.why ?? 'its MIDI path was not found'}`);
+    else {
+      try { chroma = { site: base.features.midiChroma, channel, cfg: channelByte(channel) }; }
+      catch (e) { problems.push((e as Error).message); }
+    }
+  }
   // --dsp1-recover: the base's DSP1/DSP2 code the handler is written against, word for word
   if (f.dsp1Recover && base.support.dsp1Recover && !base.support.dsp1Recover.ok) {
     problems.push(`--dsp1-recover: not supported on ${base.name}: ${base.support.dsp1Recover.why}`);
   }
   const make = (): RamImage => ramImage(base, main, core, fams, sel,
-    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, unmute: r.unmute });
+    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, chroma, unmute: r.unmute });
+  // --midi-chroma's routines sit at the end of the RAM image, which then has to stay inside the span
+  // earlier images ran from on hardware (IND_EXT_SPAN), not just the base's window
+  const pastProven = (x: RamImage): boolean => !!x.chroma && x.bytes > IND_EXT_SPAN;
+  const tooBig = (x: RamImage): boolean => x.bytes > x.limit || pastProven(x);
   let ram = make();
-  // on by default, so a selection whose labels leave no room for it builds without it (said so);
-  // asked for explicitly, the overflow is a problem below
+  // the unmute fix is on by default, so a selection whose labels leave no room for it builds without
+  // it (said so); asked for explicitly, the overflow is a problem below
   const over = (x: RamImage): boolean => !!x.unmute && (x.unmute.segment ?? x.dyn!.blob).length > x.unmute.limit;
   if (r.unmute && f.unmuteFix === undefined && over(ram)) {
     r.unmute = false;
     notes.push('the unmute-latency fix: no room left after the knob labels in their RAM range, so it is not built');
     ram = make();
   }
-  if (mode === 'auto' && canFlash && ram.bytes > ram.limit) {
+  if (mode === 'auto' && canFlash && tooBig(ram)) {
     const rank = new Map(sel.map((s) => [s.m.name.trim(), s.m.flash_rank ?? null]));
     const ranked = eligible.filter((n) => rank.get(n) != null).sort((a, b) => rank.get(a)! - rank.get(b)!);
     const order = [...ranked, ...eligible.filter((n) => rank.get(n) == null)];
     for (const n of order) {
-      if (ram.bytes <= ram.limit) break;
+      if (!tooBig(ram)) break;
       toFlash.add(n);
       ram = make();
     }
-    if (toFlash.size) notes.push(`descriptors in flash (auto, for the RAM image to fit its ${ram.limit}-byte window): ${[...toFlash].join(', ')}`);
+    if (toFlash.size) notes.push(`descriptors in flash (auto, for the RAM image to fit its ${ram.chroma ? Math.min(ram.limit, IND_EXT_SPAN) : ram.limit}-byte window): ${[...toFlash].join(', ')}`);
   }
   const outside = drive ? drivePairs(drive.selector, sel).filter(([id]) => id >= idSpace) : [];
   if (outside.length) problems.push(`machine IDs ${outside.map(([id]) => id).join(', ')} are outside the DSP1 ID table (0..${idSpace - 1})`);
   if (ram.indicator?.home === 'ext' && ram.indicator.at + ram.indicator.code.length > ram.base + IND_EXT_SPAN) {
     problems.push(`--cpu-indicator: with no dynamic-label segment its stub goes in the RAM image, and ends at ` +
                   `${(ram.indicator.at + ram.indicator.code.length).toString(16)}, past the proven ${(ram.base + IND_EXT_SPAN).toString(16)}`);
+  }
+  if (pastProven(ram) && ram.bytes <= ram.limit) {
+    const over = ram.bytes - IND_EXT_SPAN;
+    const fix = mode === 'auto' && canFlash
+      ? 'untick a machine (one with dynamic knob labels frees the most) or turn MIDI chromatic note input off'
+      : canFlash ? `let descriptors move to flash (descriptors in flash: auto${mode === 'none' ? ', not none' : ''}), untick a machine, or turn MIDI chromatic note input off`
+      : 'untick a machine or turn MIDI chromatic note input off';
+    problems.push(`MIDI chromatic note input needs ${over} more byte${over === 1 ? '' : 's'} of RAM: its ${ram.chroma!.code.bytes.length}-byte routines ` +
+                  `go at the end of the RAM image, which then ends at ${(ram.base + ram.bytes).toString(16)}, past the hardware-proven ` +
+                  `${(ram.base + IND_EXT_SPAN).toString(16)}${mode === 'auto' && canFlash && toFlash.size ? `, even with ${toFlash.size} descriptors moved to flash` : ''}: ${fix}`);
   }
   if (ram.bytes > ram.limit) {
     problems.push(`the RAM image needs ${ram.bytes} bytes and the base's proven window holds ${ram.limit}: ` +

@@ -18,7 +18,7 @@ import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, 
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
 import { checkPack, modelWords, needLines, needsUwSamples, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
-import { merged, plan, trimFor, type Plan, type Trimmed } from '../../engine/src/plan.js';
+import { merged, plan, trimFor, MIDI_CHROMA_CHANNEL, type Plan, type Trimmed } from '../../engine/src/plan.js';
 import { drawLcd } from './lcd.js';
 import { categories, describeModel } from './catalog.js';
 import { addScreenHelp } from './screen-help.js';
@@ -298,8 +298,22 @@ const firmwareFixes = (): ReturnType<typeof currentFirmwareFixes> => {
   return { ...f, features: { ...f.features, unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false } };
 };
 
+/** MIDI chromatic note input (off by default): offered only on an OS whose MIDI path the engine verified. */
+const chromaTicked = (): boolean => $<HTMLInputElement>('midi-chroma').checked;
+const chromaOn = (): boolean => !!base?.support.midiChroma?.ok && chromaTicked();
+/** the chromatic channel: the default, or what a loaded project chose (the page has no channel control) */
+let chromaChannel = MIDI_CHROMA_CHANNEL;
+/** Both Download-step options on top of the default fixes: the unmute-latency fix and MIDI chromatic input. */
+function firmwareOptions(): ReturnType<typeof currentFirmwareFixes> {
+  const o = firmwareFixes();
+  return chromaOn() ? { ...o, features: { ...o.features, midiChroma: { channel: chromaChannel } } } : o;
+}
+function syncChromaOption(): void {
+  $('midi-chroma-option').hidden = !base?.support.midiChroma?.ok;
+}
+
 function planFor(exclude: string[], opt = trimOptions()): Plan {
-  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareFixes() }, trimmed(opt));
+  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareOptions() }, trimmed(opt));
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
@@ -439,6 +453,7 @@ async function onFile(f: File): Promise<void> {
   const request = ++fileRequest;
   revision++;
   input = null; base = null; fw = null; current = null; cachedBuild = null;
+  syncChromaOption();
   $('room').hidden = true;
   $('firmware-options').hidden = true;
   $<HTMLInputElement>('unmute-fix').checked = true;   // a new OS starts from the default
@@ -486,6 +501,7 @@ async function onFile(f: File): Promise<void> {
     $('firmware-details').hidden = false;
     // the unmute-latency fix is offered only where this OS has the sequencer it is written against
     $('firmware-options').hidden = !b.support.unmuteFix?.ok;
+    syncChromaOption();
     status(`Loaded ${f.name}.`, 'ok');
     if (pendingProject) applyProject(pendingProject.project, pendingProject.name);
   } catch (e) {
@@ -564,7 +580,7 @@ function buildWith(trim: TrimOptions): Promise<BuildResult> {
   // throws without a Yes or a No (and engine build refuses a missing answer too)
   const uw = uwForBuild(uwAnswer);
   return build(input!, base!, data.packs, data.core!,
-    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareFixes() }, trimmed(trim));
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareOptions() }, trimmed(trim));
 }
 
 function showStorage(report: BuildReport): void {
@@ -737,6 +753,8 @@ function projectNow(): Project {
     models: boxes().filter((i) => i.checked).map((i) => i.dataset.module!),
     layout: layoutEd.mapForPlan() ?? null,
     uw: uwOf(uwAnswer),
+    // what the user chose, even on an OS that cannot have it, so the project keeps it
+    midiChroma: chromaTicked() ? { channel: chromaChannel } : undefined,
   };
 }
 
@@ -797,6 +815,8 @@ function applyProject(p: Project, name: string): boolean {
   if (radio) radio.checked = true;
   $<HTMLInputElement>('db').value = String(p.trim.db);
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
+  $<HTMLInputElement>('midi-chroma').checked = !!p.midiChroma;
+  chromaChannel = p.midiChroma?.channel ?? MIDI_CHROMA_CHANNEL;
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
   if (p.uw !== undefined) fileAnswer(p.uw, name);
@@ -907,6 +927,7 @@ async function main(): Promise<void> {
   syncTrim();
   $('build').addEventListener('click', () => void onBuild());
   $('unmute-fix').addEventListener('change', () => refresh());
+  $('midi-chroma').addEventListener('change', () => refresh());
   const packFiles = $('pack-files') as HTMLInputElement;
   packFiles.addEventListener('change', () => { if (packFiles.files?.length) void onPackFiles(Array.from(packFiles.files)); });
 }

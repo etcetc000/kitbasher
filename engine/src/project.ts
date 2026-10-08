@@ -7,6 +7,7 @@ import type { Base } from './bases.js';
 import { fromBase64, sha256, toBase64 } from './bytes.js';
 import { parseLayout, type Layout } from './layout.js';
 import { MAX_12, MIN_12 } from './samples.js';
+import { channelByte } from './midi_chroma.js';
 
 export const PROJECT_FORMAT = 'kitbasher-project/1';
 export const PROJECT_EXTENSION = '.kitbasher.json';
@@ -38,6 +39,11 @@ export interface ProjectFile {
   layout: Layout | null;
   /** the answer to "does your Machinedrum have the UW option?"; absent: not answered (the page asks) */
   uw?: boolean;
+  /**
+   * MIDI chromatic note input was turned on (engine/src/midi_chroma.ts), with its channel; absent:
+   * off. Kept whatever OS the project was saved with: it applies where the OS supports it.
+   */
+  midi_chroma?: { channel: string };
 }
 
 /** A project in memory: what the page and the build use. */
@@ -51,6 +57,8 @@ export interface Project {
   layout: Layout | null;
   /** the answer to "does your Machinedrum have the UW option?"; undefined: not answered */
   uw?: boolean;
+  /** MIDI chromatic note input and its channel; undefined: off */
+  midiChroma?: { channel: string };
 }
 
 export function osOf(base: Base): ProjectOs {
@@ -115,6 +123,7 @@ export async function encodeProject(p: Project): Promise<ProjectFile> {
     samples: { swaps, no_trim: [...p.noTrim].sort((a, b) => a - b) },
     trim: p.trim, models: [...p.models].sort(), layout: p.layout,
     ...(p.uw === undefined ? {} : { uw: p.uw }),
+    ...(p.midiChroma ? { midi_chroma: { channel: p.midiChroma.channel } } : {}),
   };
 }
 
@@ -152,6 +161,12 @@ export async function decodeProject(json: string): Promise<Project> {
   if (!Array.isArray(o.models) || o.models.some((m) => typeof m !== 'string')) throw new Error('project file: models must list module names');
   const layout = o.layout === null || o.layout === undefined ? null : parseLayout(JSON.stringify(o.layout));
   if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('project file: uw must be true or false');
+  const mc = o.midi_chroma;
+  if (mc !== undefined) {
+    if (!mc || typeof mc !== 'object' || typeof mc.channel !== 'string') throw new Error('project file: midi_chroma must be { "channel": "base+4" } or absent');
+    try { channelByte(mc.channel); } catch (e) { throw new Error(`project file: ${(e as Error).message}`); }
+  }
   return { os: { base: os.base, name: String(os.name ?? os.base), tag: os.tag, coldfire_sha256: os.coldfire_sha256, dsp2_sha256: os.dsp2_sha256, dsp1_sha256: os.dsp1_sha256 },
-           swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout, uw: o.uw ?? layout?.uw };
+           swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout, uw: o.uw ?? layout?.uw,
+           ...(mc ? { midiChroma: { channel: mc.channel } } : {}) };
 }
