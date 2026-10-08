@@ -15,9 +15,10 @@ removing any stock machine.
 X.13 is no longer supported: an OS tagged `X13 ` is refused before anything else.
 
 Each profile also records how far that base has been tested. DEV 26912 images
-have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,
-X.14 and DEV 26A01 have passed the engine's gates and emulator checks of
-controls, labels, kits, memory and audio. The page and the build report show the
+have been tested on hardware (Machinedrum MKII +Drive UW), and so have X.14
+images (Machinedrum with UW), including the unmute-latency fix and MIDI
+chromatic note input. Prepared 1.63 and DEV 26A01 have passed the engine's
+gates and emulator checks of controls, labels, kits, memory and audio. The page and the build report show the
 level for the base you load.
 
 ## How a base is recognised
@@ -108,7 +109,7 @@ Five instructions of the OS's sequencer call 360 bytes of code (and 44 of data)
 placed after the knob labels in their RAM range, or alone in that range when no
 selected machine has labels. Discovery finds the sequencer by signature, and the
 base's profile must record the fix as run on it: OS 1.63 (prepared) and X.14
-have it. The DEV builds enter their own code from the sequencer's tick handler
+have it, X.14 on hardware (plain, p-locked and swung unmutes). The DEV builds enter their own code from the sequencer's tick handler
 and buffer toggle, so discovery does not find it there. Turn it off with *Fix
 unmute latency* on the Download step or `--no-unmute-fix`; the image is then
 the one a build without the fix makes.
