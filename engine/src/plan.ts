@@ -125,7 +125,7 @@ export interface Trimmed {
   opt: TrimOptions;
   bankIndex: number;               // the bank record's tag word in the DSP2 upload
   bankEndIndex: number;            // one past the last word of the record(s) holding the bank
-  bankRecords: number;             // how many records held it (stock 1.63: 62, X.13: 1)
+  bankRecords: number;             // how many records held it (stock 1.63: 62, X.14: 1)
   words: number[];                 // the re-laid bank
   end: number;                     // where the bank now ends
   report: TrimEntry[];
@@ -243,10 +243,10 @@ export function baseCtrCoverage(fw: Firmware, base: Base): CtrCoverage {
 
 /**
  * The E12 bank re-laid for these trim options: the one expensive step, done once per setting.
- * The bank is one P record in X.13 and 62 back-to-back ones in stock 1.63 (code, table, each
+ * The bank is one P record in X.14 and 62 back-to-back ones in stock 1.63 (code, table, each
  * sample and its silent pad). A run of records that follow each other in the upload and in P
  * memory loads what one record over the same words loads, so the run is re-recorded as one
- * (X.13's own upload is 1.63's re-recorded this way). Nothing else in the upload may write there.
+ * (X.14's own upload is 1.63's re-recorded this way). Nothing else in the upload may write there.
  */
 export function trimFor(fw: Firmware, base: Base, opt: TrimOptions, samples?: SampleEdits): Trimmed {
   const D = base.dsp2;

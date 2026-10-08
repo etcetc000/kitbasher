@@ -34,7 +34,7 @@ export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
 
 export interface Discovery {
-  /** 'addon': a hidden routine that unpacks an add-on (X.13, DEV); 'hook': a routine that only
+  /** 'addon': a hidden routine that unpacks an add-on (X.14, DEV); 'hook': a routine that only
    *  continues into the OS (the prepared 1.63 base); 'stock': the OS jump goes straight to the
    *  OS; 'patched': the boot chain already enters something that is not the OS */
   kind: 'addon' | 'hook' | 'stock' | 'patched' | 'unknown';
@@ -374,7 +374,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       if (!rb) throw new NotFound(`the knob-turn refresh ${h(R)} is not in the base's code`);
       let redraw: NonNullable<Base['features']['dynLabels']>['redraw'];
       if (rb[0] === 0x4e && rb[1] === 0xf9) {
-        // the base already redirected it (X.13): chain through what its jmp names
+        // the base already redirected it (X.14): chain through what its jmp names
         redraw = { mode: 'stub', sites: [R + 2], old: u32(rb, 2), values: u32(rb, 2) };
         redrawStub = R + 2;
       } else {
@@ -401,21 +401,17 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       const hostWrite = x.caps.host_write.value;
       const osSite = sram.dst + (x.caps.sender.at - sram.src);
       if (sender < sram.dst || sender >= sram.dst + sram.len) throw new NotFound(`the DSP1 sender ${h(sender)} is not in the SRAM copy`);
-      // a base with its own per-track loop loads the sender as an immediate (X.13's add-on): those
-      // are the sites that run; otherwise the OS loop's call in SRAM
-      const refs = dsp1SenderSites([cfLive,sramImg],segImgs,sender);
-      // otherwise every call of it in the OS as it runs (the ColdFire slot below the BSS and the
-      // SRAM copy): stock 1.63 sends per track from two loops, 0x20ab84 in RAM and the SRAM one
+      // every call of it in the OS as it runs (the ColdFire slot below the BSS and the SRAM copy)
+      // and in the base's own pieces: stock 1.63 sends per track from two loops, 0x20ab84 in RAM
+      // and the SRAM one; X.14's add-on calls it too
+      const senderSites = dsp1SenderSites([cfLive, sramImg], segImgs, sender);
       const osCalls = callSitesIn([cfLive, sramImg], sender);
-      if (!refs.immediates && !osCalls.includes(osSite)) throw new NotFound(`the SRAM sender call ${h(osSite)} is not a jsr`);
-      const senderSites = refs.sites;
+      if (!osCalls.includes(osSite)) throw new NotFound(`the SRAM sender call ${h(osSite)} is not a jsr`);
       const dw = dsp1Window(fw.slots[2].raw);
       if (typeof dw === 'string') throw new NotFound(dw);
       if (dw.hook !== num(A.dsp1_hook)) throw new NotFound(`the DSP1 dead window is at P:${h(dw.hook)} and the core pack's hook is built for P:${A.dsp1_hook}`);
       dsp1 = { senderSites, sender, hook: dw.hook, ret: dw.ret, program: dw.program };
-      note('DSP1 sender', true, refs.immediates
-        ? `the base runs its own per-track loop: ${senderSites.length} immediates of the sender ${h(sender)} at ${senderSites.map(h).join(', ')}`
-        : `the OS and extension loops call the sender ${h(sender)} at ${senderSites.map(h).join(', ')} (in SRAM ${h(osSite)}${at1('sram_sender_call', osSite)}, copied from ${h(x.caps.sender.at)} at reset)`);
+      note('DSP1 sender', true, `the OS and extension loops call the sender ${h(sender)} at ${senderSites.map(h).join(', ')} (in SRAM ${h(osSite)}${at1('sram_sender_call', osSite)}, copied from ${h(x.caps.sender.at)} at reset)`);
       note('DSP1 chain hook', true, `dead window at P:${h(dw.hook)}, return jmp at P:${h(dw.ret)}, program window P:${h(dw.program[0])}..${h(dw.program[1])} in no upload record`);
       val('dsp1.sender', sender); val('dsp1.sender_sites', senderSites); val('dsp1.host_write', hostWrite); val('dsp1.hook', dw.hook);
       val('dsp1.program', dw.program);
@@ -439,9 +435,8 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       const dsp2Entry = x.caps.dsp2_entry.at;
       const dsp1Entry = x.caps.dsp1_entry.at;
       const refs = operands(images, (v) => v === dsp2Entry);
-      // the forms the lineage's callers use: jsr/pea abs.l, lea abs.l,An, move.l #imm,Dn (X.13's
-      // add-on loop keeps both sender addresses in registers across the per-track loop)
-      const bad = refs.filter((o) => ![0x4eb9, 0x4879].includes(o.op) && (o.op & 0xf1ff) !== 0x41f9 && (o.op & 0xf1ff) !== 0x203c);
+      // the forms the lineage's callers use: jsr/pea abs.l, lea abs.l,An
+      const bad = refs.filter((o) => ![0x4eb9, 0x4879].includes(o.op) && (o.op & 0xf1ff) !== 0x41f9);
       if (bad.length) throw new NotFound(`the DSP2 host-send entry ${h(dsp2Entry)} is named by an opcode the engine does not know at ${bad.map((o) => h(o.at)).join(', ')}`);
       if (!refs.length) throw new NotFound(`nothing names the DSP2 host-send entry ${h(dsp2Entry)}`);
       const sites = refs.map((o) => o.at);
@@ -450,8 +445,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       note('host-command sender', true, `${h(dsp2Entry)}${at1('host_send_dsp2', dsp2Entry)} (DSP2, ${dsp2Bytes} bytes to its rts) and ` +
         `${h(dsp1Entry)}${at1('host_send_dsp1', dsp1Entry)} (DSP1) share one body, stock byte for byte over all ${nb} bytes; ` +
         `the CVR write is at ${h(x.caps.cvr.at + 2)}, ahead of the second word at ${h(x.caps.word2.at)}; the DSP2 entry is named at ${sites.map(h).join(', ')} ` +
-        `(${refs.filter((o) => o.op === 0x4eb9).length} jsr, ${refs.filter((o) => (o.op & 0xf1ff) === 0x41f9).length} lea, ` +
-        `${refs.filter((o) => (o.op & 0xf1ff) === 0x203c).length} move.l #imm,Dn), in ${[...new Set(refs.map((o) => o.image))].join(', ')}`);
+        `(${refs.filter((o) => o.op === 0x4eb9).length} jsr, ${refs.filter((o) => (o.op & 0xf1ff) === 0x41f9).length} lea), in ${[...new Set(refs.map((o) => o.image))].join(', ')}`);
       val('host_send.dsp2', dsp2Entry); val('host_send.dsp1', dsp1Entry); val('host_send.sites', sites);
     } catch (e) { if (!(e instanceof NotFound)) throw e; hostWhy = e.message; note('host-command sender', false, hostWhy); }
 
@@ -633,14 +627,18 @@ function hexBytes(s: string): Uint8Array {
   return Uint8Array.from(s.match(/../g)!.map((x) => parseInt(x, 16)));
 }
 
-/** Operand address of every jsr/jmp abs.l <target> in the images. */
-/** X.13 keeps its sender in a register; X.14 calls it directly from the add-on. */
-export function dsp1SenderSites(os:CodeImage[],extensions:CodeImage[],sender:number):{sites:number[];immediates:boolean} {
+/**
+ * Every jsr/jmp abs.l of the DSP1 sender in the OS and the base's own pieces (X.14's add-on calls
+ * it directly). A piece that loads the sender as an immediate (move.l #sender,Dn) runs a loop of
+ * its own the drive cannot hook, so the drive is refused there rather than half-applied.
+ */
+export function dsp1SenderSites(os:CodeImage[],extensions:CodeImage[],sender:number):number[] {
   const own=operands(extensions,v=>v===sender).filter(o=>(o.op&0xf1ff)===0x203c);
-  return own.length ? {sites:own.map(o=>o.at),immediates:true} :
-    {sites:callSitesIn([...os,...extensions],sender),immediates:false};
+  if(own.length) throw new NotFound(`the base's own code loads the DSP1 sender ${h(sender)} as an immediate at ${own.map(o=>h(o.at)).join(', ')}`);
+  return callSitesIn([...os,...extensions],sender);
 }
 
+/** Operand address of every jsr/jmp abs.l <target> in the images. */
 export function callSitesIn(images: CodeImage[], target: number): number[] {
   return operands(images, (v) => v === target).filter((o) => o.op === 0x4eb9 || o.op === 0x4ef9).map((o) => o.at);
 }

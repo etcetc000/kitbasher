@@ -74,8 +74,6 @@
 //   --restore <file>     keep the machine IDs of a previous session: a project file (.kitbasher.json), a
 //                        layout file, or a .syx/.bin Kitbasher built (its layout table, or else its
 //                        descriptor table matched to the catalog). Same as --map for a layout file
-//   --legacy-ids         the IDs earlier Kitbasher builds gave (before 2026-10: OSCPW 175, ...), for kits
-//                        saved with them (engine/src/legacy_ids.ts)
 //   --family-menus       menu categories by pack family in pack order (the layout the parity tests
 //                        use) instead of the sound categories (KIK, SNR, HAT, ...)
 //   --map <file>         the user's layout (md-layout/1: IDs and menu categories); the build honours
@@ -95,8 +93,7 @@ import { NotPatchable, resolveBase, supportLine } from './bases.js';
 import { build, uwFromFlags } from './build.js';
 import { readFirmware } from './container.js';
 import { loadBases, loadPacks, LOCAL_PACKS } from './node.js';
-import { findLayout, fingerprint, listedFreeIds, parseLayout } from './layout.js';
-import { legacyLayout } from './legacy_ids.js';
+import { findLayout, fingerprint, parseLayout } from './layout.js';
 import { needsUwSamples } from './packs.js';
 import { select } from './selection.js';
 import { recoverSession } from './restore.js';
@@ -107,7 +104,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
-                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw', 'legacy-ids',
+                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw',
                           'unmute-fix', 'no-unmute-fix']);
 const REPEATABLE = new Set(['packs']);
 
@@ -159,7 +156,8 @@ async function main(): Promise<void> {
       const d = (e as NotPatchable).discovery;
       for (const f of d?.findings ?? []) console.log(`  ${f.ok ? 'found' : 'NOT FOUND'}  ${f.what}: ${f.detail}`);
       console.error(`not patchable: ${(e as Error).message}`);
-      if (a.report && d) writeFileSync(a.report, JSON.stringify({ refused: (e as Error).message, findings: d.findings, values: d.values }, null, 1));
+      // an OS refused before discovery (X.13) has no findings: the report says why
+      if (a.report) writeFileSync(a.report, JSON.stringify(d ? { refused: (e as Error).message, findings: d.findings, values: d.values } : { refused: (e as Error).message }, null, 1));
       process.exit(1);
     }
     console.log(`base: ${r.base.name} [${r.base.qualification.level}: ${r.base.qualification.by}]`);
@@ -223,12 +221,6 @@ async function main(): Promise<void> {
     const out = select(packs, {}).fams.filter((f) => want.has(f.name)).flatMap((f) => f.models).filter(needsUwSamples)
       .filter((m) => !(exclude ?? []).includes(m.module));
     if (out.length) { console.log(`left out (they play UW samples, which a Machinedrum without UW does not have): ${out.map((m) => m.name.trim()).join(', ')}`); exclude = [...(exclude ?? []), ...out.map((m) => m.module)]; }
-  }
-  if (a['legacy-ids']) {
-    if (layout) throw new Error('--legacy-ids is a layout of its own: do not combine it with --map or --restore');
-    const fw0 = readFirmware(input);
-    const chosen = select(packs, { families: a.families ? a.families.split(',') : undefined, exclude }).fams;
-    layout = legacyLayout(base, fw0.slots[0].raw, chosen, listedFreeIds(fw0, base));
   }
   const { output, report, gateReport } = await build(input, base, packs, core, {
     allowIdMove,

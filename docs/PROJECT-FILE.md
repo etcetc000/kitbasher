@@ -12,7 +12,7 @@ The file holds your choices only: never the OS, and never the stock E12 samples.
 ```json
 {
  "format": "kitbasher-project/1",
- "os": { "base": "x13", "name": "OS X.13", "tag": "X13 ",
+ "os": { "base": "x14", "name": "OS X.14", "tag": "X14 ",
          "coldfire_sha256": "…", "dsp2_sha256": "…", "dsp1_sha256": "…" },
  "samples": {
   "swaps": [ { "entry": 12, "samples": 32876, "sha256": "…", "data": "…", "source": "snare.wav" } ],

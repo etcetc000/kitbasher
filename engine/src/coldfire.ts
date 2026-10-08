@@ -56,7 +56,7 @@ export function levBarStub(low: number, draw: number, resume: number): Uint8Arra
  * second word.
  *
  * The stock routine, shared with the DSP1 half (which enters two instructions earlier with
- * a0 = $500004) and byte-identical in stock 1.63, stock X.13 and DEV:
+ * a0 = $500004) and byte-identical in stock 1.63, X.14 and DEV:
  *
  *   movea.l #$600004,a0    DSP2's HDI08 data window (CVR is at -3(a0))
  *   move.l  4(a7),(a0)     word 1 -> TX

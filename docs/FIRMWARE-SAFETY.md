@@ -49,7 +49,7 @@ the unit with the trig LED lit.
 `isa_scan.ts`) runs on every build. It decodes our code and the base's patched
 code by recursive descent from every entry point, in the final image as read
 back. Rewritten base code (the control-all loop skip and the CPU indicator's
-flush hook) is decoded straight through from its start. Stock X.13 and 1.63 must
+flush hook) is decoded straight through from its start. Stock X.14 and 1.63 must
 decode with zero rejects; that is the decoder's positive control.
 `engine/test/isa_unit.test.ts` keeps the negative control: a planted
 `movem.l d0-d1,-(sp)` and `bfextu` must be rejected.

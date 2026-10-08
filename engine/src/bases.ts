@@ -78,7 +78,7 @@ export interface BaseProfileFile {
  * goes silent with it while the DEV base plays. --unmute-fix: the sequencer is found and checked,
  * but whether the base's own code around it (its add-on, its other users of the queues) leaves the
  * queues as the routines expect is shown only by running it, so it is given to the bases it was
- * run on (X.14 and prepared 1.63), and refused on X.13, whose support is ending.
+ * run on (X.14 and prepared 1.63).
  */
 export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix' };
 
@@ -214,11 +214,24 @@ export class NotPatchable extends Error {
 }
 
 /**
+ * OS tags Kitbasher does not support, and what it says. Refused before discovery, so such an OS
+ * (stock, or a build made on it) is never patched or taken for another base.
+ */
+const UNSUPPORTED: Record<string, string> = { 'X13 ': 'OS X.13 is not supported. Load an OS X.14 file.' };
+
+/** Why an OS with this tag is not supported, or null. */
+export function unsupported(tag: string): string | null {
+  return UNSUPPORTED[tag] ?? null;
+}
+
+/**
  * Identify and discover. A profile matches by its slot hashes (and add-on, when it has one); with
  * none, the base is still discovered and labelled 'discovered'. A profile with `refuse` (stock
- * 1.63) turns the build away with its message.
+ * 1.63) turns the build away with its message; an unsupported tag (X.13) is refused first.
  */
 export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved> {
+  const no = unsupported(fw.tag);
+  if (no) throw new NotPatchable(no, null, null);
   const id = await identity(fw);
   let profile: BaseProfileFile | null = null;
   for (const p of set.profiles) {

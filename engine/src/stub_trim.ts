@@ -1,7 +1,7 @@
 // DSP2's silence stub, trimmed: what an idle track costs.
 //
 // A track with nothing to render (no machine, or a machine that is silent) is dispatched to one
-// short routine in the base's DSP2 code, the same eleven words in X.13, X.14, the DEV builds and
+// short routine in the base's DSP2 code, the same eleven words in X.14, the DEV builds and
 // 1.63 (P:$10008f in X.14):
 //
 //   +0   260000            move #$0,y0

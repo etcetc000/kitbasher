@@ -131,7 +131,7 @@ test('the machine map is read from INIT and TRIGGER code through the dispatch ta
   ]);
 });
 
-const OS = { base: 'x13', name: 'OS X.13', tag: 'X13 ', coldfire_sha256: 'a'.repeat(64), dsp2_sha256: 'b'.repeat(64), dsp1_sha256: 'c'.repeat(64) };
+const OS = { base: 'x14', name: 'OS X.14', tag: 'X14 ', coldfire_sha256: 'a'.repeat(64), dsp2_sha256: 'b'.repeat(64), dsp1_sha256: 'c'.repeat(64) };
 const baseLike = (o = OS): Base => ({ id: o.base, name: o.name, identify: { tag: o.tag, coldfire_sha256: o.coldfire_sha256, dsp2_sha256: o.dsp2_sha256, dsp1_sha256: o.dsp1_sha256 } }) as unknown as Base;
 
 test('12-bit packing round-trips, odd counts included', () => {
@@ -146,7 +146,7 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   const p: Project = {
     os: OS, swaps: new Map([[12, Int16Array.from(tone(999))], [3, Int16Array.from([1, -2, 3])]]), sources: new Map([[12, 'snare.wav']]),
     noTrim: new Set([3]), trim: { mode: 'manual', db: -17, cap: 1 }, models: ['b', 'a'],
-    layout: { format: 'md-layout/1', base: 'x13', categories: ['KIK'], machines: { 'vadbd': { id: 100, category: 'KIK', order: 0 } } },
+    layout: { format: 'md-layout/1', base: 'x14', categories: ['KIK'], machines: { 'vadbd': { id: 100, category: 'KIK', order: 0 } } },
   };
   const file = await encodeProject(p);
   const text = JSON.stringify(file);
@@ -162,8 +162,8 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   assert.deepEqual(q.layout, p.layout);
   assert.equal(JSON.stringify(await encodeProject(q)), text, 'export is stable');
   assert.equal(osProblem(q.os, baseLike()), null);
-  assert.match(osProblem(q.os, baseLike({ ...OS, dsp2_sha256: 'd'.repeat(64) }))!, /different OS X\.13 file/);
-  assert.match(osProblem(q.os, baseLike({ ...OS, base: 'x14', name: 'OS X.14' }))!, /made for OS X\.13/);
+  assert.match(osProblem(q.os, baseLike({ ...OS, dsp2_sha256: 'd'.repeat(64) }))!, /different OS X\.14 file/);
+  assert.match(osProblem(q.os, baseLike({ ...OS, base: 'dev-26a01', name: 'DEV 26A01' }))!, /made for OS X\.14, and the loaded OS is DEV 26A01/);
   const bad = JSON.parse(text);
   bad.samples.swaps[0].sha256 = '0'.repeat(64);
   await assert.rejects(decodeProject(JSON.stringify(bad)), /sha256/);

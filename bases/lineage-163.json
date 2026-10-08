@@ -49,7 +49,7 @@
       "high_defaults": { "ids": ["0xa9", "0xaf"], "old": "0xa8", "new": "0xaf" },
       "ctr_mask": {
         "ids": ["0x7c", "0x7f"], "old": "0xf8", "new": "0xfc",
-        "about": "Every andi.l #$f8,Dn whose Dn is then compared with 0x78, found by following the masked ID through the base's code (engine/src/scan.ts): 22 in X.13, 25 in DEV, 24 in stock 1.63. These are the complete site list.",
+        "about": "Every andi.l #$f8,Dn whose Dn is then compared with 0x78, found by following the masked ID through the base's code (engine/src/scan.ts): 22 in X.14, 25 in DEV, 24 in stock 1.63. These are the complete site list.",
         "defaults_low": { "old": "0x705fb086", "new": "0x707fb086" }
       },
       "lev_bar": {
@@ -90,14 +90,6 @@
       "evidence": "docs/BASES.md"
     },
     {
-      "id": "x13",
-      "abi": "md-voice/1",
-      "dsp2": "2d402a93404a27b3594c8da397f65420d1e21cb672bbeac74f697d24d779696b",
-      "sram": "d5762d042f49a78ebb9e4461d0fd99856e76fc8cbb51b4f4d6a6a39a636dd9ee",
-      "extensions": "93a40df865404f7c85e993547f5a12fd532b1b5aaf180026cecedc3fc8231ffd",
-      "evidence": "docs/BASES.md"
-    },
-    {
       "id": "x14",
       "abi": "md-voice/1",
       "dsp2": "2d402a93404a27b3594c8da397f65420d1e21cb672bbeac74f697d24d779696b",
@@ -112,10 +104,10 @@
     "about": "The ColdFire RAM window patched images use, tested on a Machinedrum MKII +Drive UW. The range 0x2bd000..0x2bd100 is in use on that hardware (an image that uses it freezes at the boot logo) and the emulator does not model this, so the window stops below it. A base gets this window only where its own code and boot leave it free: above the heap's measured peak (0x2b8000 on X.13 and stock 1.63 in the emulator), below every piece of the base's code and every RAM address its code names. The heap ceiling is lowered to the window's base."
   },
   "dsp2": {
-    "about": "DSP2 addresses of the stock 1.63 upload, which every lineage base keeps (X.13 re-records it). Anchored and shape-verified in the base's upload: the E12 table as 21 (start, length, 0) entries in the bank record, the three dispatch tables as 193 words each with the silence stub on every free ID.",
+    "about": "DSP2 addresses of the stock 1.63 upload, which every lineage base keeps (X.14 re-records it). Anchored and shape-verified in the base's upload: the E12 table as 21 (start, length, 0) entries in the bank record, the three dispatch tables as 193 words each with the silence stub on every free ID.",
     "bank_record": "0x1028c0", "e12_table": "0x103d7b", "e12_count": 21, "bank_end": "0x135206",
     "free_regions": [["0x13b601", "0x140000"], ["0x147600", "0x147e00"]],
-    "free_regions_about": "Measured in the emulator, not discoverable from ColdFire code: stock 1.63 itself writes P:$13b600 at boot, so the first region starts at 0x13b601 (X.13 and DEV place their own code there anyway). A RAM probe with a sentinel-filled image finds every other word of 0x13b601..0x140000 and 0x147600..0x147e00 untouched on 1.63 and DEV with every machine ID on 16 tracks.",
+    "free_regions_about": "Measured in the emulator, not discoverable from ColdFire code: stock 1.63 itself writes P:$13b600 at boot, so the first region starts at 0x13b601 (X.14 and DEV place their own code there anyway). A RAM probe with a sentinel-filled image finds every other word of 0x13b601..0x140000 and 0x147600..0x147e00 untouched on 1.63 and DEV with every machine ID on 16 tracks.",
     "workspace": { "base": "0x12d000", "slice": "0x800" },
     "dispatch": { "init": "0x145af5", "trigger": "0x145bb6", "render": "0x145c77" },
     "pi": {

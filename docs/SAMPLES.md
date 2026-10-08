@@ -24,7 +24,7 @@ the DSP2 dispatch tables (indexed by machine ID + 1) to the machine's INIT and T
 - Two-sample machines: TRIGGER loads both entries' table addresses directly
   (`move #>second,r1` / `move #>first,r0`).
 
-On OS 1.63, X.13, X.14 and both DEV releases this gives the same map:
+On OS 1.63, X.14 and both DEV releases this gives the same map:
 
 | Machine | ID | Sample(s) | | Machine | ID | Sample(s) |
 |---|---|---|---|---|---|---|

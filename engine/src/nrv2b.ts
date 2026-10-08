@@ -1,6 +1,6 @@
 // NRV2B decoder: the format of every Machinedrum OS container slot (the boot block's routine at
 // flash 0x1c4). Returns the unpacked bytes and how many packed bytes the stream used, because
-// slots and X.13's add-on carry a dead tail.
+// slots and a base's add-on can carry a dead tail.
 
 const END_CODE = 0x1000002;
 

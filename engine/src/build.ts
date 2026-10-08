@@ -509,8 +509,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   for (const s of O.familyListSites) { patches.push([s, family + 4]); checks.push([s, O.familyTable + 4]); }
   // a Machinedrum without UW hides ROM and RAM, not two of our categories (engine/src/uw_menu.ts)
   // Without the fix a non-UW unit shows the wrong categories (1.63, DEV), or opens the machine menu
-  // on the wrong one and, on X.13, hangs at boot. A build for a Machinedrum without UW must have
-  // it; a build for a UW unit still builds without it and says so.
+  // on the wrong one (X.14). A build for a Machinedrum without UW must have it; a build for a UW
+  // unit still builds without it and says so.
   let uwWhy: string;
   let uwOk = true;
   if (!O.uwMenu || !ram.uwMenu) {
