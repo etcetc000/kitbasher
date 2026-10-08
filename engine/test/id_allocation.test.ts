@@ -120,7 +120,9 @@ const BASE_163 = { ...BASE, id: 'stock-163-prepared', name: 'OS 1.63', os: { ...
 test('the earlier-IDs layout: the earlier allocator on the selection itself', () => {
   const { packs } = loadPacks(resolve(process.cwd(), 'catalog'));
   const { fams: all } = select(packs as Pack[], {});
-  const models = all.flatMap((f) => f.models);
+  // the models earlier builds knew (a model added to the catalog since is in no earlier layout)
+  const known = new Set(LEGACY_MODELS.map((t) => t.key));
+  const models = all.flatMap((f) => f.models).filter((m) => known.has(m.key));
   // everything selected: what earlier builds gave
   const legacy = legacyAllocate(BASE_163, MAIN, all, STOCK_163);
   assert.deepEqual(legacy.problems, []);
@@ -147,11 +149,11 @@ test('the earlier-IDs layout: the earlier allocator on the selection itself', ()
 
 test('the earlier-IDs layout is frozen: a model added to the catalog never moves an earlier ID', () => {
   const { packs } = loadPacks(resolve(process.cwd(), 'catalog'));
-  const all = select(packs as Pack[], {}).fams;
+  // the catalog's models that earlier builds knew (whatever else it holds now), as the base of each case
+  const all = select(packs as Pack[], { modelKeys: LEGACY_MODELS.map((t) => t.key) }).fams;
   const byName = (sel: { m: PackModel; id: number }[]) => Object.fromEntries(sel.map((s) => [s.m.name.trim(), s.id]));
-  // the frozen table is the catalog the earlier allocator ran over: today's catalog keys, in order
-  assert.deepEqual(LEGACY_MODELS.map((t) => t.name), Object.keys(EARLIER_163).sort((a, b) =>
-    all.flatMap((f) => f.models).findIndex((m) => m.name.trim() === a) - all.flatMap((f) => f.models).findIndex((m) => m.name.trim() === b)));
+  // the frozen table names exactly the models of the earlier build
+  assert.deepEqual(LEGACY_MODELS.map((t) => t.name).sort(), Object.keys(EARLIER_163).sort());
   const dead = (id: number) => id >= BASE_163.os.deadIds[0] && id <= BASE_163.os.deadIds[1];
   const earlierIds = new Set(Object.values(EARLIER_163));
   let lowestFree = 0;
@@ -164,7 +166,8 @@ test('the earlier-IDs layout is frozen: a model added to the catalog never moves
   for (const m of [auto, pinned]) {
     const places: [string, Family[]][] = [
       ['first of all', inFamily('AN', 0, m)],
-      ['before NZEPL, in its own family', [...all.slice(0, 2), { name: 'NEW', models: [m] }, ...all.slice(2)]],
+      ['before NZEPL, in its own family', [...all.slice(0, all.findIndex((f) => f.name === 'NP')), { name: 'NEW', models: [m] },
+        ...all.slice(all.findIndex((f) => f.name === 'NP'))]],
       ['last of COM, just before NZEPL', inFamily('COM', -1, m)],
       ['among the pinned synths', inFamily('SYN', 3, m)],
       ['last of all', [...all, { name: 'NEW', models: [m] }]],
@@ -189,7 +192,8 @@ test('the earlier-IDs layout is frozen: a model added to the catalog never moves
     }
   }
   // a subset with a new model: the earlier IDs of that subset, unchanged
-  const drums = select(packs as Pack[], { families: ['AN', 'NP'], exclude: ['VAD/SY'] }).fams;
+  const drums = all.filter((f) => f.name === 'AN' || f.name === 'NP')
+    .map((f) => ({ ...f, models: f.models.filter((x) => x.key !== 'VAD/SY') }));
   const drumsBefore = byName(legacyAllocate(BASE_163, MAIN, drums, STOCK_163).sel);
   assert.deepEqual(byName(legacyAllocate(BASE_163, MAIN, [{ name: 'NEW', models: [auto] }, ...drums], STOCK_163).sel), drumsBefore);
   // a pack's own ID changed since, or a model renamed (its old key kept as an alias): the frozen table decides
