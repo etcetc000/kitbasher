@@ -1,38 +1,52 @@
 // "Does your Machinedrum have the UW option?" The page asks before anything else and will not go on
-// without a Yes or a No. The answer decides what the build may use: a Machinedrum without UW takes
-// 128 off any machine ID of 128 and up, has no UW sample memory, and hides the ROM and RAM menu
-// categories (engine/src/uw_menu.ts puts the added categories in their place).
+// without a Yes or a No clicked in this visit: nothing is pre-selected, no answer is remembered in the
+// browser, and a restored layout, project or .syx that records one only shows a hint. The answer
+// decides what the build may use: a Machinedrum without UW takes 128 off any machine ID of 128 and
+// up, has no UW sample memory, and hides the ROM and RAM menu categories (engine/src/uw_menu.ts puts
+// the added categories in their place).
 //
 // No imports: the page and its tests (ci/uw_mode.test.mjs) use the same code.
 
-export type UwAnswer = 'yes' | 'no' | 'unsure' | null;
+export type UwAnswer = 'yes' | 'no' | null;
 
 /** IDs a Machinedrum without UW can use: below this. */
 export const NO_UW_ID_LIMIT = 128;
 /** How many of the base's own categories (its last ones: ROM and RAM) a unit without UW hides. */
 export const UW_ONLY_CATEGORIES = 2;
-export const UW_STORAGE_KEY = 'kitbasher.uw';
 
 export const HOW_TO_CHECK = 'To check: on your current firmware, open the machine menu of any track. ' +
   'If it has ROM and RAM categories, your Machinedrum has the UW option. If it does not, it has no UW.';
 
+export const UNANSWERED = 'Answer Yes or No: does your Machinedrum have the UW option?';
+
 /** Whether the user may leave the first step: only with a Yes or a No. */
 export function gate(answer: UwAnswer, haveFirmware: boolean): { ok: boolean; why: string | null } {
   if (answer === 'yes' || answer === 'no') return { ok: haveFirmware, why: haveFirmware ? null : 'Load your OS file first.' };
-  if (answer === 'unsure') return { ok: false, why: `Answer Yes or No to continue. ${HOW_TO_CHECK}` };
-  return { ok: false, why: 'Tell us whether your Machinedrum has the UW option to continue.' };
+  return { ok: false, why: UNANSWERED };
+}
+
+/**
+ * The answer as the build takes it (`uw`): true for Yes, false for No. With no answer it throws, so
+ * no build or download can happen without one, whichever way it was reached.
+ */
+export function uwForBuild(answer: UwAnswer): boolean {
+  if (answer === 'yes') return true;
+  if (answer === 'no') return false;
+  throw new Error(UNANSWERED);
 }
 
 /** The answer as the engine needs it: noUw for a No, nothing otherwise. */
 export const noUwOf = (a: UwAnswer): boolean => a === 'no';
 
-/** The answer a layout or project file carries (`uw`: true or false), or null when it has none. */
-export const answerOf = (uw: boolean | undefined): UwAnswer => (uw === true ? 'yes' : uw === false ? 'no' : null);
-/** What a layout or project file records for an answer. */
+/** What a layout or project file records for an answer (nothing without one). */
 export const uwOf = (a: UwAnswer): boolean | undefined => (a === 'yes' ? true : a === 'no' ? false : undefined);
 
-export function readStored(get: (k: string) => string | null): UwAnswer {
-  try { const v = get(UW_STORAGE_KEY); return v === 'yes' || v === 'no' ? v : null; } catch { return null; }
+/**
+ * The hint a restored file's `uw` shows next to the question. It never answers it: the user still
+ * clicks Yes or No.
+ */
+export function fileHint(uw: boolean | undefined): string | null {
+  return uw === undefined ? null : `This layout was saved for a Machinedrum ${uw ? 'with' : 'without'} UW.`;
 }
 
 /** The base's categories a unit shows: without UW, all but its last two (ROM and RAM). */

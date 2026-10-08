@@ -156,8 +156,41 @@ export class OsAreaCapacityError extends Error {
   }
 }
 
+/** Why a build without the user's own UW answer is refused (the page and the CLI both ask for one). */
+export const UW_ANSWER_REQUIRED = 'Answer the UW question before building: does your Machinedrum have the UW option, Yes or No? ' +
+  'A layout or project file that records an answer does not stand in for it.';
+
+/** Refused before anything is read: the build was asked for without an explicit UW answer. */
+export class UwAnswerRequired extends Error {
+  constructor(detail = UW_ANSWER_REQUIRED) { super(detail); this.name = 'UwAnswerRequired'; }
+}
+
+/**
+ * The user's UW answer, which every build needs: `opt.uw` is true or false. A layout's own `uw`
+ * (what a restored file says) never satisfies it, and `noUw` must agree with it.
+ */
+export function requireUwAnswer(opt: { uw?: unknown; noUw?: boolean }): boolean {
+  if (typeof opt.uw !== 'boolean') throw new UwAnswerRequired();
+  if (opt.noUw && opt.uw) throw new UwAnswerRequired('Conflicting UW answers: noUw with uw: true. Answer Yes or No once.');
+  return opt.uw;
+}
+
+/**
+ * The CLI's answer: exactly one of --uw and --no-uw. Neither, or both, is refused; a restored
+ * layout's answer is only reported, never used in its place.
+ */
+export function uwFromFlags(flags: { uw?: boolean; noUw?: boolean }): boolean {
+  if (flags.uw && flags.noUw) throw new UwAnswerRequired('--uw and --no-uw: choose one.');
+  if (!flags.uw && !flags.noUw) {
+    throw new UwAnswerRequired('Say whether the Machinedrum has the UW option: pass --uw (it has) or --no-uw (it does not). ' +
+      'Nothing is built without it; a restored layout or project does not answer for you.');
+  }
+  return !!flags.uw;
+}
+
 export async function build(input: Uint8Array, base: Base, packs: Pack[], core: CorePack, opt: BuildOptions,
   trimmed?: Trimmed): Promise<BuildResult> {
+  requireUwAnswer(opt);
   try { return await buildAttempt(input, base, packs, core, opt, trimmed, false); }
   catch (e) {
     // Preserve existing output whenever it fits. Fixed slots can instead hold the
@@ -211,7 +244,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   const mapped = sel.filter((s) => s.mapped && s.id !== s.preferred);
   // Without UW a machine whose ID is 128 or more must move below 128 (selection.ts allocateIds):
   // that move is the point of the answer, not a liberty taken with a saved kit.
-  const noUw = !!opt.noUw || opt.uw === false || (opt.uw === undefined && opt.layout?.uw === false);
+  const noUw = opt.uw === false;                // requireUwAnswer: always the user's answer, never the layout's
   const uwMove = new Set(pl.moves.filter((m) => noUw && m.preferred >= 128 && m.id < 128).map((m) => m.name.trim()));
   gate('machine-ids', sel.every((s) => s.id === s.preferred || s.mapped || uwMove.has(s.m.name.trim())) || !!opt.allowIdMove,
        (pl.moves.length ? `moved (${pl.moves.every((m) => uwMove.has(m.name.trim())) ? 'no IDs of 128 and up without UW' : 'allowed'}): ${pl.moves.map((m) => `${m.name} ${m.preferred}->${m.id}`).join(', ')}`
@@ -356,9 +389,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   // Their run-time addresses are the flash alias plus where the block lands, known only now: plan
   // again at that address. The plan's choices depend on sizes alone, so they cannot change.
   const container = img;
-  // the layout this build embeds, with the UW answer when there is one (decodeLayout reads it back)
-  const answer = opt.noUw || opt.uw === false ? false : opt.uw;
-  const layout = pl.layout ?? { ...defaultLayout(base, pl.menus, (k) => sel.find((s) => s.m.key === k)!.id), ...(answer === undefined ? {} : { uw: answer }) };
+  // the layout this build embeds, with the user's UW answer (decodeLayout reads it back)
+  const layout = pl.layout ?? { ...defaultLayout(base, pl.menus, (k) => sel.find((s) => s.m.key === k)!.id), uw: opt.uw! };
   const streamEnd = sD2 + 8 + comp.length - pad;
   const payloadAt = (streamEnd + 3) & ~3;
   if (reclaimTail) {
@@ -678,9 +710,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
                        loop_skip: O.ctrLoopSkip ? h(O.ctrLoopSkip.site) : null, patched: caFix, ids: O.ctrMask.ids },
     ctr: { needed: c.needed, tests: c.found.size, patched: c.needed ? O.ctrMask.sites.length : 0,
            missed: c.missed.map(h), extra: c.extra.map(h) },
-    notes: [...pl.notes, ...(stub && !stub.applied ? [stub.note] : []),
-      // only when the UW question was not answered (with Yes they are fine, with No there are none)
-      ...sel.filter((s) => opt.uw === undefined && !noUw && s.id >= 128).map((s) => `${s.m.name.trim()} is on ID ${s.id}: a Machinedrum without UW cannot use IDs 128 and up (it selects ${s.id - 128} instead); give it an ID below 128 in the layout for such a unit`)],
+    notes: [...pl.notes, ...(stub && !stub.applied ? [stub.note] : [])],
     features: {
       dyn_labels: ram.dyn ? { bytes: ram.dyn.blob.length, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
       dsp1_drive: ram.dsp1 ? { machines: ram.dsp1.pairs.length, entry: h(ram.dsp1.entry), laws: ram.dsp1.link.laws } : null,

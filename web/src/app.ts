@@ -32,7 +32,7 @@ import { selectCatalog } from '../../engine/src/catalog.js';
 import { readBank } from '../../engine/src/samples.js';
 import { decodeProject, encodeProject, osOf, osProblem, PROJECT_EXTENSION, type Project } from '../../engine/src/project.js';
 import { SamplesStep } from './samples-ui.js';
-import { answerOf, gate, HOW_TO_CHECK, noUwOf, readStored, UW_STORAGE_KEY, uwOf, type UwAnswer } from './uw-mode.js';
+import { fileHint, gate, noUwOf, uwForBuild, uwOf, type UwAnswer } from './uw-mode.js';
 import { recoverSession } from '../../engine/src/restore.js';
 import { legacyLayout, LEGACY_LAYOUT_NAME } from '../../engine/src/legacy_ids.js';
 import { listedFreeIds, parseLayout, type Layout } from '../../engine/src/layout.js';
@@ -112,13 +112,7 @@ function syncWizard(): void {
 function showStep(n: number): void {
   if (building || (n > 1 && !fw) || (n > 3 && (!current?.ok || !current.sel.length || packedCapacityProblem))) return;
   // the UW question is answered before anything else
-  const asked = gate(uwAnswer, !!fw);
-  if (n > 1 && !asked.ok) {
-    status(asked.why!, 'error');
-    if (step !== 1) { step = 1; for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== 1; syncWizard(); }
-    $('uw-question').querySelector<HTMLInputElement>('input')?.focus();
-    return;
-  }
+  if (n > 1 && needsUwAnswer()) return;
   if (step <= 3 && n > 3 && !cachedBuild) { void onBuild(n === 4 ? 'categories' : 'download'); return; }
   step = n;
   for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== n;
@@ -139,43 +133,45 @@ function status(msg: string, kind: 'info' | 'ok' | 'error' = 'info'): void {
 const boxes = (): HTMLInputElement[] => Array.from(document.querySelectorAll<HTMLInputElement>('#machines input[type=checkbox]'));
 
 // "Does your Machinedrum have the UW option?" (web/src/uw-mode.ts): asked on the first step, which
-// the page does not leave without a Yes or a No. A No means no machine on IDs 128 and up and no
-// model that plays a UW sample (engine/src/selection.ts allocateIds). Remembered in this browser,
-// and saved in layout and project files.
+// the page does not leave without a Yes or a No clicked in this visit. Nothing is pre-selected and
+// nothing is remembered in the browser; a restored file's answer is only a hint. A No means no
+// machine on IDs 128 and up and no model that plays a UW sample (engine/src/selection.ts
+// allocateIds). Saved in layout and project files.
 let uwAnswer: UwAnswer = null;
 const noUw = (): boolean => noUwOf(uwAnswer);
-function setUwAnswer(a: UwAnswer, remember = true): void {
-  uwAnswer = a;
-  for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) r.checked = r.value === a;
-  if (remember && (a === 'yes' || a === 'no')) { try { localStorage.setItem(UW_STORAGE_KEY, a); } catch { /* storage unavailable */ } }
-  $('uw-help').hidden = a !== 'unsure';
-  $('uw-help').textContent = a === 'unsure' ? `${HOW_TO_CHECK} Then choose Yes or No to continue.` : '';
-  const uw = uwOf(a);
+/** The restored layout follows the user's answer (none until there is one). */
+function syncLayoutUw(): void {
+  const uw = uwOf(uwAnswer);
   layoutEd.uw = uw;
   if (layoutEd.map && layoutEd.map.uw !== uw) {
     const { uw: _drop, ...rest } = layoutEd.map;
     layoutEd.map = uw === undefined ? rest : { ...rest, uw };
   }
+}
+/** Only the user's click on Yes or No sets the answer. */
+function setUwAnswer(a: UwAnswer): void {
+  uwAnswer = a;
+  for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) r.checked = r.value === a;
+  syncLayoutUw();
   applyNoUw();
   syncWizard();
 }
 /**
- * The UW answer a restored file records. It never replaces an answer the user gave: a different
- * one is pointed out instead. With no answer yet it is taken for this visit, not remembered.
+ * The UW answer a restored file records: shown as a hint next to the question, never taken as the
+ * answer. A different answer from the user's is pointed out; theirs stands.
  */
 function fileAnswer(uw: boolean | undefined, from: string): void {
-  const said = answerOf(uw);
-  if (!said) return;
-  if (uwAnswer === 'yes' || uwAnswer === 'no') {
-    if (said !== uwAnswer) {
-      // the user's answer stands; the restored layout follows it
-      setUwAnswer(uwAnswer, false);
-      status(`${from} was saved for a Machinedrum ${said === 'yes' ? 'with' : 'without'} UW; you answered ${uwAnswer === 'yes' ? 'Yes' : 'No'}, so that is what this build uses. Change your answer on the first step if ${from} is right.`, 'error');
-    }
-    return;
+  const hint = fileHint(uw);
+  $('uw-file-hint').textContent = hint ?? '';
+  $('uw-file-hint').hidden = !hint;
+  syncLayoutUw();
+  if (uw === undefined) return;
+  const said = uw ? 'yes' : 'no';
+  if (uwAnswer === null) {
+    status(`${from} was saved for a Machinedrum ${uw ? 'with' : 'without'} UW. Answer the UW question (Yes or No) to continue.`, 'info');
+  } else if (said !== uwAnswer) {
+    status(`${from} was saved for a Machinedrum ${uw ? 'with' : 'without'} UW; you answered ${uwAnswer === 'yes' ? 'Yes' : 'No'}, so that is what this build uses. Change your answer on the first step if ${from} is right.`, 'error');
   }
-  setUwAnswer(said, false);
-  status(`${from} was saved for a Machinedrum ${said === 'yes' ? 'with' : 'without'} UW, so the UW question is answered ${said === 'yes' ? 'Yes' : 'No'}. Change it on the first step if that is wrong.`, 'info');
 }
 
 // ---- restoring a previous session: the machine IDs saved kits rely on
@@ -569,8 +565,10 @@ const storageFull = (e: unknown): e is CompressedCapacityError | OsAreaCapacityE
   e instanceof CompressedCapacityError || e instanceof OsAreaCapacityError;
 
 function buildWith(trim: TrimOptions): Promise<BuildResult> {
+  // throws without a Yes or a No (and engine build refuses a missing answer too)
+  const uw = uwForBuild(uwAnswer);
   return build(input!, base!, data.packs, data.core!,
-    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
 }
 
 function showStorage(report: BuildReport): void {
@@ -608,7 +606,7 @@ let storage: { revision: number; done: Promise<void> } | null = null;
 
 function scheduleStorageCheck(): void {
   storage = null;
-  if (!input || !base || !current?.ok) {
+  if (!input || !base || !current?.ok || !gate(uwAnswer, true).ok) {
     $('m-packed').querySelector('.num')!.textContent = '';
     return;
   }
@@ -661,8 +659,19 @@ async function checkStorage(version: number): Promise<void> {
   showStorage(got.report);
 }
 
+/** Back to the question when it is unanswered: no build, check or download goes ahead without it. */
+function needsUwAnswer(): boolean {
+  const asked = gate(uwAnswer, !!fw);
+  if (asked.ok) return false;
+  status(asked.why!, 'error');
+  if (step !== 1) { step = 1; for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== 1; syncWizard(); }
+  $('uw-question').querySelector<HTMLInputElement>('input')?.focus();
+  return true;
+}
+
 async function onBuild(destination: 'categories' | 'download' = 'download'): Promise<void> {
   if (!input || !base || !current?.ok || building) return;
+  if (needsUwAnswer()) return;
   building = true;
   let succeeded = false;
   status(destination === 'categories' ? 'Checking that your selection fits…' : 'Building…');
@@ -694,6 +703,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     const name = `${stem}-models.syx`;
     downloadUrl = URL.createObjectURL(blob);
     const a = el('a', { class: 'download', href: downloadUrl, download: name }, `Download ${name}`);
+    a.addEventListener('click', (e) => { if (needsUwAnswer()) e.preventDefault(); });
     $('result').replaceChildren(a, el('details', {}, el('summary', {}, 'Build details and checks'), reportView(report)));
     status(`Built in ${((performance.now() - t) / 1000).toFixed(1)} s.`, 'ok');
   } catch (e) {
@@ -820,11 +830,11 @@ async function main(): Promise<void> {
   for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) {
     r.addEventListener('change', () => {
       if (!r.checked) return;
-      setUwAnswer(r.value as UwAnswer);
+      setUwAnswer(r.value === 'yes' ? 'yes' : 'no');
       refresh();
     });
   }
-  setUwAnswer(readStored((k) => localStorage.getItem(k)), false);
+  setUwAnswer(null);                                   // never pre-selected: not from storage, not from a file
   document.querySelectorAll<HTMLButtonElement>('[data-step], [data-back]').forEach(b => {
     b.addEventListener('click', () => showStep(Number(b.dataset.step ?? b.dataset.back)));
   });

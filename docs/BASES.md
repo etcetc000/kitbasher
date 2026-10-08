@@ -134,11 +134,16 @@ replaced; a build for a Machinedrum without UW fails if the base's step is not
 found.
 
 Two things need a UW Machinedrum, so the page asks first: *Does your
-Machinedrum have the UW option?* It does not go on without a Yes or a No (Not
-sure explains how to check: a UW unit's machine menu has ROM and RAM). The
-answer is remembered in this browser and saved as `uw` in layout and project
-files and in the layout table of the OS it builds. Loading a file with a
-different answer does not change yours; the page says so. With a No:
+Machinedrum have the UW option?* There are two answers, Yes and No, and one
+line under them says how to check (a UW unit's machine menu has ROM and RAM).
+Nothing is pre-selected, and the page does not leave the first step, check,
+build or download until you click one in this visit: the answer is not
+remembered in the browser, and a restored layout, project or `.syx` that
+records one only shows a hint ("This layout was saved for a Machinedrum with
+UW") without answering for you. The engine's `build` refuses to run without an
+explicit `uw` (true or false); a layout's own `uw` does not count. The answer
+is saved as `uw` in layout and project files and in the layout table of the OS
+it builds. With a No:
 
 - **No machine IDs of 128 and up.** Without UW the OS takes 128 off any machine
   ID of 128 or more, so a machine there would be selected as another, empty one.
@@ -184,8 +189,9 @@ IDs reserved, so a later build that selects them again finds them free; only
 when no other ID is left is one given to a new model, and the build report says
 so. A session made for another OS is applied to the one you load: machines keep
 their IDs where that OS has them free, and the others move (each move is
-listed). On the command line: `--restore <file>` or `--legacy-ids`; a session
-that records the UW answer sets it unless `--uw` or `--no-uw` is given.
+listed). On the command line: `--restore <file>` or `--legacy-ids`. Exactly one of
+`--uw` or `--no-uw` is required for every build; a restored session's UW answer
+is reported but never used in its place.
 
 ## Adding a base
 

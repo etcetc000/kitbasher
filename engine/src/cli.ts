@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Kitbasher command line: patch a Machinedrum OS with machines from model packs.
 //
-//   node engine/dist/src/cli.js --in <base .syx | 8 MiB .bin> --out <file> [options]
+//   node engine/dist/src/cli.js --in <base .syx | 8 MiB .bin> --out <file> (--uw | --no-uw) [options]
 //
+//   --uw | --no-uw       required, exactly one: whether the Machinedrum has the UW option. Nothing is
+//                        built without it, and a restored layout's answer does not stand in for it
 //   --bases <dir>        base profiles (default: bases/)
 //   --catalog <dir>      use only this complete catalog; no other pack directory is read
 //   --packs <dir>        add a pack directory (repeatable). Also read when they exist: catalog/
@@ -60,8 +62,8 @@
 //   --no-align           turn it off
 //   --no-uw              the Machinedrum has no UW option: no machine on IDs 128 and up (a restored ID
 //                        there moves to the lowest free ID below 128, reported); models that play a UW
-//                        sample are left out, and named
-//   --uw                 the Machinedrum has the UW option (recorded in the embedded layout)
+//                        sample are left out, and named. Recorded in the embedded layout
+//   --uw                 the Machinedrum has the UW option. Recorded in the embedded layout
 //   --restore <file>     keep the machine IDs of a previous session: a project file (.kitbasher.json), a
 //                        layout file, or a .syx/.bin Kitbasher built (its layout table, or else its
 //                        descriptor table matched to the catalog). Same as --map for a layout file
@@ -83,7 +85,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotPatchable, resolveBase, supportLine } from './bases.js';
-import { build } from './build.js';
+import { build, uwFromFlags } from './build.js';
 import { readFirmware } from './container.js';
 import { loadBases, loadPacks, LOCAL_PACKS } from './node.js';
 import { findLayout, fingerprint, listedFreeIds, parseLayout } from './layout.js';
@@ -155,9 +157,11 @@ async function main(): Promise<void> {
     return;
   }
   if (!a.in || !a.out) {
-    console.error('usage: cli.js --in <base> --out <file> [--families ..] [--exclude ..] [--trim-db ..] [--trim-min ..] [--trim-cap ..] [--report ..]');
+    console.error('usage: cli.js --in <base> --out <file> (--uw | --no-uw) [--families ..] [--exclude ..] [--trim-db ..] [--trim-min ..] [--trim-cap ..] [--report ..]');
     process.exit(2);
   }
+  // the UW answer is required before anything is read (a restored layout's answer, below, only reported)
+  const uw = uwFromFlags({ uw: !!a.uw, noUw: !!a['no-uw'] });
   const bases = loadBases(a.bases ?? resolve(ROOT, 'bases'));
   if (a.catalog && many.packs?.length) throw new Error('--catalog selects a complete set; do not combine it with --packs');
   const { packs, core, dirs } = loadPacks(a.catalog ? [resolve(a.catalog)] :
@@ -169,8 +173,6 @@ async function main(): Promise<void> {
   for (const d of disagreements) console.log(`  CACHE DISAGREES (discovery wins): ${d}`);
   for (const [k, v] of Object.entries(base.support)) if (!v.ok) console.log(`  not supported on this base: ${supportLine(k, v)}`);
   const cap = a['trim-cap'] === undefined ? 0.55 : Number(a['trim-cap']);
-  if (a['no-uw'] && a.uw) throw new Error('--uw and --no-uw: choose one');
-  let uw = a['no-uw'] ? false : a.uw ? true : undefined;
   const all = select(packs, {}).fams.flatMap((f) => f.models);
   // the session whose IDs to keep
   let layout = a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined;
@@ -194,10 +196,10 @@ async function main(): Promise<void> {
     layout = { ...layout, base: base.id };
     allowIdMove = true;
   }
-  // the session's UW answer, when no flag gives one
-  if (uw === undefined && layout?.uw !== undefined) {
-    uw = layout.uw;
-    console.log(`the restored session was made for a Machinedrum ${uw ? 'with' : 'without'} UW (--uw / --no-uw to override)`);
+  // the session's UW answer is reported, never used: the flag is the answer
+  if (layout?.uw !== undefined) {
+    console.log(`the restored session was made for a Machinedrum ${layout.uw ? 'with' : 'without'} UW; building for one ${uw ? 'with' : 'without'} UW (${uw ? '--uw' : '--no-uw'})` +
+      (layout.uw !== uw ? ': the IDs follow your answer' : ''));
   }
   // without UW, models that play a UW sample cannot work: leave them out, and say so
   let exclude = a.exclude ? a.exclude.split(',') : undefined;

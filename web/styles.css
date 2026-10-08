@@ -757,7 +757,7 @@ h2 {
 .machine.unavailable { opacity: .5; }
 .uw-question { margin: 14px 0 6px; border: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
 .uw-question legend { float: left; font-weight: 600; margin-right: 6px; padding: 0; }
-.uw-question #uw-help { flex-basis: 100%; margin: 2px 0 0; }
+.uw-question #uw-help, .uw-question #uw-file-hint { flex-basis: 100%; margin: 2px 0 0; }
 .restore { margin: 8px 0; }
 .restore summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .restore p { margin: 6px 0; }
