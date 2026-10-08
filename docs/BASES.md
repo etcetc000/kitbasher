@@ -69,7 +69,7 @@ node engine/dist/src/cli.js --prepare-163 --in os163.syx --out os163-prepared.sy
 
 Discovery checks each feature on the base you load: dynamic knob labels, DSP1
 drive curves, menu descriptors in flash, control-all for added machines,
-overload recovery and the CPU indicator. A feature whose sites are not found is
+overload recovery, the CPU indicator and MIDI chromatic note input. A feature whose sites are not found is
 switched off and reported, never guessed. To see what a base supports:
 
 ```text
@@ -92,6 +92,9 @@ details matter to the patcher:
 - X.13 and X.14 upload the DSP2 voice-retirement code twice. Clean recovery
   patches every copy, and refuses the build if any copy differs from the stock
   instructions it expects.
+- [MIDI chromatic note input](MIDI-CHROMATIC.md) (`--midi-chroma`) hooks X.14's
+  real-time MIDI path in its add-on, so it is offered on X.14 only; OS 1.63 and
+  DEV read MIDI in their main loop, which it does not patch.
 
 ## DEV 26A01
 

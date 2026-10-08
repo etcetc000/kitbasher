@@ -168,6 +168,14 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   bad.samples.swaps[0].sha256 = '0'.repeat(64);
   await assert.rejects(decodeProject(JSON.stringify(bad)), /sha256/);
   await assert.rejects(decodeProject('{"format":"md-layout/1"}'), /not a kitbasher-project\/1/);
+  // MIDI chromatic note input: absent means off, and a file without it reads back without it
+  assert.equal(q.midiChroma, undefined);
+  assert.ok(!text.includes('midi_chroma'));
+  const on = await encodeProject({ ...p, midiChroma: true });
+  assert.equal(on.midi_chroma, true);
+  assert.equal((await decodeProject(JSON.stringify(on))).midiChroma, true);
+  assert.ok(!JSON.stringify(await encodeProject({ ...p, midiChroma: false })).includes('midi_chroma'));
+  await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: 'yes' })), /midi_chroma/);
 });
 
 test('a swapped first sample shorter than its partner is padded at any length; the stock pair rule is unchanged', () => {

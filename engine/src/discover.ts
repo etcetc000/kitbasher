@@ -28,6 +28,7 @@ import { findSite as findFlushHook, NoIndicator, type Site as FlushSite } from '
 import { recoverProblems, ANCHORS } from './recover.js';
 import {qualifyModelRuntime} from './model_runtime.js';
 import { findUwMenu } from './uw_menu.js';
+import { findChroma, NoChroma, type ChromaSite } from './midi_chroma.js';
 
 export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
@@ -43,7 +44,9 @@ export interface Discovery {
              /** the options: --dsp1-recover (its anchors in DSP1/DSP2), --cpu-indicator (the LCD flush hook), --ctr-control-all (its three sites) */
     dsp1Recover: Support; cpuIndicator: Support; ctrControlAll: Support; modelRuntime: Support;
     /** the menu on a Machinedrum without UW: how the base hides ROM and RAM there (engine/src/uw_menu.ts) */
-    uwMenu: Support };
+    uwMenu: Support;
+    /** --midi-chroma: the real-time MIDI path's hook sites, byte for byte (engine/src/midi_chroma.ts) */
+    midiChroma: Support };
   /** the patchable base; null with `refused` saying why */
   base: Base | null;
   refused: string | null;
@@ -66,7 +69,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
   const at1 = (k: string, v: number): string => (A[k] === undefined ? '' : num(A[k]) === v ? ' (the 1.63 address)' : ` (1.63 has it at ${A[k]}: moved)`);
   const fail = (kind: Discovery['kind'], why: string): Discovery => ({
     kind, lineage: kind !== 'unknown', findings, values, base: null, refused: why,
-    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
+    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'midiChroma'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
   });
   /** exactly one match, else NotFound naming the signature and the count */
   const one = (name: string, imgs: CodeImage[], sig = S[name]): Hit => {
@@ -463,6 +466,18 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       if (lcdFlush.trapOperand !== null) val('lcd.trap', lcdFlush.trapOperand);
     } catch (e) { if (!(e instanceof NoIndicator)) throw e; lcdWhy = e.message; note('LCD flush (--cpu-indicator)', false, lcdWhy); }
 
+    // ---- 9d. MIDI chromatic note input (--midi-chroma, engine/src/midi_chroma.ts): X.14's real-time
+    //      MIDI path, every hook site and the OS code the lock path relies on, byte for byte
+    let midiChroma: ChromaSite | null = null;
+    let chromaWhy = '';
+    try {
+      midiChroma = findChroma(images);
+      note('MIDI chromatic input (--midi-chroma)', true, `the parser's base-range test at ${h(midiChroma.parser.site)}, the real-time note-on call at ` +
+           `${h(midiChroma.consumer.site)}, the live-record call at ${h(midiChroma.recSite.site)} and the UI idle call's operand at ${h(midiChroma.idle.site)}, ` +
+           `with ${Object.keys(midiChroma.anchors).length} anchors in the OS, byte for byte`);
+      val('midi_chroma.sites', [midiChroma.parser.site, midiChroma.consumer.site, midiChroma.recSite.site, midiChroma.idle.site]);
+    } catch (e) { if (!(e instanceof NoChroma)) throw e; chromaWhy = e.message; note('MIDI chromatic input (--midi-chroma)', false, chromaWhy); }
+
     // ---- 10. descriptors in flash: the OS reads its own container through the flash alias
     let alias: number | null = null;
     let aliasWhy = '';
@@ -554,7 +569,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       },
       layout,
       ext: { base: env[0][0], end: env[0][1] },
-      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush },
+      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush, midiChroma },
       os: {
         cfBase, osMain, descriptorTable, freeDescriptor, descriptorSize: dsz,
         familyTable, familyBaseSites, familyListSites, uwMenu: uw.menu, pageDraw, redrawStub,
@@ -607,6 +622,8 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       ctrControlAll: caBoth && caLoop.length === 1
         ? { ok: true, why: `discovered: control-all masks at ${h(caBoth.kind.site)}, ${h(caBoth.encoder.site)} and the per-track skip at ${h(caLoop[0].site)}` }
         : { ok: false, why: `control-all gates: ${gateLine(caGates)}; per-track skip: ${caLoop.length} candidates (one needed)` },
+      midiChroma: midiChroma ? { ok: true, why: `discovered: X.14's real-time MIDI path (parser ${h(midiChroma.parser.site)}, note-on call ${h(midiChroma.consumer.site)}), byte for byte` }
+        : { ok: false, why: chromaWhy },
     };
     base.support = support;
     return { kind, lineage: true, findings, support, base, refused: ramWhy ? `no ColdFire RAM for the machines: ${ramWhy}` : null, values };

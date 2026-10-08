@@ -33,6 +33,7 @@ The file holds your choices only: never the OS, and never the stock E12 samples.
 | `trim` | The Models step's sample setting: `mode` is `auto`, `keep` or `manual`; `db` and `cap` are the slider values (the trim threshold in dB, and At most in seconds, 0 for no limit). Auto mode recomputes its threshold from the same inputs, so it finds the same one. |
 | `models` | The selected models, by module name. Models the page's catalog does not have are named when the file is loaded. |
 | `layout` | Your menu layout in the `md-layout/1` format the Categories step exports, or `null` for the default layout. A layout file carries the same `uw` field. |
+| `midi_chroma` | `true` when *MIDI chromatic note input* was ticked ([MIDI chromatic note input](MIDI-CHROMATIC.md)); absent means off. It applies only on an OS that supports it. |
 | `uw` | Your answer to *Does your Machinedrum have the UW option?*: `true` or `false`. Absent in files saved before the question. Loading a file never changes an answer you gave on the page (it says so when they differ); with no answer given yet, the file's is used for that visit. With `false` the build keeps every machine below ID 128 and leaves out models that play UW samples ([Machinedrum without UW](BASES.md#machinedrum-without-uw)). |
 
 Readers must refuse a file whose `format` is not one they know. Later versions will change the

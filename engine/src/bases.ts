@@ -116,6 +116,8 @@ export interface Base {
     descFlash: { alias: number } | null;
     /** --cpu-indicator: the LCD flush's diff (engine/src/indicator.ts), once in the base's code */
     lcdFlush: import('./indicator.js').Site | null;
+    /** --midi-chroma: X.14's real-time MIDI path, verified byte for byte (engine/src/midi_chroma.ts) */
+    midiChroma: import('./midi_chroma.js').ChromaSite | null;
   };
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;

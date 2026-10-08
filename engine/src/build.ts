@@ -1,8 +1,9 @@
 import { isaGate, rewrittenCode } from './isa_gate.js';
-import { assertBootRamWrites } from './boot_safety.js';
+import { assertBootRamWrites, readBootRamWrites } from './boot_safety.js';
 import { decodeLinear } from './isa.js';
 import { menuRefreshPatches } from './menu_refresh.js';
 import { uwMenuPatches } from './uw_menu.js';
+import { checkChromaCode, chromaPatches, chromaRanges } from './midi_chroma.js';
 export { isaGate, rewrittenCode } from './isa_gate.js';
 // Build orchestration: discovered base + relocatable packs -> gated OS image.
 // Planning owns placement; selection.ts owns catalog/IDs; isa_gate.ts independently reads
@@ -35,7 +36,7 @@ import { operands } from './sig.js';
 import type { TrimEntry, TrimOptions } from './e12.js';
 import { nrv2bDecode } from './nrv2b.js';
 import { checkPack, needLines, type CorePack, type Pack } from './packs.js';
-import { plan, type Plan, type Selection, type Trimmed } from './plan.js';
+import { IND_EXT_SPAN, plan, type Plan, type Selection, type Trimmed } from './plan.js';
 import { containerOf, encodeSyx } from './syx.js';
 import { bestPack } from './ucl.js';
 import { appendLayout, canonical, defaultLayout, encodeLayout, findLayout, type Layout } from './layout.js';
@@ -108,6 +109,9 @@ export interface BuildReport {
   notes: string[];
   features: { dyn_labels: { bytes: number; free: number; page_sites: number } | null; dsp1_drive: { machines: number; entry: string; laws: string[] } | null;
               host_reorder: { entry: string; bytes: number; old: string; sites: string[] } | null;
+              /** --midi-chroma: where its routines are, the channel, and what a chromatic note does on each selected machine */
+              midi_chroma?: { at: string; end: string; code_bytes: number; data_bytes: number; channel: string;
+                              machines: { id: number; name: string; plays: string }[] } | null;
               desc_flash: string[]; notes: string[] };
   /** layout_table..os_end is the layout table, which every build appends after the boot routine */
   flash: { addon: string | null; boot_routine: string; os_end: string; headroom: number; patches: number; layout_table: string; layout_bytes: number };
@@ -536,6 +540,18 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     patches.push(...hp.patches);
     checks.push(...hp.checks);
   }
+  // --midi-chroma: the parser's range test rewritten, three calls retargeted; no other write may touch them
+  let chromaWrites: [number, number][] = [];
+  if (ram.chroma) {
+    const cp = chromaPatches(ram.chroma.site, ram.chroma.code.labels);
+    const ranges = chromaRanges(ram.chroma.site);
+    const clash = patches.filter(([s]) => ranges.some(([lo, hi]) => s + 4 > lo && s < hi));
+    gate('midi-chroma-sites', clash.length === 0, clash.length ? `other patches write ${clash.map(([s]) => h(s)).join(', ')}, inside the hook sites`
+      : `${cp.patches.length} longwords at ${ranges.map(([lo, hi]) => `${h(lo)}..${h(hi)}`).join(', ')}, written by nothing else`);
+    chromaWrites = cp.patches;
+    patches.push(...cp.patches);
+    checks.push(...cp.checks);
+  }
   // Each site is read where the base's boot puts it: the ColdFire slot (below the BSS its reset
   // code clears), the SRAM copy, the add-on, a scatter entry.
   const live = codeImages(fw, base);
@@ -679,6 +695,21 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
              'FUNC + knob reaches 124..127; 0x60..0x6f, 0x70..0x73 and the four stock control machines 0x78..0x7b unchanged');
   }
 
+  // ---- --midi-chroma: the routines as the image carries them, and the writes that enter them
+  if (ram.chroma) {
+    const C = ram.chroma;
+    const inImage = image.subarray(extSrc + (C.at - E), extSrc + (C.at - E) + C.code.bytes.length);
+    const cc = checkChromaCode(inImage, C.code.codeLen, C.at, C.site);
+    const listed = readBootRamWrites(image, routine, base.boot.sram);
+    const entered = chromaWrites.every(([a, v]) => listed.some(([b, w]) => a === b && v === w));
+    gate('midi-chroma', equal(inImage, C.code.bytes) && cc.ok && entered && C.at + C.code.bytes.length <= E + IND_EXT_SPAN,
+      !cc.ok ? cc.detail : !entered ? 'the patch list does not carry every hook write'
+        : C.at + C.code.bytes.length > E + IND_EXT_SPAN ? `the routines end at ${h(C.at + C.code.bytes.length)}, past the proven ${h(E + IND_EXT_SPAN)}`
+        : `${C.code.codeLen} bytes of routines (${cc.insns.length} ISA_A instructions, calls only to the OS routines they name) and ` +
+          `${C.code.bytes.length - C.code.codeLen} bytes of data at ${h(C.at)}..${h(C.at + C.code.bytes.length)}, channel ${C.channel}; ` +
+          `${C.table.entries.length} of ${sel.length} machines play notes, the others are triggered`);
+  }
+
   // ---- every added instruction, and every one a patched word lands in, is ColdFire ISA_A
   const isa = isaGate(fw, base, back);
   gate('isa', isa.ok, isa.detail + (isa.rejects.length ? `; ${isa.rejects.slice(0, 3).map((i) => `${h(i.at)} ${i.name}: ${i.why}`).join('; ')}` : ''));
@@ -715,6 +746,9 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
       dyn_labels: ram.dyn ? { bytes: ram.dyn.blob.length, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
       dsp1_drive: ram.dsp1 ? { machines: ram.dsp1.pairs.length, entry: h(ram.dsp1.entry), laws: ram.dsp1.link.laws } : null,
       host_reorder: ram.hostSend ? { entry: h(ram.hostSend.entry), bytes: ram.hostSend.bytes, old: h(ram.hostSend.old), sites: ram.hostSend.sites.map(h) } : null,
+      ...(ram.chroma ? { midi_chroma: { at: h(ram.chroma.at), end: h(ram.chroma.at + ram.chroma.code.bytes.length), code_bytes: ram.chroma.code.codeLen,
+        data_bytes: ram.chroma.code.bytes.length - ram.chroma.code.codeLen, channel: ram.chroma.channel,
+        machines: ram.chroma.table.perModel.map((p) => ({ id: p.id, name: p.name, plays: p.kind })) } } : {}),
       desc_flash: pr.features.descFlash, notes: pr.features.notes,
     },
     flash: { addon: addonAt === null ? null : h(addonAt), boot_routine: h(routine), os_end: h(osEnd), headroom: OS_LIMIT - osEnd, patches: patches.length,
@@ -754,7 +788,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
             ...(wdN === undefined ? {} : { dsp1_watchdog: wdN }),
             ...(rec === null ? {} : { dsp1_recover: true }),
             ...(ram.indicator === null ? {} : { cpu_indicator: true }),
-            ...(opt.ctrControlAll ? { ctr_control_all: true } : {}) },
+            ...(opt.ctrControlAll ? { ctr_control_all: true } : {}),
+            ...(ram.chroma ? { midi_chroma: ram.chroma.channel } : {}) },
     // present only with --host-reorder: the reordered DSP2 host-command sender, so a checker can
     // allow those patched words and verify the routine itself
     ...(ram.hostSend === null ? {} : { host_reorder: { entry: h(ram.hostSend.entry), bytes: ram.hostSend.bytes, old: h(ram.hostSend.old),
@@ -785,6 +820,11 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
       timer_install: h(ram.indicator.site.timerInstall),
       trap_operand: ram.indicator.site.trapOperand === null ? null : h(ram.indicator.site.trapOperand),
       isr: h(DSP1_ISR), hold_flushes: HOLD, cue: [CUE.x0, CUE.y0, CUE.x1, CUE.y1] } }),
+    // present only with --midi-chroma: its routines and every word it patched, so a checker can
+    // allow those words and verify the routines
+    ...(ram.chroma === null ? {} : { midi_chroma: { at: h(ram.chroma.at), bytes: ram.chroma.code.bytes.length, code_bytes: ram.chroma.code.codeLen,
+      channel: ram.chroma.channel, cfg: h(ram.chroma.cfg), labels: Object.fromEntries(Object.entries(ram.chroma.code.labels).map(([k, v]) => [k, h(v)])),
+      patches: chromaWrites.map(([a, v]) => [h(a), h(v)]), table: ram.chroma.table.perModel } }),
     // present when the silence stub was trimmed: the one changed DSP2 word, so a checker that
     // compares the upload against the base can allow that word and verify the stub separately
     ...(stub?.applied ? { stub_trim: { stub: h(stub.stub.at), pad: h(stub.stub.pad), from: h(stub.from), to: h(stub.to) } } : {}),
