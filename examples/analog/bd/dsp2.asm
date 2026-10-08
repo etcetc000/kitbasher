@@ -5,8 +5,9 @@ init:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+7
+    do #<$37,>local_7
     move x0,y:(r0)+
+local_7:
     move #$0,x0
     move x0,x:(r6+$3f)
     move #$8,x0
@@ -67,8 +68,9 @@ local_3d:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$30,>code_origin+68
+    do #<$30,>local_44
     move x0,y:(r0)+
+local_44:
     move #>$1,x0
     move x0,y:(r6+$36)
     move #>$ffffff,x0
@@ -142,8 +144,9 @@ local_7d:
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$9,>code_origin+151
+    do #<$9,>local_97
     move x0,y:(r0)+
+local_97:
     move #>$1,x0
     move x0,y:(r6+$36)
 local_9a:
@@ -564,7 +567,7 @@ local_246:
     nop
     move y:(r0),a
     tst a
-    jne code_origin+858
+    jne local_35a
     move r6,r3
     move #$0,n3
     move (r3)+n3
@@ -639,7 +642,7 @@ local_246:
     move #>$7fff,m1
     move #$1,n4
     move #$1,n5
-    do #<$20,>code_origin+742
+    do #<$20,>local_2e6
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -701,6 +704,7 @@ local_246:
     mpy y0,x0,b
     asl #$1,b,b
     move b,y:(r7)+
+local_2e6:
     move #>$ffffff,m0
     move #>$ffffff,m1
     move #>$ffffff,m4
@@ -727,7 +731,7 @@ local_2ef:
     move #>$7fff,m1
     move #$1,n4
     move #$1,n5
-    do #<$20,>code_origin+849
+    do #<$20,>local_351
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -800,11 +804,13 @@ local_2ef:
     mpy y0,x0,b
     asl #$1,b,b
     move b,y:(r7)+
+local_351:
     move #>$ffffff,m0
     move #>$ffffff,m1
     move #>$ffffff,m4
     move #>$ffffff,m5
     bra <local_3e1
+local_35a:
     move r6,r3
     move #$0,n3
     move (r3)+n3
@@ -862,7 +868,7 @@ local_2ef:
     move #>$7fff,m1
     move #$3,n4
     move #$3,n5
-    do #<$20,>code_origin+985
+    do #<$20,>local_3d9
     move x:(r0)+,x0      y:(r4)+,y0
     mpy y0,x0,a         x:(r0)+,x1
     move a1,y:(r5)+
@@ -926,6 +932,7 @@ local_2ef:
     mpy y0,x0,b
     asl #$1,b,b
     move b,y:(r7)+
+local_3d9:
     move #>$ffffff,m0
     move #>$ffffff,m1
     move #>$ffffff,m4
@@ -940,8 +947,9 @@ local_3e1:
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$9,>code_origin+1005
+    do #<$9,>local_3ed
     move x0,y:(r0)+
+local_3ed:
     move #>$1,x0
     move x0,y:(r6+$36)
 local_3f0:

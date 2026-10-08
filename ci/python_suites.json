@@ -1,5 +1,6 @@
 {
   "unit": [
+    "asm_targets_test",
     "assembly_source_test",
     "ksstr_test",
     "live_reload_test",
