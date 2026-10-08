@@ -1,6 +1,7 @@
 {
   "unit": [
     "catalog",
+    "golden_catalog",
     "browse",
     "align_unit",
     "isa_unit",
