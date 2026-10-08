@@ -8,7 +8,7 @@ import { findSite as findFlushHook, NoIndicator } from './indicator.js';
 import { findLoopSkip } from './ctr_controlall.js';
 import { menuRefreshSite } from './menu_refresh.js';
 import { readBootRamWrites } from './boot_safety.js';
-import { findChroma, NoChroma } from './midi_chroma.js';
+import { chromaRewritten } from './midi_chroma.js';
 
 // ---- the ColdFire ISA_A gate (engine/src/isa.ts): our code and every patched instruction ----------
 
@@ -19,8 +19,8 @@ import { findChroma, NoChroma } from './midi_chroma.js';
  *     as one range test, so the base's instruction boundaries no longer hold there;
  *   --cpu-indicator's hook (engine/src/indicator.ts): the LCD flush's `move.l <prev>,d5` as `jsr <stub>`;
  *   the unmute-latency fix (engine/src/unmute.ts): five sequencer instructions as `jsr <routine>` (+ `nop`);
- *   --midi-chroma's parser hook (engine/src/midi_chroma.ts): the 20-byte base-range test as
- *     `jsr hook; beq.w; bmi.w; nop x3`.
+ *   --midi-chroma's hook (engine/src/midi_chroma.ts): X.14's 20-byte parser range test as
+ *     `jsr hook; beq.w; bmi.w; nop x3`, or 1.63's 16-byte MIDI-task channel test as `jsr hook; bmi.w; nop x3`.
  * [lo, hi) is the replaced CODE; the ISA gate decodes it linearly from lo.
  */
 export function rewrittenCode(baseFw: Firmware, base: Base, sites: number[]): [number, number][] {
@@ -38,10 +38,10 @@ export function rewrittenCode(baseFw: Firmware, base: Base, sites: number[]): [n
     const F = findFlushHook(cf, org);
     if (hit(F.site, F.site + 6)) out.push([F.site, F.site + 6]);
   } catch (e) { if (!(e instanceof NoIndicator)) throw e; }
-  try {
-    const C = findChroma(codeImages(baseFw, base));
-    if (hit(C.parser.site, C.parser.end)) out.push([C.parser.site, C.parser.end]);
-  } catch (e) { if (!(e instanceof NoChroma)) throw e; }
+  if (base.features.midiChroma) {
+    const [lo, hi] = chromaRewritten(base.features.midiChroma);
+    if (hit(lo, hi)) out.push([lo, hi]);
+  }
   return out;
 }
 

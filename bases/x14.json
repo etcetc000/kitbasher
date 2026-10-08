@@ -22,6 +22,10 @@
   "hostSend": {
    "ok": false,
    "why": "Host-send reordering is not qualified on X.14; the default ordered recovery is used instead."
+  },
+  "midiChroma": {
+   "ok": true,
+   "evidence": "Emulator: note -> pitch-knob readbacks for every model and MODE segment, live record under every quantize setting, held-step locks, locks full and a stress run; base-channel notes, CCs and Enhanced-MIDI masks unchanged."
   }
  },
  "cache": {

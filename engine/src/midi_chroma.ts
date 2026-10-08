@@ -1,8 +1,8 @@
-// MIDI chromatic note input (--midi-chroma, off by default; X.14 only).
+// MIDI chromatic note input (--midi-chroma, off by default; X.14 and prepared OS 1.63).
 //
 // A note-on on the chromatic channel (base+4 by default: channel 5 with the factory base channel 1)
 // plays the SELECTED track, the one the knobs edit: the note becomes the track machine's pitch-knob
-// raw value through the OS's own real-time CC handler (kit value, live parameter and, in EXTENDED
+// raw value through the OS's own CC handler (kit value, live parameter and, in EXTENDED
 // mode, the lock staging, exactly as a pitch CC on the base channel), and the track is triggered in
 // the same pass through the OS's own note-on handler in its direct-track form [9n, ~track, velocity],
 // so the new pitch is in place at the onset. The note -> raw mapping comes from the selected models'
@@ -12,8 +12,8 @@
 //
 // P-locks: with live record on, a played note also writes a pitch p-lock on the step the OS
 // recorded the trig at; in grid record with trig keys held, on every held step. The lock writer
-// allocates lock slots and is only ever called from the UI task, so the audio interrupt queues a
-// request in a small ring and the UI task's idle call drains it.
+// allocates lock slots and is only ever called from the UI task, so the MIDI path (X.14: the audio
+// interrupt; 1.63: the MIDI task) queues a request in a small ring and a call in the UI task drains it.
 //
 // X.14 (the add-on's real-time MIDI path, all add-on addresses verified byte for byte):
 //   * the UART parser (0x2dc854) puts note-ons of the base range base..base+3 into the real-time
@@ -30,29 +30,63 @@
 // The code and its table go at the end of the RAM image the boot routine copies, inside the span of
 // it earlier images ran from on hardware (plan.ts IND_EXT_SPAN).
 //
-// The base OS 1.63 and the DEV builds read MIDI in the main loop, a different path: not implemented.
+// OS 1.63 (the prepared base) has no real-time queue: the UART interrupt's parser posts every
+// complete message to the MIDI task's queue (and the UI task's), and the MIDI task dispatches it
+// through the OS's channel-message table, so base-channel notes and CCs are handled in that task.
+// Every site is found by signature (bases/lineage-163.json, chroma_*), none by address:
+//   * the MIDI task's channel test for 0x80..0xBF (16 bytes, 0x209e10 on 1.63: drop unless the
+//     channel is base..base+3) becomes `jsr hook_task; bmi.w next; nop x3`: the base range goes on to
+//     the dispatch as before; a note-on with velocity on the chromatic channel is played right there
+//     (the same CC, trigger and p-lock request as on X.14, in the task that plays base-channel notes),
+//     and then dropped like every other message outside the base range;
+//   * the note-on handler's call of the live trig recorder (0x20d040) goes to rec_hook, as on X.14;
+//   * the UI loop's queue-count call (operand at 0x225524, `jsr <count>` before its idle call) goes to
+//     drain, which writes the queued locks and continues to the count routine. (The idle call's own
+//     operand is what dynamic labels retarget on 1.63, so drain is not put there.)
+// The lock writer still runs only in the UI task: the MIDI task is a task of its own, and the two
+// can preempt each other, so its requests go through the same ring, filled with interrupts masked.
+// The DEV builds read MIDI through their own per-block queue: not implemented.
 
 import { h, hex, u32 } from './bytes.js';
 import { decodeLinear, type Insn } from './isa.js';
 import type { Pitch } from './pitch.js';
-import { reader, type CodeImage } from './sig.js';
+import { findSig, reader, type CodeImage, type Hit } from './sig.js';
 
 // ---- the X.14 sites --------------------------------------------------------------------------------
 
-export interface ChromaSite {
+/** What both paths share: the OS state and routines the play and lock code use. */
+export interface ChromaCommon {
   baseCh: number; selTrack: number; machineIds: number; kitParams: number;
   noteOn: number; ccHandler: number;
-  parser: { site: number; end: number; enqueue: number; drop: number; old: string };
-  consumer: { site: number; old: string };
   recorder: number; trigHi: number;
   recSite: { site: number; old: string };
   livePattern: number; lockWriter: number; popup: number; popupFull: number;
   queuePost: number; uiQueue: number;
+  /** the UI-task call drain takes the place of (its operand), and where drain continues */
   idle: { site: number; old: string; next: number };
   uiPattern: number; gridMode: number; held: number; knobTouched: number;
+}
+
+/** X.14: the add-on's real-time path, every site byte for byte. */
+export interface ChromaSite extends ChromaCommon {
+  kind?: 'x14';
+  parser: { site: number; end: number; enqueue: number; drop: number; old: string };
+  consumer: { site: number; old: string };
   /** main-OS code the lock path calls or depends on, byte for byte */
   anchors: Record<number, string>;
 }
+
+/** OS 1.63: the MIDI task, every address read from the base's code by signature. */
+export interface ChromaTask extends ChromaCommon {
+  kind: 'task';
+  /** the MIDI task's channel test (16 bytes), and the loop head it drops to */
+  filter: { site: number; end: number; loop: number; old: string };
+  /** for the report: the task's queue, the UART parser that fills it, the dispatch table */
+  midiQueue: number; parser: number; table: number;
+}
+
+export type Chroma = ChromaSite | ChromaTask;
+export const isTask = (S: Chroma): S is ChromaTask => S.kind === 'task';
 
 export const X14_CHROMA: ChromaSite = {
   baseCh: 0x100155c,      // long: the MIDI base channel 0..15
@@ -110,14 +144,95 @@ export function findChroma(images: CodeImage[], S: ChromaSite = X14_CHROMA): Chr
   for (const [at, old, what] of want) {
     const got = read(at, old.length / 2);
     if (!got || hexOf(got) !== old) {
-      throw new NoChroma(`implemented for X.14's real-time MIDI path only (OS 1.63 and the DEV builds read MIDI in their main loop, ` +
-        `which is not implemented): ${what} at ${h(at)} ${got ? `holds ${hexOf(got)}` : 'is not in the base\'s code'}`);
+      throw new NoChroma(`X.14's real-time MIDI path: ${what} at ${h(at)} ${got ? `holds ${hexOf(got)}` : 'is not in the base\'s code'}`);
     }
   }
   if (S.parser.site % 4 || S.parser.end - S.parser.site !== 20 || S.consumer.site % 4 || S.recSite.site % 4 || S.idle.site % 4) {
     throw new NoChroma('the hook sites are not whole longwords');
   }
   return S;
+}
+
+/** The lineage signatures (bases/lineage-163.json) the MIDI-task path is found by. */
+export const TASK_SIGNATURES = ['chroma_task', 'chroma_uart_isr', 'chroma_parser_post', 'chroma_note_on', 'chroma_rec_call', 'chroma_sel_track',
+  'chroma_recorder', 'chroma_cc', 'chroma_cc_kit', 'chroma_grid_held', 'chroma_grid_lock', 'chroma_lock_writer', 'chroma_queue_post', 'chroma_ui_loop'] as const;
+
+/**
+ * OS 1.63's MIDI task (the prepared base), found by signature in the base's code. The UART
+ * interrupt must call the parser that posts channel messages to the task's queue, the task must
+ * dispatch through the table that names the note-on and CC handlers, and every routine and
+ * variable the play and lock code uses must be the one the OS's own paths use. Throws NoChroma
+ * naming the first thing that is missing, ambiguous or inconsistent.
+ */
+export function findChromaTask(images: CodeImage[], sigs: Record<string, string>): ChromaTask {
+  const read = reader(images);
+  const fail = (why: string): never => { throw new NoChroma(`OS 1.63's MIDI task: ${why}`); };
+  for (const n of TASK_SIGNATURES) if (!sigs[n]) fail(`the lineage file has no signature '${n}'`);
+  /** exactly one match, inside [lo, hi) when given (or exactly at lo when `at`) */
+  const one = (name: string, what: string, win?: { lo: number; hi?: number }): Hit['caps'] & { at: { at: number; value: number } } => {
+    let hits = findSig(images, sigs[name]);
+    if (win) hits = hits.filter((x) => (win.hi === undefined ? x.at === win.lo : x.at >= win.lo && x.at < win.hi));
+    if (hits.length !== 1) fail(`${what} (signature '${name}') ${hits.length ? `matches ${hits.length} times (${hits.slice(0, 3).map((x) => h(x.at)).join(', ')})` : 'is not found'}`);
+    return { ...hits[0].caps, at: { at: hits[0].at, value: 0 } };
+  };
+  const long = (a: number, what: string): number => { const b = read(a, 4); if (!b) fail(`${what} at ${h(a)} is not in the base's code`); return u32(b!, 0); };
+  const same = (what: string, ...v: number[]): void => { if (v.some((x) => x !== v[0])) fail(`${what} differ (${v.map(h).join(', ')})`); };
+
+  const T = one('chroma_task', 'the MIDI task\'s loop');
+  const isr = one('chroma_uart_isr', 'the UART interrupt\'s parser call');
+  const parser = isr.parser.value;
+  const P = one('chroma_parser_post', 'the parser\'s post of channel messages', { lo: parser, hi: parser + 0x400 });
+  same('the MIDI task\'s queue and the one the parser posts to', T.midi_queue.value, P.midi_queue.value);
+  const table = T.table.value;
+  const noteOn = long(table + 4 * 9, 'the dispatch table\'s note-on entry'), ccHandler = long(table + 4 * 0xb, 'the dispatch table\'s CC entry');
+  one('chroma_note_on', 'the note-on handler\'s entry (the direct-track form, the port argument)', { lo: noteOn });
+  const R = one('chroma_rec_call', 'the note-on handler\'s live-record call', { lo: noteOn, hi: noteOn + 0x600 });
+  const st = one('chroma_sel_track', 'the note-on handler\'s selected-track test', { lo: noteOn, hi: noteOn + 0x600 });
+  const recorder = R.recorder.value;
+  const rec = one('chroma_recorder', 'the live trig recorder\'s step write', { lo: recorder, hi: recorder + 0x100 });
+  const cc = one('chroma_cc', 'the CC handler\'s entry', { lo: ccHandler });
+  const kit = one('chroma_cc_kit', 'the CC handler\'s kit write', { lo: ccHandler, hi: ccHandler + 0x200 });
+  same('the base channel and the CC handler\'s low byte of it', T.base_ch.value + 3, cc.base_ch_lo.value);
+  const gh = one('chroma_grid_held', 'the grid knob path\'s held-step test');
+  const gl = one('chroma_grid_lock', 'the grid knob path\'s lock write');
+  same('the held-step mask\'s two longwords', gh.held.value + 4, gh.held_lo.value);
+  same('the selected track (note-on handler, grid knob path)', st.sel_track.value, gl.sel_track.value);
+  one('chroma_lock_writer', 'the lock writer\'s entry and its no-slot exit', { lo: gl.lock_writer.value });
+  one('chroma_queue_post', 'the queue post (interrupts masked)', { lo: P.queue_post.value });
+  const ui = one('chroma_ui_loop', 'the UI loop\'s queue count, idle call and wait');
+  same('the UI task\'s queue (parser, UI loop)', P.ui_queue.value, ui.ui_queue.value, ui.ui_queue2.value);
+  same('the queue get (MIDI task, UI loop)', T.queue_get.value, ui.queue_get.value);
+  same('the base channel (MIDI task, UI loop)', T.base_ch.value, ui.base_ch.value);
+  same('the UI task\'s pattern (UI loop, grid knob path)', ui.ui_pattern.value, gl.ui_pattern.value);
+  const site = T.filter.at;
+  const old = read(site, 16);
+  if (!old || site % 4) fail(`the channel test at ${h(site)} is not a whole run of longwords`);
+  const words = (at: number, n: number): string => hexOf(read(at, n)!);
+  const S: ChromaTask = {
+    kind: 'task',
+    baseCh: T.base_ch.value, selTrack: st.sel_track.value, machineIds: cc.machine_base.value + 0x1a2, kitParams: kit.kit_params.value,
+    noteOn, ccHandler, recorder, trigHi: rec.trig_hi.value,
+    recSite: { site: R.site.at, old: words(R.site.at, 8) },
+    livePattern: rec.live_pattern.value, lockWriter: gl.lock_writer.value, popup: gl.popup.value, popupFull: gl.popup_full.value,
+    queuePost: P.queue_post.value, uiQueue: ui.ui_queue.value,
+    idle: { site: ui.queue_count.at, old: words(ui.queue_count.at, 4), next: ui.queue_count.value },
+    uiPattern: ui.ui_pattern.value, gridMode: gh.grid_mode.value, held: gh.held.value, knobTouched: gh.knob_touched.value,
+    filter: { site, end: site + 16, loop: T.loop.at, old: words(site, 16) },
+    midiQueue: T.midi_queue.value, parser, table,
+  };
+  if (S.recSite.site % 4 || S.idle.site % 4) fail('the hook sites are not whole longwords');
+  return S;
+}
+
+/** The base's chromatic-input path: X.14's real-time path, else OS 1.63's MIDI task; NoChroma says why neither. */
+export function discoverChroma(images: CodeImage[], sigs: Record<string, string>): Chroma {
+  try { return findChroma(images); } catch (e) {
+    if (!(e instanceof NoChroma)) throw e;
+    try { return findChromaTask(images, sigs); } catch (e2) {
+      if (!(e2 instanceof NoChroma)) throw e2;
+      throw new NoChroma(`neither MIDI path this option is written for: ${e.message}; ${e2.message}`);
+    }
+  }
 }
 
 // ---- the channel -----------------------------------------------------------------------------------
@@ -304,6 +419,10 @@ class Asm {
       }
       return [[0x6000 | (CC[m[1]] << 8), 2], [d & 0xffff, 2]];
     }
+    if (op === 'move.w' && (a0 === 'sr' || a1 === 'sr')) {   // move.w sr,Dn | move.w Dn,sr | move.w #imm,sr
+      if (a0 === 'sr') return [[0x40c0 | D(a1), 2]];
+      return a0.startsWith('#') ? [[0x46fc, 2], [Number(a0.slice(1)) & 0xffff, 2]] : [[0x46c0 | D(a0), 2]];
+    }
     switch (op) {
       case 'move.b': case 'move.w': case 'move.l': {
         const sz = ({ b: 0x1000, w: 0x3000, l: 0x2000 } as Record<string, number>)[op[5]], s = this.ea(a0, op[5]), d = this.ea(a1, op[5]);
@@ -409,7 +528,7 @@ export interface ChromaCode {
  * (the UI wake-up message, a status byte the UI task ignores); +8 dropped requests (long); +12 the
  * CC bases of the four tracks of a channel; +16 the ring; then the table and the laws.
  */
-export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number): ChromaCode {
+export function assemble(org: number, S: Chroma, t: ChromaTable, cfg: number): ChromaCode {
   const a = new Asm(org);
   const I = (op: string, ...x: string[]): void => a.i(op, ...x);
   const BASE = `${S.baseCh}.l`;
@@ -421,30 +540,51 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   a.label('chch_done'); I('rts');
   a.label('chch_off'); I('moveq', '#-1', 'd1'); I('rts');
 
-  // hook_parse: called in place of the parser's base-range test, note-on, d0 = channel, a1 = message.
-  // Returns Z (enqueue), N (drop) or neither (continue: the base range). Clobbers d1 only.
-  a.label('hook_parse');
-  I('move.l', 'd0', 'd1'); I('sub.l', BASE, 'd1'); I('cmpi.l', '#3', 'd1'); I('bhi.b', 'hp_other');
-  I('moveq', '#1', 'd1'); I('rts');
-  a.label('hp_other');
-  I('bsr.b', 'chch'); I('cmp.l', 'd0', 'd1'); I('bne.b', 'hp_drop');
-  I('tst.b', '2(a1)'); I('beq.b', 'hp_drop');
-  I('moveq', '#0', 'd1'); I('rts');
-  a.label('hp_drop'); I('moveq', '#-1', 'd1'); I('rts');
+  if (isTask(S)) {
+    // hook_task: called in place of the MIDI task's channel test, for a channel message (0x80..0xBF):
+    // d0 = the status byte sign-extended, d2 = status & 0xF0, d3 = the base channel, a0 = the message.
+    // The base range returns N clear (the task dispatches it, as before); everything else returns N
+    // set (dropped, as before), a note-on with velocity on the chromatic channel played first.
+    // Keeps d2, d3 and a0, which the dispatch reads.
+    a.label('hook_task');
+    I('moveq', '#15', 'd1'); I('and.l', 'd0', 'd1');
+    I('move.l', 'd1', 'd0'); I('sub.l', 'd3', 'd0'); I('cmpi.l', '#3', 'd0'); I('bhi.b', 'ht_other');
+    I('moveq', '#0', 'd0'); I('rts');
+    a.label('ht_other');
+    I('move.l', 'd1', 'd0'); I('bsr.b', 'chch'); I('cmp.l', 'd0', 'd1'); I('bne.b', 'ht_drop');
+    I('cmpi.l', '#0x90', 'd2'); I('bne.b', 'ht_drop');
+    I('tst.b', '2(a0)'); I('beq.b', 'ht_drop');
+    I('move.l', 'a0', '-(a7)'); I('bsr.b', 'hn_mine'); I('addq.l', '#4', 'a7');
+    a.label('ht_drop'); I('moveq', '#-1', 'd0'); I('rts');
+  } else {
+    // hook_parse: called in place of the parser's base-range test, note-on, d0 = channel, a1 = message.
+    // Returns Z (enqueue), N (drop) or neither (continue: the base range). Clobbers d1 only.
+    a.label('hook_parse');
+    I('move.l', 'd0', 'd1'); I('sub.l', BASE, 'd1'); I('cmpi.l', '#3', 'd1'); I('bhi.b', 'hp_other');
+    I('moveq', '#1', 'd1'); I('rts');
+    a.label('hp_other');
+    I('bsr.b', 'chch'); I('cmp.l', 'd0', 'd1'); I('bne.b', 'hp_drop');
+    I('tst.b', '2(a1)'); I('beq.b', 'hp_drop');
+    I('moveq', '#0', 'd1'); I('rts');
+    a.label('hp_drop'); I('moveq', '#-1', 'd1'); I('rts');
 
-  // hook_note(msg, port): in place of the real-time consumer's call of the note-on handler.
-  a.label('hook_note');
-  I('move.l', '4(a7)', 'a0');
-  I('moveq', '#0', 'd0'); I('move.b', '(a0)', 'd0'); I('moveq', '#15', 'd1'); I('and.l', 'd1', 'd0');
-  I('move.l', 'd0', 'd1'); I('sub.l', BASE, 'd1'); I('cmpi.l', '#3', 'd1'); I('bls.b', 'hn_orig');
-  I('bsr.b', 'chch'); I('cmp.l', 'd0', 'd1'); I('beq.b', 'hn_mine');
-  a.label('hn_orig'); I('jmp', `${S.noteOn}.l`);
+    // hook_note(msg, port): in place of the real-time consumer's call of the note-on handler.
+    a.label('hook_note');
+    I('move.l', '4(a7)', 'a0');
+    I('moveq', '#0', 'd0'); I('move.b', '(a0)', 'd0'); I('moveq', '#15', 'd1'); I('and.l', 'd1', 'd0');
+    I('move.l', 'd0', 'd1'); I('sub.l', BASE, 'd1'); I('cmpi.l', '#3', 'd1'); I('bls.b', 'hn_orig');
+    I('bsr.b', 'chch'); I('cmp.l', 'd0', 'd1'); I('beq.b', 'hn_mine');
+    a.label('hn_orig'); I('jmp', `${S.noteOn}.l`);
+  }
+  // hn_mine: play the note whose message pointer is at 4(a7) on the selected track (X.14: reached
+  // from hook_note, the consumer's argument; 1.63: called from hook_task, which pushed it). Keeps
+  // d2-d7/a2; on 1.63 hook_task needs no more (the task's d2, d3 and a0 matter only to the dispatch).
   a.label('hn_mine');
   // frame: 0..7 message, 8..35 saved d2-d7/a2; the message pointer is at 40(a7)
   I('lea', '-36(a7)', 'a7'); I('movem.l', 'd2-d7/a2', '8(a7)');
   I('move.l', '40(a7)', 'a0');
   I('moveq', '#0', 'd3'); I('move.b', '1(a0)', 'd3');            // note
-  I('moveq', '#0', 'd5'); I('move.b', '2(a0)', 'd5');            // velocity (> 0: hook_parse queued no other)
+  I('moveq', '#0', 'd5'); I('move.b', '2(a0)', 'd5');            // velocity (> 0: no other note gets here)
   I('move.l', `${S.selTrack}.l`, 'd4');
   I('moveq', '#15', 'd0'); I('cmp.l', 'd4', 'd0'); I('bcs.w', 'hn_out');      // no track selected
   I('lea', `${S.machineIds}.l`, 'a0'); I('move.l', '(a0,d4.l*4)', 'd0');
@@ -478,13 +618,16 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   a.label('hn_queue');
   // enqueue (one slot stays free: full when write+1 == read) and wake the UI task. Full: the newest
   // request is replaced (the last note still wins) and counted; the UI task only ever reads the
-  // slot at the read index, which is not the newest one while the ring is full.
+  // slot at the read index, which is not the newest one while the ring is full. On 1.63 the
+  // producer is a task, which the UI task may preempt: the enqueue runs with interrupts masked.
+  if (isTask(S)) { I('move.w', 'sr', 'd6'); I('move.w', '#0x2700', 'sr'); }
   I('moveq', '#0', 'd0'); I('move.b', '4(a2)', 'd0');
   I('move.l', 'd0', 'd2'); I('addq.l', '#1', 'd2'); I('moveq', `#${RING - 1}`, 'd3'); I('and.l', 'd3', 'd2');
   I('moveq', '#0', 'd3'); I('move.b', '5(a2)', 'd3'); I('cmp.l', 'd3', 'd2'); I('bne.b', 'hn_put');
   I('addq.l', '#1', '8(a2)'); I('move.l', 'd0', 'd2'); I('subq.l', '#1', 'd0'); I('moveq', `#${RING - 1}`, 'd3'); I('and.l', 'd3', 'd0');
   a.label('hn_put');
   I('move.l', 'd1', '16(a2,d0.l*4)'); I('move.b', 'd2', '4(a2)');
+  if (isTask(S)) I('move.w', 'd6', 'sr');
   I('pea', '7(a2)'); I('pea', `${S.uiQueue}.l`); I('jsr', `${S.queuePost}.l`); I('addq.l', '#8', 'a7');
   a.label('hn_out');
   I('movem.l', '8(a7)', 'd2-d7/a2'); I('lea', '36(a7)', 'a7'); I('rts');
@@ -502,7 +645,9 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   I('move.l', `${S.livePattern}.l`, 'd0'); I('move.b', 'd0', '3(a1)');       // the pattern the trig went to
   a.label('rh_out'); I('rts');
 
-  // drain: the UI task's idle call (before it waits for an event), continuing to the call's own target.
+  // drain: a call in the UI task (X.14: its idle call, before it waits for an event; 1.63: its
+  // queue-count call at the top of every pass), continuing to that call's own target with the stack
+  // as it found it (the count call's argument still at 4(a7)).
   // Writes the queued p-locks with the OS's lock writer, in the task that writes every other lock:
   //   a recorded step: (that pattern, track, knob, step, raw);
   //   ARMED: grid recording with steps held: every held step of the UI's pattern, and the held
@@ -545,7 +690,7 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   I('and.l', 'd0', 'd7'); I('rts');
 
   // lookup: d0 = machine ID, d3 = note, d4 = track -> d0 = raw (or -1: trigger only), d1 = knob.
-  // Uses d2, d6, d7, a0, a1 (saved by hook_note).
+  // Uses d2, d6, d7, a0, a1 (saved by hn_mine).
   a.label('lookup');
   I('lea', '@table', 'a0');
   a.label('lk_def');                                                        // the plain IDs: knob 0, law 0
@@ -601,36 +746,56 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
 }
 
 /** The OS routines the code may call or jump to; every other branch stays inside it. */
-export const callees = (S: ChromaSite): number[] => [S.noteOn, S.ccHandler, S.recorder, S.lockWriter, S.popup, S.queuePost, S.idle.next];
+export const callees = (S: Chroma): number[] => [S.noteOn, S.ccHandler, S.recorder, S.lockWriter, S.popup, S.queuePost, S.idle.next];
+
+/** The base code the hook replaces with new instructions (not a retargeted operand), as [lo, hi). */
+export const chromaRewritten = (S: Chroma): [number, number] => (isTask(S) ? [S.filter.site, S.filter.end] : [S.parser.site, S.parser.end]);
 
 /** The boot patch-list writes that enter the routines, and what each longword must hold before. */
-export function chromaPatches(S: ChromaSite, L: Record<string, number>): { patches: [number, number][]; checks: [number, number][] } {
-  const p = S.parser;
-  const w16 = [0x4eb9, L.hook_parse >>> 16, L.hook_parse & 0xffff,
-    0x6700, (p.enqueue - (p.site + 8)) & 0xffff,        // beq.w enqueue (at site+6, displacement from site+8)
-    0x6b00, (p.drop - (p.site + 12)) & 0xffff,          // bmi.w drop    (at site+10)
-    0x4e71, 0x4e71, 0x4e71];                             // to site+20, the enhanced-mode test, unchanged
+export function chromaPatches(S: Chroma, L: Record<string, number>): { patches: [number, number][]; checks: [number, number][] } {
   const patches: [number, number][] = [];
-  for (let k = 0; k < 10; k += 2) patches.push([p.site + 2 * k, ((w16[k] << 16) | w16[k + 1]) >>> 0]);
+  const words = (site: number, w16: number[]): void => { for (let k = 0; k < w16.length; k += 2) patches.push([site + 2 * k, ((w16[k] << 16) | w16[k + 1]) >>> 0]); };
   const call = (site: number, to: number, tail: number): [number, number][] =>
     [[site, ((0x4eb9 << 16) | (to >>> 16)) >>> 0], [site + 4, (((to & 0xffff) << 16) | tail) >>> 0]];
+  const old = (site: number, s: string): [number, number][] => Array.from({ length: s.length / 8 }, (_, k) => [site + 4 * k, u32(hex(s), 4 * k)]);
+  if (isTask(S)) {
+    const f = S.filter;
+    words(f.site, [0x4eb9, L.hook_task >>> 16, L.hook_task & 0xffff,
+      0x6b00, (f.loop - (f.site + 8)) & 0xffff,          // bmi.w loop (at site+6, displacement from site+8): dropped
+      0x4e71, 0x4e71, 0x4e71]);                          // to site+16, the dispatch, unchanged
+    patches.push(...call(S.recSite.site, L.rec_hook, 0x588f));
+    patches.push([S.idle.site, L.drain >>> 0]);
+    return { patches, checks: [...old(f.site, f.old), ...old(S.recSite.site, S.recSite.old), ...old(S.idle.site, S.idle.old)] };
+  }
+  const p = S.parser;
+  words(p.site, [0x4eb9, L.hook_parse >>> 16, L.hook_parse & 0xffff,
+    0x6700, (p.enqueue - (p.site + 8)) & 0xffff,        // beq.w enqueue (at site+6, displacement from site+8)
+    0x6b00, (p.drop - (p.site + 12)) & 0xffff,          // bmi.w drop    (at site+10)
+    0x4e71, 0x4e71, 0x4e71]);                            // to site+20, the enhanced-mode test, unchanged
   patches.push(...call(S.consumer.site, L.hook_note, 0x508f), ...call(S.recSite.site, L.rec_hook, 0x588f));
   patches.push([S.idle.site, L.drain >>> 0]);
-  const old = (site: number, s: string): [number, number][] => Array.from({ length: s.length / 8 }, (_, k) => [site + 4 * k, u32(hex(s), 4 * k)]);
   const checks = [...old(p.site, p.old), ...old(S.consumer.site, S.consumer.old), ...old(S.recSite.site, S.recSite.old), ...old(S.idle.site, S.idle.old)];
   return { patches, checks };
 }
 
 /** Every longword the patch list writes for this feature, as [lo, hi) ranges. */
-export function chromaRanges(S: ChromaSite): [number, number][] {
-  return [[S.parser.site, S.parser.end], [S.consumer.site, S.consumer.site + 8], [S.recSite.site, S.recSite.site + 8], [S.idle.site, S.idle.site + 4]];
+export function chromaRanges(S: Chroma): [number, number][] {
+  const [lo, hi] = chromaRewritten(S);
+  return isTask(S)
+    ? [[lo, hi], [S.recSite.site, S.recSite.site + 8], [S.idle.site, S.idle.site + 4]]
+    : [[lo, hi], [S.consumer.site, S.consumer.site + 8], [S.recSite.site, S.recSite.site + 8], [S.idle.site, S.idle.site + 4]];
 }
+
+/** The hook sites, in the order discovery reports and profiles cache them. */
+export const chromaSites = (S: Chroma): number[] => (isTask(S)
+  ? [S.filter.site, S.recSite.site, S.idle.site]
+  : [S.parser.site, S.consumer.site, S.recSite.site, S.idle.site]);
 
 /**
  * The routines as the image carries them: every instruction ISA_A, every branch inside them on an
  * instruction boundary, every call or jump out of them to one of the OS routines they name.
  */
-export function checkChromaCode(code: Uint8Array, codeLen: number, org: number, S: ChromaSite): { ok: boolean; detail: string; insns: Insn[] } {
+export function checkChromaCode(code: Uint8Array, codeLen: number, org: number, S: Chroma): { ok: boolean; detail: string; insns: Insn[] } {
   const ins = decodeLinear(code.subarray(0, codeLen), org);
   const starts = new Set(ins.map((i) => i.at));
   const why: string[] = [];
@@ -643,4 +808,3 @@ export function checkChromaCode(code: Uint8Array, codeLen: number, org: number, 
   if (ins.reduce((n, i) => n + i.len, 0) !== codeLen) why.push('the routines do not decode to their length');
   return { ok: why.length === 0, detail: why.join('; '), insns: ins };
 }
-

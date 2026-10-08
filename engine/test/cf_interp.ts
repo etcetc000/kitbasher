@@ -12,6 +12,10 @@ export class Cpu {
   a = new Uint32Array(8);
   pc = 0;
   n = false; z = false; v = false; c = false;
+  /** the status register's upper byte as `move.w sr` sees it (S bit, interrupt mask); the CCR bits are n/z/v/c */
+  sr = 0x2000;
+  /** every write of the interrupt mask, in order (tests check the routines restore it) */
+  srWrites: number[] = [];
   mem = new Map<number, number>();
   stubs = new Map<number, Stub>();
   steps = 0;
@@ -121,6 +125,16 @@ export class Cpu {
     const top = op >> 12;
     if (op === 0x4e75) { this.pc = this.pop(); return; }                       // rts
     if (op === 0x4e71) return;                                                 // nop
+    if ((op & 0xfff8) === 0x40c0) {                                            // move.w sr,Dn
+      const ccr = (this.n ? 8 : 0) | (this.z ? 4 : 0) | (this.v ? 2 : 0) | (this.c ? 1 : 0);
+      this.d[reg] = (this.d[reg] & ~0xffff) | ((this.sr & 0xff00) | ccr); return;
+    }
+    if (op === 0x46fc || (op & 0xfff8) === 0x46c0) {                           // move.w #imm,sr / move.w Dn,sr
+      const v = op === 0x46fc ? this.fetch16() : this.d[reg] & 0xffff;
+      this.sr = v & 0xff00; this.srWrites.push(this.sr);
+      this.n = !!(v & 8); this.z = !!(v & 4); this.v = !!(v & 2); this.c = !!(v & 1);
+      return;
+    }
     if (top === 7 && !(op & 0x100)) { this.d[rx] = (op << 24) >> 24; this.logic(this.d[rx], 4); return; }   // moveq
     if (top === 1 || top === 2 || top === 3) {                                 // move.b / move.l / move.w
       const size = top === 1 ? 1 : top === 2 ? 4 : 2;

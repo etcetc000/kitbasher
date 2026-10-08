@@ -78,9 +78,11 @@ export interface BaseProfileFile {
  * goes silent with it while the DEV base plays. --unmute-fix: the sequencer is found and checked,
  * but whether the base's own code around it (its add-on, its other users of the queues) leaves the
  * queues as the routines expect is shown only by running it, so it is given to the bases it was
- * run on (X.14 and prepared 1.63).
+ * run on (X.14 and prepared 1.63). --midi-chroma: the MIDI path and the lock writer's task are found
+ * by signature, but how the base's tasks and interrupts interleave around them is shown only by
+ * playing it (X.14 and prepared 1.63; the DEV builds read MIDI through their own queue).
  */
-export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix' };
+export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma' };
 
 export interface BaseSet { lineage: LineageFile; profiles: BaseProfileFile[] }
 
@@ -121,8 +123,8 @@ export interface Base {
     lcdFlush: import('./indicator.js').Site | null;
     /** the unmute-latency fix's sequencer sites (engine/src/unmute.ts); null: not found, or no label RAM range */
     unmute: import('./unmute.js').Unmute | null;
-    /** --midi-chroma: X.14's real-time MIDI path, verified byte for byte (engine/src/midi_chroma.ts) */
-    midiChroma: import('./midi_chroma.js').ChromaSite | null;
+    /** --midi-chroma: X.14's real-time MIDI path (byte for byte) or OS 1.63's MIDI task (by signature), engine/src/midi_chroma.ts */
+    midiChroma: import('./midi_chroma.js').Chroma | null;
   };
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;
@@ -269,6 +271,7 @@ export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved>
     (base.support as unknown as Record<string, { ok: boolean; why: string }>)[k] = { ok: false, why };
     if (k === 'hostSend') base.features.hostSend = null;
     if (k === 'unmuteFix') base.features.unmute = null;
+    if (k === 'midiChroma') base.features.midiChroma = null;
   }
   if (profile) {
     for (const [k, v] of Object.entries(profile.cache ?? {})) {
