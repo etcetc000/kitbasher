@@ -80,6 +80,16 @@ class NoisePlethora(unittest.TestCase):
         for gone in ('pitch', 'mode_index', 'radio_width', 'flange_rate', 'fmp_rates_sineFMcluster'):
             self.assertNotIn(gone, [t['name'] for t in self.model['tables']])
 
+    def test_walking_filomena_clamps_its_filt_period_index(self):
+        # WALK's walkers drift past BND, and BND reaches 2,000: the walk step clamps the index
+        # at filt_period's last entry. No other walk gets near the end.
+        source = (self.out / 'dsp2.asm').read_text(encoding='utf-8')
+        size = {t['name']: len(words(t['words'])) for t in self.model['tables']}
+        clamp = f'    move #>{size["filt_period"] - 1},x0\n    cmp x0,a\n    tgt x0,a\n    add #>filt_period,a\n'
+        self.assertEqual(source.count(clamp), 1)
+        walk = source[source.index('\nwalk_ready:'):source.index('\nwalk_walk_end:')]
+        self.assertIn(clamp, walk)
+
     def test_shortened_tables(self):
         size = {t['name']: len(words(t['words'])) for t in self.model['tables']}
         self.assertEqual(size['reso_coef'], 1024)          # one period of the triangle fold

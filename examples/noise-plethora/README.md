@@ -29,7 +29,7 @@ there instead.
 ## How it fits
 
 Every program runs under the 129-cycle-per-sample target (worst: grainGlitchII,
-about 125), and the whole machine uses 20,469 DSP2 words (4,683 of code, 15,786
+about 125), and the whole machine uses 20,473 DSP2 words (4,687 of code, 15,786
 of tables). Getting there meant replacing some of the original's structures. Each
 program is one of:
 

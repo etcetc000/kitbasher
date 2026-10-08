@@ -592,12 +592,12 @@ test('firmware: discovery finds what each profile caches for the fix, and the fi
 // the engine of 255c0ec with the catalog from before 2b1bd79 still gives the earlier db5a9921... / a2976aa1...
 // d360e4b: NFX4P joined the catalog (catalog/effects-ladder.json); the engine of d360e4b with that file
 // left out of catalog/ still gives the earlier 95d8fa8a... / 1874e754...
-// NZEPL footprint: catalog/np.json re-exported 2,203 DSP2 words smaller; with the earlier np.json
+// NZEPL footprint and WALK fix: catalog/np.json re-exported, 2,199 DSP2 words smaller; with the earlier np.json
 // the same engine still gives the earlier 4c73c964... / e037e2ee...
 // golden_catalog.test.ts records the catalog these were built from, so CI notices a catalog change.
 const GOLDEN_OFF: Record<string, string> = {
-  x14: '3f92291b4b8d28dbed28199fd65a1779c8cb0bb99fc1de626d224fd38c3e8af7',
-  'stock-163-prepared': '9e24dbfd00558841e2f1b0343f70bff132400b978e060184934f7109b932960c',
+  x14: 'cb8591e66b86ec79dbe90e2a261000da5b3c99bba82513904adfc7d8a5bf2ba8',
+  'stock-163-prepared': '760c4f9d79bac77e99c622e93c3f44f147934dd3b10cd4506cc19a58842a0516',
 };
 
 test('firmware: --no-unmute-fix builds the image the build made before the fix', { skip: fwSkip }, async () => {

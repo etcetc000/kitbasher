@@ -1383,13 +1383,20 @@ def filt_edges(tag, count, weighted):
 '''
 
 
-def filt_period_tail():
-    """A1 = walk position (negative -> 0) -> period (1/4096 sample) at x:(r2)+, pitch
-    inverse at Y+$11."""
+FILT_PERIOD_LEN=2048
+
+
+def filt_period_tail(top=False):
+    """A1 = walk position (negative -> 0; with top, past the table's end -> its last entry)
+    -> period (1/4096 sample) at x:(r2)+, pitch inverse at Y+$11."""
+    clamp_top=f'''    move #>{FILT_PERIOD_LEN-1},x0
+    cmp x0,a
+    tgt x0,a
+''' if top else ''
     return '''    move #0,x0
     cmp x0,a
     tlt x0,a
-    add #>filt_period,a
+'''+clamp_top+'''    add #>filt_period,a
     move a1,r5
     move y:(r6+$11),y0
     move y:(r5),x0
@@ -1399,10 +1406,10 @@ def filt_period_tail():
 '''
 
 
-def filt_duration_tail():
+def filt_duration_tail(top=False):
     """A1 = walk position -> PWM half durations: high = period*duty at x:(r2)+, low = the
     rest at y:(r4)+ (1/4096 sample). Pitch inverse at Y+$11, duty at Y+$12."""
-    return filt_period_tail().replace('    move a,x:(r2)+\n','')+'''    move a,x0
+    return filt_period_tail(top).replace('    move a,x:(r2)+\n','')+'''    move a,x0
     move y:(r6+$12),y0
     mpy x0,y0,b
     move b,x1
@@ -1421,6 +1428,9 @@ def walking_filomena():
     # Four voices walk per block (+/-20 Hz steps, about the old per-block +/-10 diffusion);
     # their high/low durations (duty, pitch) refresh with the walk, i.e. within 4 blocks.
     # X+0 high, X+16 positions, X+32 edge buffer; Y+$20 next edge, Y+$30 low.
+    # Past BND a walker steps +20 and is pulled back only 10, so with BND near its top
+    # (2,000) it drifts past the end of filt_period (seen at BND 127: 2,069, within 0.5 s).
+    # The walk step clamps its table index at the last entry; the position walks on as before.
     return 'WalkingFilomena:\n'+lookup(4,'pitch_inverse','x0')+'''    move x0,y:(r6+$11)
 '''+lookup(3,'walk_width','x0')+'''    move x0,y:(r6+$12)
 '''+lookup(2,'walk_bound','y1')+'''    ; First block after a reset: every duration from the initial positions.
@@ -1455,7 +1465,7 @@ walk_ready:
     move (r1)+n1
     move (r4)+n4
     do #4,walk_walk_end
-'''+filt_walk_body('walk',20,100,'y1')+filt_duration_tail()+'''walk_walk_end:
+'''+filt_walk_body('walk',20,100,'y1')+filt_duration_tail(top=True)+'''walk_walk_end:
     move r6,r2
     move #>$30,n4
     move r6,r4
@@ -2426,7 +2436,7 @@ def filt_tables():
         coefficients.append(min(FILT_RESO_FMAX,q(math.pi*1000/44100*2**(5*u))))
     assert coefficients[:1024]==coefficients[1024:]
     tables['reso_coef']=coefficients[:1024]
-    tables['filt_period']=[min(0x7fffff,round(44100*4096/max(pos,25))) for pos in range(2048)]
+    tables['filt_period']=[min(0x7fffff,round(44100*4096/max(pos,25))) for pos in range(FILT_PERIOD_LEN)]
     tables['filt_walk_delta']=[1]*16
     tables['filt_bit_weights']=[q(w) for w in FILT_BIT_WEIGHTS]
     tables['filt_flange_car']=[round((10+500*k/127+offset)*(1<<24)/44100) for k in range(128) for offset in (0,55,75,65)]
