@@ -76,6 +76,20 @@ class Assembly(unittest.TestCase):
         fresh.pop('source')
         self.assertEqual(json.loads(json.dumps(fresh)),bundled)
 
+    def test_bundled_example_code_matches_a_fresh_export(self):
+        # Code and DSP1 drive only: a source fix must reach the pack the site serves
+        bundled={}
+        for path in ROOT.glob('catalog/**/*.json'):
+            pack=json.loads(path.read_text(encoding='utf-8'))
+            if isinstance(pack,dict) and len(pack.get('models',[]))==1: bundled[pack['models'][0]['key']]=pack
+        for collection in ('analog','community','physical'):
+            for entry in json.loads((ROOT/'examples'/collection/'catalog.json').read_text(encoding='utf-8'))['models']:
+                with self.subTest(key=entry['key']), tempfile.TemporaryDirectory() as tmp:
+                    fresh=json.loads(json.dumps(exporter.export(ROOT/'examples'/collection/entry['directory'],Path(tmp)/'out')))
+                    pack=bundled[entry['key']]
+                    self.assertEqual(fresh['models'][0]['code'],pack['models'][0]['code'])
+                    self.assertEqual(fresh['dsp1_laws'],pack['dsp1_laws'])
+
     def test_compact_x_slots_and_explicit_long_forms(self):
         w,_=A.assemble('move x0,x:(r6+$28)\nmove x:(r6+$28),a\nmove a0,y:(r6+$19)\nmove x0,x:(r6+>$28)\nmove y:(r0+>$22),r2',0x110000)
         self.assertEqual(w,[0x02a684,0x02a69e,0x0266e8,0x0a7684,0x28,0x0b70d2,0x22])

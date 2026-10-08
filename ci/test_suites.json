@@ -24,7 +24,9 @@
     "clean_recovery",
     "stub_trim_unit",
     "samples_unit",
-    "pitch"
+    "pitch",
+    "unmute",
+    "midi_chroma"
   ],
   "legacy": [],
   "alignment": []

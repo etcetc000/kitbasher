@@ -5,8 +5,9 @@ init:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+7
+    do #<$37,>local_7
     move x0,y:(r0)+
+local_7:
     move #$0,x0
     move x0,x:(r6+$3f)
     move #>$4f0000,x0
@@ -35,15 +36,16 @@ trigger:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+40
+    do #<$37,>local_28
     move x0,y:(r0)+
+local_28:
     move x:(r6+$3f),a
     tst a
     bne <local_2d
     bsr <local_6c
     bra <local_2f
 local_2d:
-    jsr code_origin+1113
+    jsr local_459
 local_2f:
     move x:(r6+$3d),a
     move x:(r6+$3f),b
@@ -62,7 +64,7 @@ local_2f:
     bsr <local_c0
     bra <local_42
 local_40:
-    jsr code_origin+1129
+    jsr local_469
 local_42:
     move x:(r6+$3e),x0
     move x0,y:(r6+$3)
@@ -82,7 +84,7 @@ local_4c:
     bsr <local_da
     bra <local_53
 local_51:
-    jsr code_origin+1212
+    jsr local_4bc
 local_53:
     move x:(r6+$3e),x0
     move x0,y:(r6+$3)
@@ -116,8 +118,9 @@ local_6c:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+115
+    do #<$37,>local_73
     move x0,y:(r0)+
+local_73:
     move #>$ffffff,x0
     move x0,x:(r6+$0)
     move x0,x:(r6+$1)
@@ -216,8 +219,9 @@ local_da:
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$9,>code_origin+240
+    do #<$9,>local_f0
     move x0,y:(r0)+
+local_f0:
     move #>$1,x0
     move x0,y:(r6+$33)
     move #$0,x0
@@ -539,7 +543,7 @@ local_22b:
 local_23f:
     move y:(r6+$9),a
     sub #<$5,a
-    jeq code_origin+994
+    jeq local_3e2
     move y:(r6+$2b),a
     asl a
     add #>$800000,a
@@ -838,7 +842,7 @@ local_35c:
     move #>md_sine,r1
     move #>$7fff,m1
     move x:(r0)+,x0      y:(r4)+,y0
-    do #<$20,>code_origin+981
+    do #<$20,>local_3d5
     mpy y0,x0,a         y0,y:(r2)
     move a,y:(r5)+
     move x:(r0)+,x0      y:(r4)+,a
@@ -911,6 +915,7 @@ local_35c:
     mpy y0,x0,a         y:(r4)+,y0
     asl #$2,a,a
     move x:(r0)+,x0      a,y:(r7)+
+local_3d5:
     move y:(r6+$37),a
     move y:(r6+$30),b
     add b,a
@@ -925,6 +930,7 @@ local_35c:
     move x0,y:(r6+$38)
 local_3e1:
     rts
+local_3e2:
     move y:(r6+$2b),a
     asl a
     add #>$800000,a
@@ -1027,18 +1033,21 @@ local_40a:
     move a,y:(r6+$17)
 local_458:
     bra <local_35c
+local_459:
     move r6,r0
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+1120
+    do #<$37,>local_460
     move x0,y:(r0)+
+local_460:
     move #>$ffffff,m0
     move #>$ffffff,x0
     move x0,y:(r6+$9)
     move #>$3039,x0
     move x0,y:(r6+$13)
     rts
+local_469:
     move y:(r6+$a),x0
     move x0,y:(r6+$15)
     move y:(r6+$3),a
@@ -1068,8 +1077,9 @@ local_458:
     move #$20,n0
     move (r0)+n0
     move #$0,x0
-    do #<$7,>code_origin+1162
+    do #<$7,>local_48a
     move x0,y:(r0)+
+local_48a:
     move #>$ffffff,m0
 local_48c:
     move #>$7fffff,x0
@@ -1115,6 +1125,7 @@ local_48c:
     move a,y:(r6+$12)
 local_4bb:
     rts
+local_4bc:
     move y:(r6+$3),a
     asr #$10,a,a
     move a1,x0
@@ -1173,8 +1184,9 @@ local_4f0:
     move #$20,n0
     move (r0)+n0
     move #$0,x0
-    do #<$7,>code_origin+1271
+    do #<$7,>local_4f7
     move x0,y:(r0)+
+local_4f7:
     move #>$ffffff,m0
 local_4f9:
     move y:(r6+$a),a
@@ -1314,8 +1326,9 @@ local_57f:
     move #$23,n0
     move (r0)+n0
     move #$0,x0
-    do #<$3,>code_origin+1428
+    do #<$3,>local_594
     move x0,y:(r0)+
+local_594:
     move #>$ffffff,m0
     move #$0,x0
     move x0,y:(r6+$26)
@@ -1328,9 +1341,10 @@ local_599:
     move r6,r0
     move #$27,n0
     move (r0)+n0
-    do #<$10,>code_origin+1443
+    do #<$10,>local_5a3
     move y:(r0)+,x0
     move x0,x:(r3)+
+local_5a3:
     move r6,r0
     move #$20,n0
     move (r0)+n0
@@ -1343,7 +1357,7 @@ local_599:
     move #$5,m5
     move #>md_sine,r1
     move #>$7fff,m1
-    do #<$20,>code_origin+1518
+    do #<$20,>local_5ee
     move x:(r0)+,x1      y:(r4)+,y0
     mpy x1,y0,a
     asr a
@@ -1403,6 +1417,7 @@ local_599:
     mac x1,x0,b
     asl #$1,b,b
     move b,y:(r7)+
+local_5ee:
     move #>$ffffff,m0
     move #>$ffffff,m1
     move #>$ffffff,m4

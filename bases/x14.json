@@ -15,12 +15,19 @@
   "by": "Tested in the emulator only"
  },
  "options": {
+  "unmuteFix": {
+   "ok": true,
+   "evidence": "Emulator: unmute by MIDI CC and MUTE-mode keys at 30 and 120 BPM, swing 50/58/80%, muting unchanged; not yet on hardware."
+  },
   "hostSend": {
    "ok": false,
    "why": "Host-send reordering is not qualified on X.14; the default ordered recovery is used instead."
   }
  },
  "cache": {
+  "unmute.sites": "0x23a92c,0x23a9a2,0x23aa20,0x2397e0,0x239f7e",
+  "unmute.calls": "0x23abfa,0x23aac0",
+  "unmute.data": "0x1001520,0x28d152,0x28d166,0x28d13c,0x7120ca,0x71217a,0x7120dc",
   "boot.routine": "0x2be00",
   "boot.jump_operand": "0x2be1c",
   "os_main": "0x213a0c",
@@ -65,6 +72,7 @@
   "dsp2.pi_ws": "0x135600",
   "dsp2.pi_slice": "0x600",
   "dsp2.pi_track": "0x142",
-  "ram.window": "0x2bc000,0x2bd000,0x2be100,0x2bef60"
+  "ram.window": "0x2bc000,0x2bd000,0x2be100,0x2bef60",
+  "midi_chroma.sites": "0x2dcb54,0x2dcf08,0x2cf974,0x225530"
  }
 }

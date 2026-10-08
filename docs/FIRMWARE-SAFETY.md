@@ -91,7 +91,10 @@ this, so only hardware-proven ranges are used.
 
 **Enforced.** The `ext-ram` and `dyn-segment` gates, together with the
 `ram.window` in each `bases/*.json` profile. The CPU indicator stub is refused by
-name if it would end past the window. See [Supported bases](BASES.md).
+name if it would end past the window. With MIDI chromatic note input the whole RAM
+image must end inside the span earlier images ran from on hardware
+(`0x2bc000..0x2bce14`): descriptors move to flash first, and the `midi-chroma`
+gate refuses an image that still ends past it. See [Supported bases](BASES.md).
 
 **Rule.** Boot-time code must not use the stack before the OS sets one up: no
 register pushes as the boot routine's first action.
@@ -371,11 +374,17 @@ down before you flash, and let hardware decide.
    need no firmware.
 2. Build the exact image with the CLI and `--gate-report`. Every engine gate
    must pass on that image:
-   - `isa`, `boot-routine`, `ext-ram`, `dyn-segment`;
-   - `patch-sites`, `readback`, `os-area`;
+   - `isa`, `boot-routine`, `addon-moved`, `ext-ram`, `dyn-segment`;
+   - `patch-sites`, `patch-list`, `readback`, `layout-table`, `os-area`,
+     `tail-in-place`, `dsp2-tail-capacity`, `dsp2-tail-payload`;
    - `dsp2-records`, `dsp2-slot`, `stub-trim`, `cache-align`, `pi-clean`;
-   - `dsp1-drive-layout`, `dsp1-recover`, `clean-recovery`, `cpu-indicator`;
-   - `ctr-coverage`, `ctr-controlall`, `model-runtime`, `machine-ids`.
+   - `dsp1-drive-layout`, `dsp1-recover`, `dsp1-watchdog`, `clean-recovery`,
+     `cpu-indicator`, `host-reorder`;
+   - `ctr-coverage`, `ctr-controlall`, `model-runtime`, `machine-ids`, `uw-menu`;
+   - `unmute-sites`, `unmute-fix`, `midi-chroma-sites`, `midi-chroma`.
+
+   Each gate runs only when its feature is in the build; a gate that is
+   listed in the report must pass.
 3. Independent image checks, re-derived from the base and the exact output
    rather than from the build's own plan: the boot block and bootstrap routine
    are identical, flash after the OS is erased, DSP records sit only in free

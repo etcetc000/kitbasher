@@ -177,39 +177,42 @@ legacy_trigger:
     move a1,x1
     move y:(r6+$2b),a
     cmp x1,a
-    jge code_origin+39
+    jge local_27
     clr a
-    jmp code_origin+44
+    jmp local_2c
+local_27:
     tfr x1,a
     move a1,n0
     move #>degrees,r0
     move x:(r0+n0),a
+local_2c:
     move a,y:(r6+$28)
     rts
 legacy_render:
     move y:(r6+$a),a
     clr b
     cmp #>$20,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$1,b
     cmp #>$40,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$2,b
     cmp #>$80,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$3,b
     cmp #>$100,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$4,b
     cmp #>$200,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$5,b
     cmp #>$400,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$6,b
     cmp #>$800,a
-    jlt code_origin+90
+    jlt local_5a
     move #>$7,b
+local_5a:
     move b,y:(r6+$2b)
     move y:(r6+$1),a
     asr #$5,a,a
@@ -227,30 +230,31 @@ legacy_render:
     move a,y:(r6+$26)
     move y:(r6+$8),a
     cmp #>$0,a
-    jge code_origin+257
+    jge local_101
     move y:(r6+$26),a
     clr b
     cmp #>$8000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$1,b
     cmp #>$10000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$2,b
     cmp #>$20000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$3,b
     cmp #>$40000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$4,b
     cmp #>$80000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$5,b
     cmp #>$100000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$6,b
     cmp #>$200000,a
-    jlt code_origin+156
+    jlt local_9c
     move #>$7,b
+local_9c:
     move b,y:(r6+$2c)
     move b,a
     move a,x0
@@ -263,48 +267,49 @@ legacy_render:
     clr b
     move y:(r6+$2d),a
     cmp #>$21e71f,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$1,b
     move y:(r6+$2d),a
     cmp #>$23eb36,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$2,b
     move y:(r6+$2d),a
     cmp #>$260dfc,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$3,b
     move y:(r6+$2d),a
     cmp #>$285146,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$4,b
     move y:(r6+$2d),a
     cmp #>$2ab702,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$5,b
     move y:(r6+$2d),a
     cmp #>$2d413d,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$6,b
     move y:(r6+$2d),a
     cmp #>$2ff222,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$7,b
     move y:(r6+$2d),a
     cmp #>$32cbfd,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$8,b
     move y:(r6+$2d),a
     cmp #>$35d13f,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$9,b
     move y:(r6+$2d),a
     cmp #>$39047c,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$a,b
     move y:(r6+$2d),a
     cmp #>$3c6870,a
-    jlt code_origin+244
+    jlt local_f4
     move #>$b,b
+local_f4:
     move b,a
     move a1,n0
     move #>pentatonic,r0
@@ -316,17 +321,20 @@ legacy_render:
     move y:(r6+$2c),x0
     asl x0,a,a
     move a,y:(r6+$26)
+local_101:
     move y:(r6+$25),a
     cmp #>$0,a
-    jne code_origin+266
+    jne local_10a
     move y:(r6+$26),a
     move a,y:(r6+$25)
-    jmp code_origin+291
+    jmp local_123
+local_10a:
     move y:(r6+$8),a
     abs a
     cmp #>$7f0000,a
-    jlt code_origin+274
+    jlt local_112
     move #>$7f0000,a
+local_112:
     move a,x0
     move #>$7fffff,a
     sub x0,a
@@ -343,6 +351,7 @@ legacy_render:
     move y:(r6+$25),x1
     add x1,a
     move a,y:(r6+$25)
+local_123:
     move y:(r6+$6),x0
     move y:(r6+$22),y0
     mpy y0,x0,a
@@ -350,11 +359,13 @@ legacy_render:
     move y:(r6+$5),x1
     add x1,a
     cmp #>$0,a
-    jge code_origin+302
+    jge local_12e
     clr a
+local_12e:
     cmp #>$7ff,a
-    jlt code_origin+308
+    jlt local_134
     move #>$7ff,a
+local_134:
     move a,x0
     and #>$ff,a
     asr a
@@ -367,8 +378,9 @@ legacy_render:
     move x:(r0+n0),a
     asl x0,a,a
     cmp #>$400000,a
-    jlt code_origin+328
+    jlt local_148
     move #>$400000,a
+local_148:
     move a,y1
     move y:(r6+$4),a
     asl #$10,a,a
@@ -376,10 +388,11 @@ legacy_render:
     move #>$7fffff,a
     sub x0,a
     cmp #>$3d70a,a
-    jge code_origin+341
+    jge local_155
     move #>$3d70a,a
+local_155:
     move a,x0
-    do #<$20,>code_origin+364
+    do #<$20,>local_16c
     move y:(r6+$20),a
     move y:(r6+$25),x1
     add x1,a
@@ -400,6 +413,7 @@ legacy_render:
     move y:(r6+$21),y0
     mpy x1,y0,a
     move a,y:(r7)+
+local_16c:
     move y:(r6+$3),x0
     mpy x0,x0,a
     move a,x0
@@ -416,8 +430,9 @@ legacy_render:
     move a,y:(r6+$21)
     move y:(r6+$9),a
     cmp #>$7f,a
-    jlt code_origin+385
+    jlt local_181
     move #>$7f,a
+local_181:
     move a,x0
     move #>$80,a
     sub x0,a
