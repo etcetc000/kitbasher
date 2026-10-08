@@ -145,7 +145,7 @@ test('earlier builds: automatic contributions yielded to later pinned IDs (legac
   const pinned={key:'ND/0',name:'TEST ',id:6} as PackModel;
   const listed=new Map(Array.from({length:6},(_,i)=>[i,'stock'] as const));
   const fams=[{name:'MM',models:[added]},{name:'ND',models:[pinned]}];
-  const r=legacyAllocate(base,new Uint8Array(192*4),fams,listed);
+  const r=legacyAllocate(base,new Uint8Array(192*4),fams,listed,[{key:'MM/1',name:'MMSIN',id:null},{key:'ND/0',name:'TEST',id:6}]);
   assert.deepEqual(r.problems,[]);
   assert.deepEqual(r.sel.map(s=>[s.m.key,s.family,s.id]),[['MM/1','MM',9],['ND/0','ND',6]]);
   assert.deepEqual(r.moves,[]);

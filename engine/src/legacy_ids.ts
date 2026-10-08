@@ -3,6 +3,10 @@
 // every model without one on the lowest free ID after them, the whole catalog selected. Offered as
 // a layout ("IDs of earlier Kitbasher builds") so kits saved with an earlier build keep finding
 // their machines. Kept verbatim from that allocator; nothing else uses it.
+//
+// The allocator runs over LEGACY_MODELS, the catalog as it was when the switch was made, never over
+// the catalog of today: a model added later would otherwise join the allocation and shift every
+// automatic ID after it (a new model in front of NZEPL took its 43, and NZEPL and PHYKS moved up one).
 import type { Base } from './bases.js';
 import { u32 } from './bytes.js';
 import { LAYOUT_FORMAT, type Layout } from './layout.js';
@@ -12,8 +16,48 @@ import { menuCategory, menuOrder } from './sound_catalog.js';
 
 export const LEGACY_LAYOUT_NAME = 'IDs of Kitbasher builds before 2026-10';
 
-/** The earlier allocator, unchanged (with moves allowed, as the page always built). */
-export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], listed: Map<number, string>): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
+/** A model of the catalog the earlier allocator ran over: its key, its pack's ID (null: none, the next free ID). */
+export interface LegacyModel { key: string; name: string; id: number | null }
+
+/**
+ * The catalog the earlier allocator ran over, in its order (catalog/ of 031c150^, the last commit
+ * before bottom-up IDs, selected whole). Frozen: a model added since is not in it and never moves
+ * one of these; the restore path gives it a free ID around them. Never edit, reorder or extend it.
+ */
+export const LEGACY_MODELS: readonly LegacyModel[] = Object.freeze([
+  { key: 'VAD/BD', name: 'VADBD', id: null },
+  { key: 'VAD/CY', name: 'VADCY', id: null },
+  { key: 'VAD/HH', name: 'VADHH', id: null },
+  { key: 'VAD/PC', name: 'VADPC', id: null },
+  { key: 'VAD/RC', name: 'VADRC', id: null },
+  { key: 'VAD/SD', name: 'VADSD', id: null },
+  { key: 'VAD/SY', name: 'VADSY', id: null },
+  { key: 'OSC/AC', name: 'OSCAC', id: null },
+  { key: 'FMS/4O', name: 'FMS4O', id: null },
+  { key: 'VOX/FR', name: 'VOXFR', id: null },
+  { key: 'OSC/SP', name: 'OSCSP', id: null },
+  { key: 'NZE/PL', name: 'NZEPL', id: null },
+  { key: 'PHY/KS', name: 'PHYKS', id: null },
+  { key: 'FMS/2O', name: 'FMS2O', id: 11 },
+  { key: 'FMS/3O', name: 'FMS3O', id: 12 },
+  { key: 'FMS/SW', name: 'FMSSW', id: 10 },
+  { key: 'OSC/SW', name: 'OSCSW', id: 13 },
+  { key: 'OSC/PW', name: 'OSCPW', id: 175 },
+  { key: 'WAV/TB', name: 'WAVTB', id: 124 },
+  { key: 'VOX/VO', name: 'VOXVO', id: 127 },
+  { key: 'OSC/8B', name: 'OSC8B', id: 126 },
+  { key: 'WAV/CH', name: 'WAVCH', id: 6 },
+  { key: 'OSC/CH', name: 'OSCCH', id: 14 },
+  { key: 'WAV/MR', name: 'WAVMR', id: 30 },
+].map((m) => Object.freeze(m)));
+
+/**
+ * The earlier allocator, unchanged (with moves allowed, as the page always built), over the selected
+ * models that are in `table` (by key or former key), in the table's order and with the table's IDs.
+ * Selected models not in it are left out: they get no earlier ID, so the caller places them.
+ */
+export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], listed: Map<number, string>,
+  table: readonly LegacyModel[] = LEGACY_MODELS): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
   const allowMove = true;
   const layout = undefined as Layout | undefined;
   const o = base.os;
@@ -32,8 +76,13 @@ export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], lis
   const blocked: string[] = [];
   // the map's IDs first: they are the user's, and a machine the map does not name yields to them
   const mapOk = new Set<string>();
-  const automaticId = (m: PackModel): boolean => !!m.contract?.components.dsp2?.source && m.contract.injection.id === undefined;
-  const ordered = fams.flatMap(f => f.models.map(m => ({ f, m })));
+  const rank = new Map(table.map((t, i) => [t.key, i]));
+  const entry = (m: PackModel): number | undefined => [m.key, ...(m.aliases ?? [])].map((k) => rank.get(k)).find((i) => i !== undefined);
+  const frozen = new Map<string, LegacyModel>();
+  for (const m of fams.flatMap((f) => f.models)) { const i = entry(m); if (i !== undefined) frozen.set(m.key, table[i]); }
+  const automaticId = (m: PackModel): boolean => frozen.get(m.key)!.id === null;
+  const ordered = fams.flatMap(f => f.models.filter((m) => frozen.has(m.key)).map(m => ({ f, m })))
+    .sort((a, b) => entry(a.m)! - entry(b.m)!);
   // Place existing/pinned models before unassigned contributions. Otherwise an
   // earlier category's automatic model can steal a later model's existing ID.
   // Menu order is restored below; it is independent of placement priority.
@@ -48,7 +97,7 @@ export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], lis
   }
   for (const { f, m } of allocationOrder) {
     const name = m.name.trim();
-    const want = m.id;
+    const want = frozen.get(m.key)!.id ?? 0;
     const automatic = automaticId(m);
     const p = layout?.machines[m.key];
     if (p) {
@@ -89,8 +138,9 @@ export function legacyAllocate(base: Base, main: Uint8Array, fams: Family[], lis
 /**
  * The layout the earlier allocator gives this selection (`families`: the selected models, as the
  * engine selects them), in the default menu categories: what a build of the same selection with an
- * earlier Kitbasher gave, as long as the catalog has not changed since. The .syx of that build is
- * the exact record.
+ * earlier Kitbasher gave. Only models in LEGACY_MODELS are in it; a model added to the catalog
+ * since is not, and the build gives it a free ID around these as for any restored session. The
+ * .syx of that build is the exact record.
  */
 export function legacyLayout(base: Base, main: Uint8Array, families: { name: string; models: PackModel[] }[], listed: Map<number, string>): Layout {
   const { sel } = legacyAllocate(base, main, families, listed);

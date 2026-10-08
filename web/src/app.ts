@@ -205,7 +205,7 @@ function useLegacyIds(): void {
   layoutEd.adopt(legacyFor(), LEGACY_LAYOUT_NAME);
   layoutEd.legacy = true;
   $('project-status').textContent = 'Using the IDs an earlier Kitbasher (before October 2026) gave the models you select, recomputed as you change the selection. ' +
-    'This assumes the model catalog has not changed since that build; the .syx you flashed then is the exact record, so drop it here if you have it.';
+    'Models added to the catalog since then get free IDs around them. The .syx you flashed then is the exact record, so drop it here if you have it.';
   refresh();
 }
 

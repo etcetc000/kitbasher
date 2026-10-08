@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import type { Base } from '../src/bases.js';
 import { canonical, decodeLayout, encodeLayout, LAYOUT_FORMAT, parseLayout, type Layout } from '../src/layout.js';
-import { legacyAllocate, legacyLayout } from '../src/legacy_ids.js';
+import { LEGACY_MODELS, legacyAllocate, legacyLayout } from '../src/legacy_ids.js';
 import { loadPacks } from '../src/node.js';
 import type { Pack, PackModel } from '../src/packs.js';
 import { needsUwSamples } from '../src/packs.js';
 import { allocateIds, effectiveLayout, select } from '../src/plan.js';
+import type { Family } from '../src/selection.js';
 import { decodeProject, encodeProject, type Project } from '../src/project.js';
 import { menuCategory, menuOrder } from '../src/sound_catalog.js';
 
@@ -142,6 +143,59 @@ test('the earlier-IDs layout: the earlier allocator on the selection itself', ()
   const r = allocateIds(BASE_163, MAIN, drums, true, sub, STOCK_163);
   assert.deepEqual(r.problems, []);
   assert.deepEqual(Object.fromEntries(r.sel.map((s) => [s.m.key, s.id])), earlierDrums);
+});
+
+test('the earlier-IDs layout is frozen: a model added to the catalog never moves an earlier ID', () => {
+  const { packs } = loadPacks(resolve(process.cwd(), 'catalog'));
+  const all = select(packs as Pack[], {}).fams;
+  const byName = (sel: { m: PackModel; id: number }[]) => Object.fromEntries(sel.map((s) => [s.m.name.trim(), s.id]));
+  // the frozen table is the catalog the earlier allocator ran over: today's catalog keys, in order
+  assert.deepEqual(LEGACY_MODELS.map((t) => t.name), Object.keys(EARLIER_163).sort((a, b) =>
+    all.flatMap((f) => f.models).findIndex((m) => m.name.trim() === a) - all.flatMap((f) => f.models).findIndex((m) => m.name.trim() === b)));
+  const dead = (id: number) => id >= BASE_163.os.deadIds[0] && id <= BASE_163.os.deadIds[1];
+  const earlierIds = new Set(Object.values(EARLIER_163));
+  let lowestFree = 0;
+  while (STOCK_163.has(lowestFree) || dead(lowestFree) || earlierIds.has(lowestFree)) lowestFree++;
+  // an automatic contribution (no ID of its own) and one whose pack names an earlier model's ID
+  const auto = model('NEW/AU', 'NEWAU', 0, { contract: { injection: { mode: 'add' }, components: { dsp2: { source: 'dsp2.asm' } } } } as unknown as Partial<PackModel>);
+  const pinned = model('NEW/PN', 'NEWPN', 43);
+  const inFamily = (fam: string, at: number, m: PackModel) => all.map((f) => f.name !== fam ? f
+    : { ...f, models: [...f.models.slice(0, at < 0 ? f.models.length : at), m, ...f.models.slice(at < 0 ? f.models.length : at)] });
+  for (const m of [auto, pinned]) {
+    const places: [string, Family[]][] = [
+      ['first of all', inFamily('AN', 0, m)],
+      ['before NZEPL, in its own family', [...all.slice(0, 2), { name: 'NEW', models: [m] }, ...all.slice(2)]],
+      ['last of COM, just before NZEPL', inFamily('COM', -1, m)],
+      ['among the pinned synths', inFamily('SYN', 3, m)],
+      ['last of all', [...all, { name: 'NEW', models: [m] }]],
+    ];
+    for (const [where, fams] of places) {
+      const msg = `${m.name} ${where}`;
+      const legacy = legacyAllocate(BASE_163, MAIN, fams, STOCK_163);
+      assert.deepEqual(legacy.problems, [], msg);
+      assert.deepEqual(byName(legacy.sel), EARLIER_163, msg);       // the new model is not in it
+      const lay = legacyLayout(BASE_163, MAIN, fams, STOCK_163);
+      assert.equal(lay.machines[m.key], undefined, msg);
+      // building with it: every earlier model on its earlier ID, the new one on a free ID of its own
+      const r = allocateIds(BASE_163, MAIN, fams, true, lay, STOCK_163);
+      assert.deepEqual(r.problems, [], msg);
+      assert.deepEqual(r.moves, [], msg);
+      const got = byName(r.sel);
+      const { [m.name]: newId, ...rest } = got;
+      assert.deepEqual(rest, EARLIER_163, msg);
+      assert.equal(newId, lowestFree, msg);
+      assert.ok(!STOCK_163.has(newId) && !dead(newId) && !earlierIds.has(newId), msg);
+      assert.equal(new Set(Object.values(got)).size, Object.keys(got).length, msg);   // one machine per ID
+    }
+  }
+  // a subset with a new model: the earlier IDs of that subset, unchanged
+  const drums = select(packs as Pack[], { families: ['AN', 'NP'], exclude: ['VAD/SY'] }).fams;
+  const drumsBefore = byName(legacyAllocate(BASE_163, MAIN, drums, STOCK_163).sel);
+  assert.deepEqual(byName(legacyAllocate(BASE_163, MAIN, [{ name: 'NEW', models: [auto] }, ...drums], STOCK_163).sel), drumsBefore);
+  // a pack's own ID changed since, or a model renamed (its old key kept as an alias): the frozen table decides
+  const edited = all.map((f) => ({ ...f, models: f.models.map((x) => x.name.trim() === 'OSCPW' ? { ...x, id: 0 }
+    : x.name.trim() === 'NZEPL' ? { ...x, key: 'NZE/PX', aliases: [...(x.aliases ?? []), x.key] } : x) }));
+  assert.deepEqual(byName(legacyAllocate(BASE_163, MAIN, edited, STOCK_163).sel), EARLIER_163);
 });
 
 // ---- a restored session's machines that are not selected now

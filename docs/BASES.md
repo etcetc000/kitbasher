@@ -180,8 +180,9 @@ file is read the same way; the page then asks for the stock OS it was built on):
 - or your **project file** or **layout file**;
 - or choose **the IDs Kitbasher gave before October 2026**: the earlier
   allocator run on the models you select, recomputed as you change the
-  selection. It gives what an earlier build of the same selection gave as long
-  as the model catalog has not changed since; the .syx is the exact record.
+  selection, over the catalog as it was then (a frozen table). It gives what
+  an earlier build of the same selection gave; models added to the catalog
+  since are not in it and take free IDs. The .syx is the exact record.
 
 Every machine the restored session names keeps its ID; models it does not name
 take free IDs. Machines of the session that you do not select now keep their
