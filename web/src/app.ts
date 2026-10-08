@@ -305,13 +305,17 @@ const chromaTicked = (): boolean => $<HTMLInputElement>('midi-chroma').checked;
 const chromaOn = (): boolean => !!base?.support.midiChroma?.ok && chromaTicked();
 /** the chromatic channel: the default, or what a loaded project chose (the page has no channel control) */
 let chromaChannel = MIDI_CHROMA_CHANNEL;
-/** Both Download-step options on top of the default fixes: the unmute-latency fix and MIDI chromatic input. */
+/** Pitch note names (off by default): offered only on an OS whose knob-value painter the engine verified. */
+const labelsTicked = (): boolean => $<HTMLInputElement>('pitch-labels').checked;
+const labelsOn = (): boolean => !!base?.support.pitchLabels?.ok && labelsTicked();
+/** The Download-step options on top of the default fixes: the unmute-latency fix, MIDI chromatic input, pitch note names. */
 function firmwareOptions(): ReturnType<typeof currentFirmwareFixes> {
   const o = firmwareFixes();
-  return chromaOn() ? { ...o, features: { ...o.features, midiChroma: { channel: chromaChannel } } } : o;
+  return { ...o, features: { ...o.features, ...(chromaOn() ? { midiChroma: { channel: chromaChannel } } : {}), ...(labelsOn() ? { pitchLabels: true } : {}) } };
 }
 function syncChromaOption(): void {
   $('midi-chroma-option').hidden = !base?.support.midiChroma?.ok;
+  $('pitch-labels-option').hidden = !base?.support.pitchLabels?.ok;
 }
 
 function planFor(exclude: string[], opt = trimOptions()): Plan {
@@ -758,6 +762,7 @@ function projectNow(): Project {
     uw: uwOf(uwAnswer),
     // what the user chose, even on an OS that cannot have it, so the project keeps it
     midiChroma: chromaTicked() ? { channel: chromaChannel } : undefined,
+    pitchLabels: labelsTicked() ? true : undefined,
     // saved only when off, the default being on
     unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false,
   };
@@ -822,6 +827,7 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   $<HTMLInputElement>('midi-chroma').checked = !!p.midiChroma;
   chromaChannel = p.midiChroma?.channel ?? MIDI_CHROMA_CHANNEL;
+  $<HTMLInputElement>('pitch-labels').checked = !!p.pitchLabels;
   projectUnmute = p.unmuteFix !== false;
   $<HTMLInputElement>('unmute-fix').checked = projectUnmute;
   const want = new Set(p.models);
@@ -935,6 +941,7 @@ async function main(): Promise<void> {
   $('build').addEventListener('click', () => void onBuild());
   $('unmute-fix').addEventListener('change', () => refresh());
   $('midi-chroma').addEventListener('change', () => refresh());
+  $('pitch-labels').addEventListener('change', () => refresh());
   const packFiles = $('pack-files') as HTMLInputElement;
   packFiles.addEventListener('change', () => { if (packFiles.files?.length) void onPackFiles(Array.from(packFiles.files)); });
 }

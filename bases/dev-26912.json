@@ -35,6 +35,10 @@
   "midiChroma": {
    "ok": false,
    "why": "DEV feeds MIDI through its own per-block queue in its add-on (entered from the DSP interrupt), neither X.14's real-time path nor OS 1.63's MIDI task: not implemented."
+  },
+  "pitchLabels": {
+   "ok": false,
+   "why": "DEV already replaces the knob-value draw this option hooks (0x22999e calls DEV's own routine, 0x2d500c): on a track whose kit sets TUNING to TONAL it shows knob 1 as a note by DEV's own TONAL law, not by a model's pitch metadata. Chaining note names in front of DEV's routine has not been run, so the option is not offered here."
   }
  },
  "cache": {

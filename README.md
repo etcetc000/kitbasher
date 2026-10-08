@@ -51,6 +51,11 @@ input** (off by default): notes on MIDI channel 5 (base channel + 4) play the
 selected track at pitch, record a pitch p-lock in live record, and p-lock every
 held step in grid record. See [MIDI chromatic note input](docs/MIDI-CHROMATIC.md).
 
+On OS X.14 and OS 1.63 the Download step also offers **Show pitch as note names**
+(off by default): the pitch knob of an added model shows the note it plays under
+its dial (`C-3`, `C#3`, `C+3` for a quarter tone) instead of a number, as
+Elektron's DEV firmware shows a TONAL track. See [Pitch note names](docs/PITCH-LABELS.md).
+
 On OS X.14 and OS 1.63 the Download step's **Fix unmute latency** (on by default)
 makes an unmuted track play its next trig instead of about two steps later. See
 [Supported bases](docs/BASES.md#unmute-latency).

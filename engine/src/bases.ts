@@ -81,8 +81,11 @@ export interface BaseProfileFile {
  * run on (X.14 and prepared 1.63). --midi-chroma: the MIDI path and the lock writer's task are found
  * by signature, but how the base's tasks and interrupts interleave around them is shown only by
  * playing it (X.14 and prepared 1.63; the DEV builds read MIDI through their own queue).
+ * --pitch-labels: the painter's string draw is found by signature, but what the LCD shows is seen
+ * only by running it (X.14 and prepared 1.63; on DEV that draw is DEV's own TONAL hook).
  */
-export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma' };
+export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma',
+  pitchLabels: '--pitch-labels' };
 
 export interface BaseSet { lineage: LineageFile; profiles: BaseProfileFile[] }
 
@@ -125,6 +128,8 @@ export interface Base {
     unmute: import('./unmute.js').Unmute | null;
     /** --midi-chroma: X.14's real-time MIDI path (byte for byte) or OS 1.63's MIDI task (by signature), engine/src/midi_chroma.ts */
     midiChroma: import('./midi_chroma.js').Chroma | null;
+    /** --pitch-labels: the knob-value painter's string draw, engine/src/pitch_labels.ts */
+    pitchLabels?: import('./pitch_labels.js').PitchLabelSite | null;
   };
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;
@@ -276,6 +281,7 @@ export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved>
     if (k === 'hostSend') base.features.hostSend = null;
     if (k === 'unmuteFix') base.features.unmute = null;
     if (k === 'midiChroma') base.features.midiChroma = null;
+    if (k === 'pitchLabels') base.features.pitchLabels = null;
   }
   if (profile) {
     for (const [k, v] of Object.entries(profile.cache ?? {})) {

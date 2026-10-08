@@ -18,7 +18,7 @@ const REG = (s: string): { k: 'd' | 'a'; r: number } | null => {
 };
 
 // only the branches the engine's routines use; anything else is refused as an unknown instruction
-const CC: Record<string, number> = { bsr: 1, bcs: 5, bne: 6, beq: 7, ble: 15 };
+const CC: Record<string, number> = { bra: 0, bsr: 1, bhi: 2, bls: 3, bcc: 4, bcs: 5, bne: 6, beq: 7, bpl: 10, bmi: 11, bge: 12, blt: 13, bgt: 14, ble: 15 };
 
 export class Asm {
   private items: Item[] = [];
@@ -99,14 +99,23 @@ export class Asm {
         return [[0x7000 | (D(a1) << 9) | (v & 0xff), 2]];
       }
       case 'lea': return W(0x41c0 | (A(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
+      case 'pea': return W(0x4840 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'jsr': return W(0x4e80 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'jmp': return W(0x4ec0 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'rts': return [[0x4e75, 2]];
+      case 'dc.l': {   // data: a long, or a label's address
+        const m = /^@(\w+)$/.exec(a0);
+        if (m) return [[() => this.addr(m[1]), 4]];
+        return [[Number(a0) >>> 0, 4]];
+      }
       case 'nop': return [[0x4e71, 2]];
       case 'tst.b': case 'tst.l': return W(0x4a00 | ((op === 'tst.l' ? 2 : 0) << 6) | ea6(this.ea(a0, op[4] as 'b' | 'l')), this.ea(a0, op[4] as 'b' | 'l'));
       case 'clr.l': return W(0x4280 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'cmp.l': return W(0xb080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'add.l': return W(0xd080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
+      case 'sub.l': return W(0x9080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
+      case 'and.l': return W(0xc080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
+      case 'cmpi.l': return [[0x0c80 | D(a1), 2], ...this.ea(a0, 'l').ext];
       case 'or.l':
         if (REG(a1)?.k === 'd') return W(0x8080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
         return W(0x8180 | (D(a0) << 9) | ea6(this.ea(a1, 'l')), this.ea(a1, 'l'));    // or.l Dn,<ea> (memory)
@@ -117,11 +126,12 @@ export class Asm {
         if (q < 1 || q > 8) throw new Error('quick range');
         return W((op === 'addq.l' ? 0x5080 : 0x5180) | ((q & 7) << 9) | ea6(this.ea(a1, 'l')), this.ea(a1, 'l'));
       }
-      case 'lsl.l': {
-        if (REG(a0)?.k === 'd') return [[0xe1a8 | (D(a0) << 9) | D(a1), 2]];        // count in a register
+      case 'lsl.l': case 'lsr.l': {
+        const left = op === 'lsl.l';
+        if (REG(a0)?.k === 'd') return [[(left ? 0xe1a8 : 0xe0a8) | (D(a0) << 9) | D(a1), 2]];        // count in a register
         const n = Number(a0.slice(1));
         if (n < 1 || n > 8) throw new Error('shift range');
-        return [[0xe188 | ((n & 7) << 9) | D(a1), 2]];
+        return [[(left ? 0xe188 : 0xe088) | ((n & 7) << 9) | D(a1), 2]];
       }
       case 'extb.l': return [[0x49c0 | D(a0), 2]];
       case 'btst': case 'bset': {

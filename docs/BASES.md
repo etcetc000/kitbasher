@@ -71,7 +71,7 @@ node engine/dist/src/cli.js --prepare-163 --in os163.syx --out os163-prepared.sy
 
 Discovery checks each feature on the base you load: dynamic knob labels, DSP1
 drive curves, menu descriptors in flash, control-all for added machines,
-overload recovery, the CPU indicator, MIDI chromatic note input and the unmute-latency fix. A feature whose sites are not found is
+overload recovery, the CPU indicator, MIDI chromatic note input, pitch note names and the unmute-latency fix. A feature whose sites are not found is
 switched off and reported, never guessed. To see what a base supports:
 
 ```text
@@ -86,6 +86,7 @@ reason):
 |---|---|---|---|---|
 | Unmute-latency fix (`--unmute-fix`) | yes | yes | no: DEV enters its add-on from the sequencer | no: as DEV 26912 |
 | MIDI chromatic note input (`--midi-chroma`) | yes | yes | no: MIDI goes through DEV's per-block queue | no: as DEV 26912 |
+| Pitch note names (`--pitch-labels`) | yes | yes | no: the knob-value draw is DEV's own TONAL label | no: as DEV 26912 |
 | Reordered DSP2 host sender (`--host-reorder`) | no: silences output in the emulator | no: not qualified | yes | no: not qualified |
 
 A parity check (`engine/test/parity.test.ts`) runs with the tests: every profile

@@ -23,8 +23,10 @@ const profiles = readdirSync('bases').filter((f) => f.endsWith('.json'))
 const EXEMPT: Record<string, Record<string, string>> = {
   'stock-163-prepared': { hostSend: 'silent output in the emulator' },
   x14: { hostSend: 'not qualified' },
-  'dev-26912': { unmuteFix: 'the sequencer is entered from DEV\'s add-on', midiChroma: 'MIDI via DEV\'s per-block queue' },
-  'dev-26a01': { unmuteFix: 'the sequencer is entered from DEV\'s add-on', midiChroma: 'MIDI via DEV\'s per-block queue', hostSend: 'not qualified' },
+  'dev-26912': { unmuteFix: 'the sequencer is entered from DEV\'s add-on', midiChroma: 'MIDI via DEV\'s per-block queue',
+    pitchLabels: 'the knob-value draw is DEV\'s own TONAL hook' },
+  'dev-26a01': { unmuteFix: 'the sequencer is entered from DEV\'s add-on', midiChroma: 'MIDI via DEV\'s per-block queue', hostSend: 'not qualified',
+    pitchLabels: 'the knob-value draw is DEV\'s own TONAL hook' },
 };
 
 test('parity: every profile qualifies every gated option with evidence, or refuses it with a reason', () => {
@@ -45,7 +47,7 @@ test('parity: every profile qualifies every gated option with evidence, or refus
 });
 
 test('parity: the gated options are the ones the page and CLI offer per base', () => {
-  assert.deepEqual(PROFILE_GATED, { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma' });
+  assert.deepEqual(PROFILE_GATED, { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma', pitchLabels: '--pitch-labels' });
 });
 
 // ---- every feature, not only the gated options

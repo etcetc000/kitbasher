@@ -51,6 +51,16 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Added
 
+- **Pitch note names** (X.14 and OS 1.63, off by default): a build option, *Show
+  pitch as note names* on the Download step or `--pitch-labels`. On the parameter
+  page the pitch knob of a model with a quarter or chromatic pitch law shows the
+  note it plays under its dial, in the three cells Elektron's DEV firmware uses
+  for a TONAL track: `C-3`, `C#3`, and one glyph for a quarter tone (`C+3`,
+  `C‡3`); MIDI 60 is C3. VADPC and VADRC follow their MODE knob. Other knobs,
+  stock machines and models with a relative, continuous or no pitch law keep
+  their numbers. Not offered on DEV, whose TONAL setting already uses the same
+  draw. A project file records the choice (`pitch_labels`). See
+  [Pitch note names](docs/PITCH-LABELS.md).
 - **Unmuting plays the next trig.** On every 1.63-derived OS, a track unmuted
   less than about one step before its next trig stayed silent for that trig, so
   an unmute on the beat was heard about two steps late: the sequencer queues each

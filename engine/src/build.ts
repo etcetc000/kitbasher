@@ -6,6 +6,7 @@ import { uwMenuPatches } from './uw_menu.js';
 import { checkUnmuteCode, unmutePatches } from './unmute.js';
 import { reader } from './sig.js';
 import { checkChromaCode, chromaPatches, chromaRanges } from './midi_chroma.js';
+import { checkLabelCode, labelPatches } from './pitch_labels.js';
 export { isaGate, rewrittenCode } from './isa_gate.js';
 // Build orchestration: discovered base + relocatable packs -> gated OS image.
 // Planning owns placement; selection.ts owns catalog/IDs; isa_gate.ts independently reads
@@ -116,6 +117,9 @@ export interface BuildReport {
               /** --midi-chroma: where its routines are, the channel, and what a chromatic note does on each selected machine */
               midi_chroma?: { at: string; end: string; code_bytes: number; data_bytes: number; channel: string;
                               machines: { id: number; name: string; plays: string }[] } | null;
+              /** --pitch-labels: where its routine is, the site it is entered from, and what each selected machine's pitch knob shows */
+              pitch_labels?: { at: string; end: string; code_bytes: number; data_bytes: number; site: string;
+                               machines: { id: number; name: string; shows: string }[] } | null;
               desc_flash: string[]; notes: string[] };
   /** layout_table..os_end is the layout table, which every build appends after the boot routine */
   flash: { addon: string | null; boot_routine: string; os_end: string; headroom: number; patches: number; layout_table: string; layout_bytes: number };
@@ -556,6 +560,14 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     patches.push(...cp.patches);
     checks.push(...cp.checks);
   }
+  // --pitch-labels: the knob-value painter's string-draw call enters the routine (one operand)
+  let labelWrites: [number, number][] = [];
+  if (ram.pitchLabels) {
+    const lp = labelPatches(ram.pitchLabels.site, ram.pitchLabels.code.labels);
+    labelWrites = lp.patches;
+    patches.push(...lp.patches);
+    checks.push(...lp.checks);
+  }
   // Each site is read where the base's boot puts it: the ColdFire slot (below the BSS its reset
   // code clears), the SRAM copy, the add-on, a scatter entry.
   const live = codeImages(fw, base);
@@ -598,6 +610,18 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
         : code.length ? `patches write ${code.map(([a]) => h(a)).join(', ')}, inside the routines at ${h(ram.chroma.at)}`
         : `${chromaWrites.length} longwords at ${ranges.map(([lo, hi]) => `${h(lo)}..${h(hi)}`).join(', ')}, written by nothing else; ` +
           `no write into the routines at ${h(ram.chroma.at)}..${h(ram.chroma.at + ram.chroma.code.bytes.length)}`);
+  }
+  // --pitch-labels: nothing but its own write at the draw call's operand, and nothing in its routine
+  if (ram.pitchLabels) {
+    const P = ram.pitchLabels;
+    const into = (lo: number, hi: number) => patches.filter(([a]) => a + 4 > lo && a < hi);
+    const clash = into(P.site.call, P.site.call + 6).filter(([a, v]) => !labelWrites.some(([b, w]) => a === b && v === w));
+    const code = into(P.at, P.at + P.code.bytes.length);
+    gate('pitch-labels-site', clash.length === 0 && code.length === 0,
+      clash.length ? `other patches write ${clash.map(([a]) => h(a)).join(', ')}, inside the draw call at ${h(P.site.call)}`
+        : code.length ? `patches write ${code.map(([a]) => h(a)).join(', ')}, inside the routine at ${h(P.at)}`
+        : `1 longword at ${h(P.site.site)} (the operand of the value's draw call at ${h(P.site.call)}), written by nothing else; ` +
+          `no write into the routine at ${h(P.at)}..${h(P.at + P.code.bytes.length)}`);
   }
   const patchSrc = img.length;
   assertBootRamWrites(patches, base.boot.sram);
@@ -763,6 +787,22 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
           `${C.table.entries.length} of ${sel.length} machines play notes, the others are triggered`);
   }
 
+  // ---- --pitch-labels: the routine as the image carries it, and the write that enters it
+  if (ram.pitchLabels) {
+    const P = ram.pitchLabels;
+    const inImage = image.subarray(extSrc + (P.at - E), extSrc + (P.at - E) + P.code.bytes.length);
+    const lc = checkLabelCode(inImage, P.code.codeLen, P.at, P.site);
+    const listed = readBootRamWrites(image, routine, base.boot.sram);
+    const entered = labelWrites.every(([a, v]) => listed.some(([b, w]) => a === b && v === w));
+    const end = P.at + P.code.bytes.length;
+    gate('pitch-labels', equal(inImage, P.code.bytes) && lc.ok && entered && end <= E + IND_EXT_SPAN,
+      !lc.ok ? lc.detail : !entered ? 'the patch list does not carry the hook write'
+        : end > E + IND_EXT_SPAN ? `the routine ends at ${h(end)}, past the proven ${h(E + IND_EXT_SPAN)}`
+        : `${P.code.codeLen} bytes of routine (${lc.insns.length} ISA_A instructions, calls only to the OS's string draw and width) and ` +
+          `${P.code.bytes.length - P.code.codeLen} bytes of data at ${h(P.at)}..${h(end)}, entered from the value's draw call at ${h(P.site.call)}; ` +
+          `${P.table.entries.length} of ${sel.length} machines show note names`);
+  }
+
   // ---- every added instruction, and every one a patched word lands in, is ColdFire ISA_A
   const isa = isaGate(fw, base, back);
   gate('isa', isa.ok, isa.detail + (isa.rejects.length ? `; ${isa.rejects.slice(0, 3).map((i) => `${h(i.at)} ${i.name}: ${i.why}`).join('; ')}` : ''));
@@ -806,6 +846,9 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
       ...(ram.chroma ? { midi_chroma: { at: h(ram.chroma.at), end: h(ram.chroma.at + ram.chroma.code.bytes.length), code_bytes: ram.chroma.code.codeLen,
         data_bytes: ram.chroma.code.bytes.length - ram.chroma.code.codeLen, channel: ram.chroma.channel,
         machines: ram.chroma.table.perModel.map((p) => ({ id: p.id, name: p.name, plays: p.kind })) } } : {}),
+      ...(ram.pitchLabels ? { pitch_labels: { at: h(ram.pitchLabels.at), end: h(ram.pitchLabels.at + ram.pitchLabels.code.bytes.length),
+        code_bytes: ram.pitchLabels.code.codeLen, data_bytes: ram.pitchLabels.code.bytes.length - ram.pitchLabels.code.codeLen,
+        site: h(ram.pitchLabels.site.site), machines: ram.pitchLabels.table.perModel } } : {}),
       desc_flash: pr.features.descFlash, notes: pr.features.notes,
     },
     flash: { addon: addonAt === null ? null : h(addonAt), boot_routine: h(routine), os_end: h(osEnd), headroom: OS_LIMIT - osEnd, patches: patches.length,
@@ -846,7 +889,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
             ...(rec === null ? {} : { dsp1_recover: true }),
             ...(ram.indicator === null ? {} : { cpu_indicator: true }),
             ...(opt.ctrControlAll ? { ctr_control_all: true } : {}),
-            ...(ram.chroma ? { midi_chroma: ram.chroma.channel } : {}) },
+            ...(ram.chroma ? { midi_chroma: ram.chroma.channel } : {}),
+            ...(ram.pitchLabels ? { pitch_labels: true } : {}) },
     // present only with --host-reorder: the reordered DSP2 host-command sender, so a checker can
     // allow those patched words and verify the routine itself
     ...(ram.hostSend === null ? {} : { host_reorder: { entry: h(ram.hostSend.entry), bytes: ram.hostSend.bytes, old: h(ram.hostSend.old),
@@ -882,6 +926,11 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     ...(ram.chroma === null ? {} : { midi_chroma: { at: h(ram.chroma.at), bytes: ram.chroma.code.bytes.length, code_bytes: ram.chroma.code.codeLen,
       channel: ram.chroma.channel, cfg: h(ram.chroma.cfg), labels: Object.fromEntries(Object.entries(ram.chroma.code.labels).map(([k, v]) => [k, h(v)])),
       patches: chromaWrites.map(([a, v]) => [h(a), h(v)]), table: ram.chroma.table.perModel } }),
+    // present only with --pitch-labels: its routine and the one word it patched, so a checker can
+    // allow that word and verify the routine
+    ...(ram.pitchLabels === null ? {} : { pitch_labels: { at: h(ram.pitchLabels.at), bytes: ram.pitchLabels.code.bytes.length,
+      code_bytes: ram.pitchLabels.code.codeLen, labels: Object.fromEntries(Object.entries(ram.pitchLabels.code.labels).map(([k, v]) => [k, h(v)])),
+      patches: labelWrites.map(([a, v]) => [h(a), h(v)]), table: ram.pitchLabels.table.perModel } }),
     // present when the silence stub was trimmed: the one changed DSP2 word, so a checker that
     // compares the upload against the base can allow that word and verify the stub separately
     ...(stub?.applied ? { stub_trim: { stub: h(stub.stub.at), pad: h(stub.stub.pad), from: h(stub.from), to: h(stub.to) } } : {}),
