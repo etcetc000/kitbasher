@@ -17,9 +17,11 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
    file again restores your machine.
 2. **Load your OS and answer the UW question.** Open [kitbasher.xyz](https://kitbasher.xyz),
    drop in your OS file (`.syx` or `.bin`), and say whether your Machinedrum has
-   the UW option. Not sure? Open the machine menu of any track on your current
-   firmware: if it has ROM and RAM categories, you have UW. The page waits for a
-   Yes or a No, remembers it, and saves it with your layout.
+   the UW option: Yes or No. To check, open the machine menu of any track on
+   your current firmware: if it has ROM and RAM categories, you have UW. Nothing
+   goes ahead, and nothing is built, until you click Yes or No; the page does
+   not remember the answer or take it from a restored file, and saves it with
+   your layout.
 
    **Built with Kitbasher before?** Open *Restore an earlier layout* below the
    drop zone and drop the `.syx` you flashed (or your project or layout file),
@@ -112,7 +114,7 @@ npm run dev
 edit. The command-line patcher shares the browser's engine:
 
 ```text
-node engine/dist/src/cli.js --in my-os.syx --out patched.syx --clean-recovery
+node engine/dist/src/cli.js --in my-os.syx --out patched.syx --uw --clean-recovery
 ```
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and

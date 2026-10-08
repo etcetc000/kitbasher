@@ -23,7 +23,7 @@ read in your browser and never uploaded.
 ## On the command line
 
 ```text
-node engine/dist/src/cli.js --catalog /path/to/pack-set --in my-os.syx --out patched.syx --clean-recovery
+node engine/dist/src/cli.js --catalog /path/to/pack-set --in my-os.syx --out patched.syx --uw --clean-recovery
 ```
 
 - `--catalog <dir>` uses exactly the packs in that directory and nothing else.

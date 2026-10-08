@@ -10,12 +10,10 @@ const U = await import(`data:text/javascript;base64,${Buffer.from(compiled.outpu
 const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../web/src/app.ts', import.meta.url), 'utf8');
 
-test('the first step cannot be left unanswered, or with Not sure', () => {
+test('the first step cannot be left without a Yes or a No; there is no third answer', () => {
   assert.equal(U.gate(null, true).ok, false);
-  assert.match(U.gate(null, true).why, /UW option/);
-  const unsure = U.gate('unsure', true);
-  assert.equal(unsure.ok, false);
-  assert.match(unsure.why, /ROM and RAM categories/);              // tells them how to check
+  assert.match(U.gate(null, true).why, /Yes or No.*UW option/);
+  for (const other of ['unsure', 'maybe', undefined, '', true]) assert.equal(U.gate(other, true).ok, false);
   assert.equal(U.gate('yes', true).ok, true);
   assert.equal(U.gate('no', true).ok, true);
   assert.equal(U.gate('no', false).ok, false);                      // and the OS file is still needed
@@ -27,29 +25,61 @@ test('the page asks on step 1 with nothing pre-selected, and every way forward g
   const step1 = html.slice(html.indexOf('<section id="step-1"'), html.indexOf('<section id="step-2"'));
   assert.ok(step1.includes('id="uw-question"'), 'on the first step');
   const radios = [...q[0].matchAll(/<input type="radio" name="uw" value="(\w+)"([^>]*)>/g)];
-  assert.deepEqual(radios.map((r) => r[1]), ['yes', 'no', 'unsure']);
+  assert.deepEqual(radios.map((r) => r[1]), ['yes', 'no']);
   assert.ok(radios.every((r) => !/checked/.test(r[2])), 'no answer is pre-selected');
+  assert.doesNotMatch(html, /Not sure/);
+  // how to check: one small line, always visible, the same words as HOW_TO_CHECK
+  assert.ok(q[0].includes(`<p class="fine" id="uw-help">${U.HOW_TO_CHECK}</p>`));
   assert.match(html, /id="firmware-next" class="wizard-primary" disabled/);
   // showStep refuses any step past the first, and the Next button follows the same gate
   const show = app.slice(app.indexOf('function showStep('), app.indexOf('function status('));
-  assert.match(show, /gate\(uwAnswer, !!fw\)/);
-  assert.match(show, /n > 1 && !asked\.ok/);
+  assert.match(show, /n > 1 && needsUwAnswer\(\)/);
+  const needs = app.slice(app.indexOf('function needsUwAnswer('), app.indexOf('async function onBuild('));
+  assert.match(needs, /gate\(uwAnswer, !!fw\)/);
   assert.match(app, /\$\('firmware-next'\)\.toggleAttribute\('disabled', !asked\.ok/);
 });
 
-test('answers round-trip through files and storage; anything else is unanswered', () => {
+test('answers are saved in files; nothing pre-fills the answer, not storage and not a file', () => {
   assert.equal(U.uwOf('yes'), true);
   assert.equal(U.uwOf('no'), false);
-  assert.equal(U.uwOf('unsure'), undefined);
   assert.equal(U.uwOf(null), undefined);
-  for (const a of ['yes', 'no']) assert.equal(U.answerOf(U.uwOf(a)), a);
-  assert.equal(U.answerOf(undefined), null);                        // an old layout: ask again
-  assert.equal(U.readStored(() => 'no'), 'no');
-  assert.equal(U.readStored(() => 'unsure'), null);
-  assert.equal(U.readStored(() => null), null);
-  assert.equal(U.readStored(() => { throw new Error('blocked'); }), null);
+  // no stored answer: nothing to read back, and the page neither reads nor writes one
+  for (const k of ['readStored', 'UW_STORAGE_KEY', 'answerOf']) assert.equal(k in U, false, k);
+  assert.doesNotMatch(app, /kitbasher\.uw|UW_STORAGE_KEY|readStored/);
+  assert.match(app, /setUwAnswer\(null\);/);                         // the page starts unanswered
+  // the answer is set in one place only, from the user's click on a radio
+  assert.deepEqual([...app.matchAll(/setUwAnswer\(([^)]*)\)/g)].map((m) => m[1]).sort(),
+    ["a: UwAnswer", "null", "r.value === 'yes' ? 'yes' : 'no'"].sort());
   assert.equal(U.noUwOf('no'), true);
   assert.equal(U.noUwOf('yes'), false);
+});
+
+test("a restored file's answer is a hint only: the gate stays closed and the build refuses", () => {
+  assert.equal(U.fileHint(true), 'This layout was saved for a Machinedrum with UW.');
+  assert.equal(U.fileHint(false), 'This layout was saved for a Machinedrum without UW.');
+  assert.equal(U.fileHint(undefined), null);
+  const file = app.slice(app.indexOf('function fileAnswer('), app.indexOf('// ---- restoring a previous session'));
+  assert.doesNotMatch(file, /setUwAnswer|uwAnswer =[^=]/);              // never sets the answer
+  assert.match(file, /\$\('uw-file-hint'\)/);
+  assert.match(html, /<p class="fine" id="uw-file-hint" hidden><\/p>/);
+  assert.equal(U.gate(null, true).ok, false);                       // so with only a file, nothing proceeds
+});
+
+test('the build and download refuse without an answer, whatever path reached them', () => {
+  assert.equal(U.uwForBuild('yes'), true);
+  assert.equal(U.uwForBuild('no'), false);
+  for (const a of [null, undefined, 'unsure']) assert.throws(() => U.uwForBuild(a), /Yes or No/);
+  // the build takes the answer through uwForBuild (and engine build refuses a missing uw too)
+  const bw = app.slice(app.indexOf('function buildWith('), app.indexOf('function showStorage('));
+  assert.match(bw, /const uw = uwForBuild\(uwAnswer\);/);
+  assert.doesNotMatch(bw, /uwOf\(/);
+  // onBuild (Build, Continue, step tabs, keyboard) checks first, as does the background check and the download link
+  const onBuild = app.slice(app.indexOf('async function onBuild('), app.indexOf('async function onBuild(') + 200);
+  assert.match(onBuild, /if \(needsUwAnswer\(\)\) return;/);
+  assert.match(app, /current\?\.ok \|\| !gate\(uwAnswer, true\)\.ok\) \{/);
+  assert.match(app, /a\.addEventListener\('click', \(e\) => \{ if \(needsUwAnswer\(\)\) e\.preventDefault\(\); \}\);/);
+  // the auto-advance after an OS load goes through the gate
+  assert.match(app, /if \(fw && gate\(uwAnswer, true\)\.ok\) showStep\(2\);/);
 });
 
 const STOCK = ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM'];
@@ -95,10 +125,10 @@ test('step 1: one OS drop zone; restoring sits in a collapsed "Restore an earlie
   assert.match(restore[1], /id="project-file" type="file" accept="\.syx,\.bin,\.json/);
   assert.match(restore[1], /id="legacy-ids"/);
   assert.doesNotMatch(step1, /Keep your kits/);                              // no big box
-  // the UW question: one row, no always-on effect line, the hint hidden until Not sure
+  // the UW question: one row, no always-on effect line, the how-to-check line always shown
   const q = step1.match(/<fieldset id="uw-question"[\s\S]*?<\/fieldset>/)[0];
   assert.doesNotMatch(q, /uw-effect/);
-  assert.match(q, /<p class="fine" id="uw-help" hidden><\/p>/);
+  assert.match(q, /<p class="fine" id="uw-help">To check:/);
   // a Kitbasher build dropped as the OS is not built on: its layout comes back and the stock OS is asked for
   assert.match(app, /That's a Kitbasher build: layout restored\. Now drop the stock \$\{want\?\.name \?\? 'OS'\} it was built on\./);
   // the Download note: one quiet line, hidden once something is restored

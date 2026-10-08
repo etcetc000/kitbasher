@@ -33,11 +33,11 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <p>Choose your original OS 1.63, X.13, X.14 or Em's DEV firmware. Everything runs in this browser; your file stays on your computer.</p>
     <label id="drop"><input id="file" type="file" accept=".syx,.bin" aria-label="Choose firmware file"><strong>Drop your OS file here</strong>, or browse<span class="fine">.syx or .bin · <span id="bases">OS 1.63, X.13, X.14 and Em's DEV firmware</span></span></label>
     <details id="firmware-details" hidden><summary>Firmware compatibility details</summary><p class="fine" id="firmware-info"></p></details>
-    <fieldset id="uw-question" class="uw-question"><legend>Does your Machinedrum have the UW option?</legend>
-      <label><input type="radio" name="uw" value="yes"> Yes</label>
+    <fieldset id="uw-question" class="uw-question" aria-describedby="uw-help"><legend>Does your Machinedrum have the UW option?</legend>
+      <label><input type="radio" name="uw" value="yes" required> Yes</label>
       <label><input type="radio" name="uw" value="no"> No</label>
-      <label><input type="radio" name="uw" value="unsure"> Not sure</label>
-      <p class="fine" id="uw-help" hidden></p>
+      <p class="fine" id="uw-help">To check: on your current firmware, open the machine menu of any track. If it has ROM and RAM categories, your Machinedrum has the UW option. If it does not, it has no UW.</p>
+      <p class="fine" id="uw-file-hint" hidden></p>
     </fieldset>
     <details id="restore" class="restore"><summary>Restore an earlier layout</summary>
       <p class="fine">Built with Kitbasher before? Drop that build's .syx (or your project or layout file) so your kits keep their machines.</p>

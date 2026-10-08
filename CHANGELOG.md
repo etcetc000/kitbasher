@@ -7,6 +7,15 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Changed (breaking)
 
+- **The UW question is mandatory.** The page offers only Yes and No (the "Not
+  sure" choice is gone; one line under the question says how to check), selects
+  neither, and does not remember the answer in the browser. A restored layout,
+  project or `.syx` that records an answer shows a hint but never answers for
+  you. Nothing leaves the first step, checks, builds or downloads until you
+  click Yes or No. The command line requires exactly one of `--uw` or `--no-uw`
+  (a restored session's answer is reported, not used), and the engine's `build`
+  refuses to run without an explicit `uw`.
+
 - **Machine IDs are now given bottom-up.** Every selected model takes the lowest
   free ID, in menu order; packs no longer pin IDs (OSCPW was on 175, WAVTB 124,
   OSC8B 126, VOXVO 127, ...). The same selection on the same OS, with the same
@@ -113,8 +122,9 @@ All notable changes to Kitbasher are recorded here. The format follows
   the last two added categories and showed ROM and RAM (which load GND--), X.13
   and X.14 builds opened the machine menu on the wrong category for added
   machines, and X.13 builds hung at the boot screen.
-- The page now asks whether your Machinedrum has the UW option before you go on,
-  remembers the answer and saves it in layout and project files. With No,
+- The page now asks whether your Machinedrum has the UW option before you go on
+  (Yes or No, required every visit) and saves the answer in layout and project
+  files. With No,
   models that play UW samples are not selectable, machines that normally sit on
   ID 128 or above (OSCPW) move to a free ID below 128, the ID map marks 128 and
   up as unusable, and the menu preview shows your categories in place of ROM
