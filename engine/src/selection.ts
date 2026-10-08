@@ -134,7 +134,7 @@ export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; share
 /**
  * Machine IDs, bottom-up. Every selected model takes the lowest free ID, in a fixed order (`rank`,
  * then catalog order), so the same selection on the same base always gets the same IDs. A model's
- * own `id` in its pack is not a pin any more (engine/src/legacy_ids.ts keeps the IDs it gave).
+ * own `id` in its pack is not a pin any more.
  *
  * Saved kits find machines by ID, so what keeps a kit working is the session it was made with: a
  * `layout` (from a project file, a layout file or a patched OS) puts every machine it names on its

@@ -78,7 +78,7 @@ export function patchRetirement(input:number[],matchingOverlays=false):number[] 
   RETIRE_BASE.forEach((v,i)=>{
     const at=RETIRE_SITE+i,matches=rs.filter(r=>r.tag===0&&r.addr<=at&&at<r.addr+r.count);
     if(!matches.length || (!matchingOverlays && matches.length!==1))throw new Error('Ambiguous retirement hook');
-    // X.13 and X.14 load this region again in a later record. Every copy must hold the
+    // X.14 loads this region again in a later record. Every copy must hold the
     // stock instructions, and the caller enables this only for bases known to do so.
     for(const r of matches) {
       const pos=r.index+3+at-r.addr;

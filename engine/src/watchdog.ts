@@ -2,7 +2,7 @@
 //
 // DSP1's DMA0 interrupt handler counts frames the main loop was too late for in X:$647. On the
 // third entry without a main-loop clear it writes 0 to the DMA1 control register and jumps to
-// itself forever: the Machinedrum goes silent until it is power-cycled. Stock 1.63, X.13 and the
+// itself forever: the Machinedrum goes silent until it is power-cycled. Stock 1.63, X.14 and the
 // DEV base all carry the same fifteen instructions:
 //
 //   9c2  527000 000646   move a2,x:>$646            save A
@@ -68,7 +68,7 @@ const INSTRUCTIONS = 15;                                        // in HANDLER.le
 export const COUNTER = 0x647;      // X:$647, the miss counter every site names
 
 /**
- * A counter clear: `move #$0,x0 ; move x0,x:>$647`. The DEV, X.13 and 1.63 uploads have two of
+ * A counter clear: `move #$0,x0 ; move x0,x:>$647`. The DEV, X.14 and 1.63 uploads have two of
  * them, the main loop's (just above the handler) and the one in DSP1's DMA set-up.
  */
 const CLEAR = [0x240000, 0x447000, COUNTER];

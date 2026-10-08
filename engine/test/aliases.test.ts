@@ -26,7 +26,7 @@ const RENAMED = [
 const BASE = { name: 'fixture', os: { descriptorTable: 0, cfBase: 0, freeDescriptor: 0, deadIds: [180, 181] } } as unknown as Base;
 
 test('a layout saved under the former keys maps each renamed model to the same ID and category', () => {
-  const old: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['SYN', 'DRM'],
+  const old: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['SYN', 'DRM'],
     machines: { 'MM/4': { id: 77, category: 'SYN', order: 1 }, 'MM/8': { id: 78, category: 'SYN', order: 0 },
                 'AN/BD': { id: 79, category: 'DRM', order: 0 }, 'ND/9': { id: 90, category: 'DRM', order: 1 } } };
   const { fams, aliases } = select(RENAMED, {});
@@ -42,7 +42,7 @@ test('a layout saved under the former keys maps each renamed model to the same I
 
 test('a layout naming one model under both its former and its current key is refused', () => {
   const { aliases } = select(RENAMED, {});
-  const both: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['SYN'],
+  const both: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['SYN'],
     machines: { 'MM/4': { id: 77, category: 'SYN', order: 0 }, 'OSC/SW': { id: 78, category: 'SYN', order: 1 } } };
   assert.throws(() => resolveLayout(both, aliases), /names OSC\/SW twice: as MM\/4 and as OSC\/SW/);
 });

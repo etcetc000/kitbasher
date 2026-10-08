@@ -58,7 +58,7 @@ export interface E12Bank {
   stockWords: number;
 }
 
-/** The bank's run of upload records (one in X.13, 62 back to back in stock 1.63) and its words. */
+/** The bank's run of upload records (one in X.14, 62 back to back in stock 1.63) and its words. */
 export interface BankRun { bank: number[]; bankIndex: number; bankEndIndex: number; bankRecords: number }
 
 export function bankRun(fw: Firmware, base: Base): BankRun {

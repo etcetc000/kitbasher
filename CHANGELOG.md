@@ -7,6 +7,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Changed (breaking)
 
+- X.13 is no longer supported.
+
 - **The UW question is mandatory.** The page offers only Yes and No (the "Not
   sure" choice is gone; one line under the question says how to check), selects
   neither, and does not remember the answer in the browser. A restored layout,
@@ -22,10 +24,13 @@ All notable changes to Kitbasher are recorded here. The format follows
   UW answer and menu layout, gets the same IDs. Kits saved with an earlier build
   refer to the old IDs: on the first step, under *Restore an earlier layout*,
   drop the `.syx` you flashed (or your
-  project or layout file), or choose "the IDs Kitbasher gave before October
-  2026" (the earlier allocator, on your selection), and every machine keeps its
+  project or layout file), and every machine keeps its
   ID. The Download step notes it in one line whenever nothing was restored. On the command
-  line: `--restore <file>` and `--legacy-ids`.
+  line: `--restore <file>`.
+
+### Removed
+
+- The "IDs Kitbasher gave before October 2026" layout (`--legacy-ids`) is removed; restore from your previous Kitbasher `.syx` instead.
 
 ### Changed
 

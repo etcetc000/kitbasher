@@ -10,7 +10,7 @@
 // 'mac' and reported, since the part has them but none of our code may use them.
 //
 // `scanCode` walks code by recursive descent from entry points (branch and call targets followed,
-// data never decoded as code), which is what lets stock X.13 and stock 1.63 serve as a positive
+// data never decoded as code), which is what lets stock X.14 and stock 1.63 serve as a positive
 // control: every instruction reachable in them must decode.
 
 export interface Insn { at: number; len: number; name: string; ok: boolean; why?: string; mac?: boolean;
