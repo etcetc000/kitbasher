@@ -5,12 +5,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The firmware golden hashes (GOLDEN in midi_chroma.test.ts, GOLDEN_OFF in unmute.test.ts) are builds
-// of the bundled catalog, so any change to catalog/ changes them. Those tests need OS files and are
-// skipped where there are none, CI included; this one needs nothing and runs everywhere. It fails when
-// catalog/ is no longer the catalog the goldens were recorded from. After a catalog change, rebuild the
-// goldens with MD_FIRMWARE_DIR set, and record the new hashes and this fingerprint in the same change.
-const GOLDEN_CATALOG = 'e5e8d66a6162b0e5353bcf62d2636e04ae7d43e2d9b2dc302c925ead680ef7c7';
+// The firmware golden hashes (GOLDEN in midi_chroma.test.ts and pitch_labels.test.ts, GOLDEN_OFF in
+// unmute.test.ts) are builds of the bundled catalog, so any change to catalog/ changes them. Those tests
+// need OS files and are skipped where there are none, CI included; this one needs nothing and runs
+// everywhere. It fails when catalog/ is no longer the catalog the goldens were recorded from. After a
+// catalog change, rebuild the goldens with MD_FIRMWARE_DIR set, and record the new hashes and this
+// fingerprint in the same change.
+const GOLDEN_CATALOG = 'd69dab4094b20d01538805152ac2c3e19dda5f6491f9c259180803549fb884e0';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -25,6 +26,6 @@ function catalogFingerprint(dir: string): string {
 
 test('the firmware goldens were recorded from the bundled catalog as it is', () => {
   assert.equal(catalogFingerprint(join(ROOT, 'catalog')), GOLDEN_CATALOG,
-    'catalog/ changed since the firmware goldens in midi_chroma.test.ts and unmute.test.ts were recorded: ' +
+    'catalog/ changed since the firmware goldens in midi_chroma, pitch_labels and unmute tests were recorded: ' +
     'rebuild them with MD_FIRMWARE_DIR set, then record the new hashes and this fingerprint together');
 });

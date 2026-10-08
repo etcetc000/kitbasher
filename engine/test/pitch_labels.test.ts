@@ -380,11 +380,14 @@ test('firmware: discovery finds the painter\'s draw on X.14 and 1.63 as cached; 
 
 // The output of main at d360e4b for these inputs (the bundled catalog, --uw). A build without
 // --pitch-labels must be the same byte for byte; the build with it is recorded so a change to it is deliberate.
+// NZEPL footprint: catalog/np.json re-exported 2,203 DSP2 words smaller; with the earlier np.json the
+// same engine still gives the earlier 1b0ec853... / d3c480df... / 77ff4079... / 84efea23...
+// A catalog change changes these: golden_catalog.test.ts records the catalog they were built from.
 const GOLDEN: Record<string, Record<string, string>> = {
-  x14: { '': '1b0ec85399bd18393588ec2125a475b2da17915309c4b9f32f25ac5b69282212', '--no-pitch-labels': '1b0ec85399bd18393588ec2125a475b2da17915309c4b9f32f25ac5b69282212',
-         '--pitch-labels': 'd3c480df3836dbff3503974c3768e6f286f5ca0b646c87b2efe97c6cde23d944' },
-  'stock-163-prepared': { '': '77ff4079d42d93b7b5082c259f23089bf2fb666928f9a4fac97eed6ec2626d96', '--no-pitch-labels': '77ff4079d42d93b7b5082c259f23089bf2fb666928f9a4fac97eed6ec2626d96',
-                          '--pitch-labels': '84efea23711ccd0ca332f36a49b495ee45f005871f57015a8656df32d0029bb0' },
+  x14: { '': '626ba83c22e11d67ae87769cba9ae08ab630d6d30f5fa8f0e92892af8f46c2b5', '--no-pitch-labels': '626ba83c22e11d67ae87769cba9ae08ab630d6d30f5fa8f0e92892af8f46c2b5',
+         '--pitch-labels': 'b236798ac5619f215eef6409d9a20f905f6981aa0e50914989ad30eaaaf3bd2a' },
+  'stock-163-prepared': { '': '36c5e702ab4056b8147b71f476d3064cde50aeb4c9b91c86f2069dff19ebccd3', '--no-pitch-labels': '36c5e702ab4056b8147b71f476d3064cde50aeb4c9b91c86f2069dff19ebccd3',
+                          '--pitch-labels': '865b37fe53d512849609b02bf855a8b8169684a7f988a81a215820f86154facc' },
 };
 
 test('firmware: builds without the option are main\'s byte for byte; with it, as recorded', { skip: fwSkip }, async () => {

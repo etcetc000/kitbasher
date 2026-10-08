@@ -717,11 +717,13 @@ test('firmware: on X.14 the 1.63 signatures for the OS routines find the address
 // are the ones run on hardware. The 1.63 build with it is recorded so a change to it is deliberate.
 // d360e4b: NFX4P joined the catalog (catalog/effects-ladder.json); the engine of d360e4b with that file
 // left out of catalog/ still gives the earlier 0b743978... / 4bab8efe... / 59bec817... / 243ce930...
+// NZEPL footprint: catalog/np.json re-exported 2,203 DSP2 words smaller; with the earlier np.json
+// the same engine still gives the earlier 1b0ec853... / 62a23f9f... / 77ff4079... / ec931869...
 // A catalog change changes these: golden_catalog.test.ts records the catalog they were built from.
 const GOLDEN: Record<string, Record<string, string>> = {
-  x14: { '': '1b0ec85399bd18393588ec2125a475b2da17915309c4b9f32f25ac5b69282212', '--no-midi-chroma': '1b0ec85399bd18393588ec2125a475b2da17915309c4b9f32f25ac5b69282212',
-         '--midi-chroma': '62a23f9fb961db6e339037c6df82a63442a2f5819d201eeb3d530ae67be9926b' },
-  'stock-163-prepared': { '': '77ff4079d42d93b7b5082c259f23089bf2fb666928f9a4fac97eed6ec2626d96', '--midi-chroma': 'ec931869681defdd07f389d9a7a1b77cf46a46a4e1d018cfacc5f8954fc76c06' },
+  x14: { '': '626ba83c22e11d67ae87769cba9ae08ab630d6d30f5fa8f0e92892af8f46c2b5', '--no-midi-chroma': '626ba83c22e11d67ae87769cba9ae08ab630d6d30f5fa8f0e92892af8f46c2b5',
+         '--midi-chroma': '4acd5140db211e77b591e7fd5c37bf633620a2579ee05e6767221faa40e93939' },
+  'stock-163-prepared': { '': '36c5e702ab4056b8147b71f476d3064cde50aeb4c9b91c86f2069dff19ebccd3', '--midi-chroma': '1b8e9873f2f76ca905b0309c520c5e22b29dd245432fc44e6700c9aedc61d0ab' },
 };
 
 test('firmware: builds without the option are main\'s byte for byte; X.14 with it too', { skip: fwSkip }, async () => {

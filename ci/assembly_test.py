@@ -4,6 +4,9 @@ from pathlib import Path
 import unittest
 import tempfile
 import json
+import contextlib
+import importlib.util
+import io
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'packs'))
 import assembly as A
@@ -73,6 +76,16 @@ class Assembly(unittest.TestCase):
         bundled=json.loads((ROOT/'catalog/effects-ladder.json').read_text(encoding='utf-8'))
         with tempfile.TemporaryDirectory() as tmp:
             fresh=exporter.export(ROOT/'examples/effects/ladder',Path(tmp)/'out')
+        fresh.pop('source')
+        self.assertEqual(json.loads(json.dumps(fresh)),bundled)
+
+    def test_bundled_np_pack_matches_a_fresh_export(self):
+        bundled=json.loads((ROOT/'catalog/np.json').read_text(encoding='utf-8'))
+        spec=importlib.util.spec_from_file_location('np_authoring',ROOT/'examples/noise-plethora/authoring.py')
+        authoring=importlib.util.module_from_spec(spec);spec.loader.exec_module(authoring)
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            authoring.generate(Path(tmp)/'np')
+            fresh=exporter.export(Path(tmp)/'np',Path(tmp)/'out')
         fresh.pop('source')
         self.assertEqual(json.loads(json.dumps(fresh)),bundled)
 

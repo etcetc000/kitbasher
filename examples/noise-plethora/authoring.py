@@ -51,6 +51,8 @@ KNOB_LAWS = {
     'lfree_bound': ('lin', 50, 500), 'grain_depth': ('lin', 0, Q/4),
     'grain_rate': ('quad', 500*_F24, 5000*_F24), 'grain_rate3': ('quad', 400*_F24, 5000*_F24),
     'flange_rate': ('lin', 0, 3*(1 << 31)/44100),
+    'fmp_sine_mod': ('quad', 38006, 1029504*16129/16384),
+    'mode_index': ('lin', 0, 30*127/128),
     # FM-group depths (fm_group_tables).
     'crx_dq': ('lin', 0, 8192), 'fmp_dq': ('lin', 819.2, 7372.8), 'prx_dq': ('lin', 0, 409.6),
     # Feedback graphs' node rates (graph_rates in generate), read by fb_step.
@@ -336,12 +338,19 @@ def control_block(name):
     asr #16,a,a
     and #>$7f,a
     move a1,a
+    tfr a,b
     asl #4,a,a
+    sub b,a
     add #>fib_ratios,a
     move a1,r0
-    nop
+    ; Ratio 1 (row word 0 is always 2^16): the base step itself, clamped.
+    move x0,a
+    move #>$7ffe00,y0
+    cmp y0,a
+    tgt y0,a
+    move a,x:(r1)+
     ; One word per ratio: ratio * 2^16 (below 2^23: every ratio is under 128).
-    do #16,fib_setup_end
+    do #15,fib_setup_end
     move y:(r0)+,y0
     mpy x0,y0,a
     asl #7,a,a
@@ -877,6 +886,8 @@ def fm_group_tables():
     for name,ratio,_ in FMP_PROGRAMS:
         t['fmp_rates_'+name]=[v for k in range(128) for v in
             (round((300+(k/127)**2*8000)*(1<<24)/44100), round((300+(k/127)**2*8000)*ratio*(1<<24)/44100))]
+    assert t['fmp_rates_sineFMcluster'][0::2]==t['fmp_rates_TriFMcluster'][0::2]
+    assert t['fmp_rates_sineFMcluster'][1::2]==knob_law_values('fmp_sine_mod')
     t['crx_k']=list(CRX_K)+[CRX_CLAMP]
     for name,law in (('PrimeCluster',lambda x:.5+10*x),('PrimeCnoise',lambda x:.5+12*x*x)):
         t['prx_u_'+name]=[round(law(k/127)*(1<<32)/44100) for k in range(128)]
@@ -991,12 +1002,12 @@ def fm_clusters():
     move b1,b
     abs b  b1,y:(r4)+
 '''
-        result+=name+':\n'+knob_index(2,'fmp_rates_'+name,1)+'''    move y:(r6+$d),y0
+        result+=name+':\n'+knob_index(2,'fmp_rates_TriFMcluster',1)+'''    move y:(r6+$d),y0
     move y:(r0)+,x0
     mpy x0,y0,a  y:(r0),x0
     asl #2,a,a
     move a,y1
-    mpy x0,y0,a
+'''+(lookup(2,'fmp_sine_mod','x0') if name=='sineFMcluster' else '')+'''    mpy x0,y0,a
     asl #2,a,a
     move #>$7ffe00,x0
     cmp x0,a
@@ -1909,7 +1920,8 @@ def fb_fm_row(control, table):
     return f'''    move y:(r6+${control:x}),a
     asr #16,a,a
     move a1,a
-    asl #2,a,a
+    tfr a,b
+    addl b,a
     add #>{table},a
     move a1,r0
     nop
@@ -1943,8 +1955,10 @@ def fb_atari():
     move y:(r0)+,y1
 '''+fb_fm_var()+'''    move a,n3
     move y:(r0)+,y0
-    move y:(r0)+,y1
-'''+fb_fm_var()+'''    move n3,b
+    mpy x0,y0,a
+    cmp x1,a
+    tgt x1,a
+    move n3,b
     sub a,b
     move b1,y1
     move y:(r6+$15),b
@@ -2009,7 +2023,9 @@ def fb_tables(tables):
     rows=[]
     for k in range(128):
         depth=tables['Atari_depth'][k]
-        for inp in (Q-1,-(Q-1)): rows.extend(fb_fm(inp,depth))
+        for inp in (Q-1,-(Q-1)):
+            m_,e_=fb_fm(inp,depth); assert inp>0 or e_==0
+            rows.extend((m_,e_) if inp>0 else (m_,))
     t['fb_atari_fm']=rows
     return t
 
@@ -2100,7 +2116,8 @@ def fb_radio():
     move y:(r6+$15),n5
     move (r4)+n4
 '''+fb_step_table(4,'radioOhNo')+'''    move #>$800000,x0
-'''+phases+lookup(3,'radio_width','a')+'''    asl a
+'''+phases+lookup(3,'radio_width','y1')+'''    move y1,a
+    asl a
     add x0,a
     move a1,y1
 '''+lookup(5,'sh_slew','r2')+'''    move #>$80000,x0
@@ -2237,7 +2254,8 @@ def fb_cmr():
     move y:(r6+$3),a
     asr #16,a,a
     move a1,a
-    asl #2,a,a
+    tfr a,b
+    addl b,a
     add #>fb_cmr_fm,a
     move a1,n1
     move r6,r4
@@ -2365,8 +2383,10 @@ CrossModRing_end:
     move y:(r1)+,y1
 '''+fb_fm_var()+'''    move a,n3
     move y:(r1)+,y0
-    move y:(r1)+,y1
-'''+fb_fm_var()+'''    move n3,y0
+    mpy x0,y0,a
+    cmp x1,a
+    tgt x1,a
+    move n3,y0
     sub y0,a
     move #>1,b
     move n5,y0
@@ -2381,7 +2401,9 @@ def fb_cmr_tables(tables):
     rows=[]
     for k in range(128):
         depth=tables['CrossModRing_depth'][k]
-        for inp in (FB_A,-FB_A): rows.extend(fb_fm(inp,depth))
+        for inp in (FB_A,-FB_A):
+            m_,e_=fb_fm(inp,depth); assert inp>0 or e_==0
+            rows.extend((m_,e_) if inp>0 else (m_,))
     t['fb_cmr_fm']=rows
     return t
 
@@ -2402,7 +2424,8 @@ def filt_tables():
         w=(v+1)%4-1
         u=w if w<=1 else 2-w                          # triangle fold, period 4
         coefficients.append(min(FILT_RESO_FMAX,q(math.pi*1000/44100*2**(5*u))))
-    tables['reso_coef']=coefficients
+    assert coefficients[:1024]==coefficients[1024:]
+    tables['reso_coef']=coefficients[:1024]
     tables['filt_period']=[min(0x7fffff,round(44100*4096/max(pos,25))) for pos in range(2048)]
     tables['filt_walk_delta']=[1]*16
     tables['filt_bit_weights']=[q(w) for w in FILT_BIT_WEIGHTS]
@@ -2459,7 +2482,8 @@ def resonoise():
     tst b  (r2)+n2
     add x1,a ifge
     mpy x0,y1,b
-    lsr #13,b
+    asl b
+    lsr #14,b
     move b1,n3
     nop
     move y:(r3+n3),x0
@@ -2953,7 +2977,8 @@ flange_osc_end:
     move r1,x:(r3)+
     move a1,x:(r3+$3)
 flange_carrier_end:
-'''+lookup(3,'flange_rate','b')+f'''    ; Triangle LFO at the original RATE; delay = centre + depth * triangle.
+'''+lookup(3,'flange_rate','x0')+f'''    move x0,b
+    ; Triangle LFO at the original RATE; delay = centre + depth * triangle.
     asr #2,b,b
     move x:(r6+$14),a
     add b,a
@@ -3289,7 +3314,8 @@ def generate(destination):
         for value in values:
             assert value<128  # ratio * 2^16 fits a word
             ratios.append(round(value*(1<<16)))
-    tables['fib_ratios']=ratios
+    assert ratios[0::16]==[65536]*128
+    tables['fib_ratios']=[r for i,r in enumerate(ratios) if i%16]
     tables['sh_rate']=[round((15+k/127*5000)*(1<<23)/44100) for k in range(128)]
     tables['sh_slew']=[q(1 if k==0 else 1-math.exp(-1/(44100*.00005*2000**(k/127)))) for k in range(128)]
     tables['pw_base']=[round((40+(k/127)**2*8000)*(1<<24)/44100) for k in range(128)]
@@ -3405,9 +3431,13 @@ def generate(destination):
     source=header()+lookup(4,'pitch','x0')+'    move x0,y:(r6+$d)\n'
     # Select and reset program-local state when switching graphs, preserving the envelope.
     # Table dispatch: a compare chain fetched up to ~230 code words per block for late modes,
-    # which the cold-cache metric charges at 3 cycles a word. Same ceil() mode boundaries.
-    tables['mode_index']=[next(i for i in range(len(names)) if k<math.ceil((i+1)*128/len(names)) or i==len(names)-1)
-                          for k in range(128)]
+    # which the cold-cache metric charges at 3 cycles a word. Same ceil() mode boundaries:
+    # mode_index is a computed knob law, exact only because for 30 programs every ceil() zone
+    # is (raw*30)>>7.
+    zones=[next(i for i in range(len(names)) if k<math.ceil((i+1)*128/len(names)) or i==len(names)-1)
+           for k in range(128)]
+    assert zones==knob_law_values('mode_index')==[(k*len(names))>>7 for k in range(128)]
+    tables['mode_index']=zones
     source+=lookup(1,'mode_index','x0')+"""    move y:(r6+$9),a
     cmp x0,a
     jeq same_program
@@ -3415,17 +3445,21 @@ def generate(destination):
     jsr reset_program
 same_program:
     move y:(r6+$9),a
-    asl a
     add #>dispatch_table,a
     move a1,r0
+    nop
+    move y:(r0),r0
     nop
     jmp (r0)
 dispatch_table:
 """
     for name in names:
-        source+=f'    jmp {name}\n'
+        source+=f'    .dc {name}\n'
     source+='\n'.join(control_block(name) for name in names if name in ('clusterSaw','FibonacciCluster','partialCluster'))+'\n'+saw_cluster()+'\n'+sample_hold()+'\n'+pulse_cluster()+'\n'+fm_clusters()+'\n'+basura_total()+'\n'+prime_clusters()+'\n'+phasing_cluster()+'\n'+basurilla()+'\n'+array_rocks()+'\n'+walking_filomena()+'\n'+filter_programs()+'\n'+feedback_programs()+'\n'+resonoise()+'\n'+bitcrush_walk()+'\n'+lfree_walk()+'\n'+satan_workout()+'\n'+sine_fm_flange()+'\n'+granular_programs()+'\n'+pi_prepare()+'\n'+common_output()+reset_program(names)
     source=remap_controls(source).replace(BANDPASS_SLOT,bandpass())
+    # The DRIV slot always reads sh_slew[0]: load that word as an immediate instead of through r0.
+    source,slews=re.subn(r'    move #>sh_slew\+0,a\n    move a1,r0\n    nop\n    move y:\(r0\),(\w+)\n',lambda m:f'    move #>${tables["sh_slew"][0]&0xffffff:06x},{m[1]}\n',source)
+    assert slews==4 and 'sh_slew+0' not in source, slews
     tables.update(bandpass_tables())
     captions={'clusterSaw':('SAW','FREQ','SPRD'),'FibonacciCluster':('FIB','FREQ','SPRD'),'partialCluster':('PART','FREQ','SPRD'),
               'S_H':('S-H','RATE','SMTH'),'pwCluster':('PW','FREQ','PWID'),
@@ -3463,7 +3497,8 @@ dispatch_table:
     (destination/'dsp2.asm').write_text(source)
     # Tables the DSP code never names stay out of the pack (DSP2 RAM is the scarce resource);
     # reference-tables.json keeps them for checking against the integer reference.
-    live={k:v for k,v in tables.items() if re.search(r'\b'+k+r'\b',source)}
+    code_only='\n'.join(l.split(';')[0] for l in source.splitlines())
+    live={k:v for k,v in tables.items() if re.search(r'\b'+k+r'\b',code_only)}
     reference={k:v for k,v in tables.items() if k not in live}
     (destination/'tables.asm').write_text('; Formula-generated tables, GPL-3.0-or-later\n'+''.join(block_table(k,v) for k,v in live.items()))
     (destination/'reference-tables.json').write_text(json.dumps(reference)+'\n')

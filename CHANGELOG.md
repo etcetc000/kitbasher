@@ -48,6 +48,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 - PHYKS (1.0.0) reads its string through a fractional, interpolated delay, so every
   note is in tune to a tenth of a cent instead of up to 40 cents out at
   the top; it costs about 8 cycles a sample.
+- NZEPL takes 2,203 fewer DSP2 words (22,672 → 20,469) and sounds exactly the
+  same: tables that repeated a column or a period are stored once, a few short
+  tables are computed instead, and one table that nothing read is no longer packed.
 
 ### Added
 

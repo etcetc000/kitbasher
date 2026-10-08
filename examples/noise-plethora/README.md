@@ -29,7 +29,7 @@ there instead.
 ## How it fits
 
 Every program runs under the 129-cycle-per-sample target (worst: grainGlitchII,
-about 125), and the whole machine uses 22,672 DSP2 words (4,710 of code, 17,962
+about 125), and the whole machine uses 20,469 DSP2 words (4,683 of code, 15,786
 of tables). Getting there meant replacing some of the original's structures. Each
 program is one of:
 
@@ -67,9 +67,11 @@ The main differences, by group:
   interpolation grit.
 - **satanWorkout.** Pink noise from Paul Kellet's three-pole filter on a 24-bit
   generator, in place of the original's pink source.
-- **Shared code.** Programs are dispatched through a table; tables that the DSP
-  code never reads are not packed; linear and quadratic knob laws are computed
-  instead of stored.
+- **Shared code.** Programs are dispatched through a table of addresses; tables
+  that the DSP code never reads are not packed; linear and quadratic knob laws
+  (the MODE zones among them) are computed instead of stored. sineFMcluster reads
+  TriFMcluster's base-rate column, and tables that held a constant column or a
+  repeated period store it once. `authoring.py` asserts each of these is exact.
 
 These changes were checked against an integer reference of the adapted
 algorithms, bit for bit. That shows the DSP code does what the adaptation says;
