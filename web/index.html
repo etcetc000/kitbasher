@@ -33,8 +33,19 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
     <p>Choose your original OS 1.63, X.13, X.14 or Em's DEV firmware. Everything runs in this browser; your file stays on your computer.</p>
     <label id="drop"><input id="file" type="file" accept=".syx,.bin" aria-label="Choose firmware file"><strong>Drop your OS file here</strong>, or browse<span class="fine">.syx or .bin · <span id="bases">OS 1.63, X.13, X.14 and Em's DEV firmware</span></span></label>
     <details id="firmware-details" hidden><summary>Firmware compatibility details</summary><p class="fine" id="firmware-info"></p></details>
+    <fieldset id="uw-question" class="uw-question"><legend>Does your Machinedrum have the UW option?</legend>
+      <label><input type="radio" name="uw" value="yes"> Yes</label>
+      <label><input type="radio" name="uw" value="no"> No</label>
+      <label><input type="radio" name="uw" value="unsure"> Not sure</label>
+      <p class="fine" id="uw-help" hidden></p>
+    </fieldset>
+    <details id="restore" class="restore"><summary>Restore an earlier layout</summary>
+      <p class="fine">Built with Kitbasher before? Drop that build's .syx (or your project or layout file) so your kits keep their machines.</p>
+      <label id="restore-drop" class="restore-drop"><input id="project-file" type="file" accept=".syx,.bin,.json,application/json" aria-label="Restore an earlier layout: a Kitbasher .syx, a project or a layout file"><strong>Drop a Kitbasher .syx, project or layout file</strong>, or browse</label>
+      <button type="button" id="legacy-ids" class="link">No file? Use the IDs Kitbasher gave before October 2026</button>
+    </details>
+    <p class="fine" id="project-status" role="status" aria-live="polite"></p>
     <button type="button" id="firmware-next" class="wizard-primary" disabled>Samples →</button>
-    <div class="project-load"><label class="fine" for="project-file">Load a saved project</label> <input id="project-file" type="file" accept=".json,application/json"><p class="fine" id="project-status" role="status" aria-live="polite"></p></div>
   </section>
 </section>
 <section id="step-2" class="wizard-page" aria-labelledby="samples-title" hidden>
@@ -68,6 +79,7 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
 <section id="step-5" class="wizard-page" aria-labelledby="download-title" hidden>
   <h2 id="download-title" tabindex="-1">Download firmware</h2>
   <p id="download-summary"></p>
+  <p id="ids-warning" class="fine" hidden></p>
   <button id="build" type="button" class="wizard-primary" disabled>Create SysEx</button>
   <div id="result" aria-live="polite"></div>
   <div id="download-needs" class="uw-next" hidden></div>

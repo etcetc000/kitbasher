@@ -5,6 +5,19 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ## Unreleased
 
+### Changed (breaking)
+
+- **Machine IDs are now given bottom-up.** Every selected model takes the lowest
+  free ID, in menu order; packs no longer pin IDs (OSCPW was on 175, WAVTB 124,
+  OSC8B 126, VOXVO 127, ...). The same selection on the same OS, with the same
+  UW answer and menu layout, gets the same IDs. Kits saved with an earlier build
+  refer to the old IDs: on the first step, under *Restore an earlier layout*,
+  drop the `.syx` you flashed (or your
+  project or layout file), or choose "the IDs Kitbasher gave before October
+  2026" (the earlier allocator, on your selection), and every machine keeps its
+  ID. The Download step notes it in one line whenever nothing was restored. On the command
+  line: `--restore <file>` and `--legacy-ids`.
+
 ### Changed
 
 - One pitch law for every pitched public model: PTCH raw = 2 × (MIDI − 24), so raw
@@ -95,3 +108,15 @@ All notable changes to Kitbasher are recorded here. The format follows
   and early code runs from flash that is already mapped.
 - On X.14, DSP1 drive curves reach every track.
 - On DEV 26A01, the kit editor draws a newly chosen category in full.
+- On a Machinedrum without UW, the machine-select menu shows every added
+  category and hides ROM and RAM, as on stock. Before, OS 1.63 and DEV builds hid
+  the last two added categories and showed ROM and RAM (which load GND--), X.13
+  and X.14 builds opened the machine menu on the wrong category for added
+  machines, and X.13 builds hung at the boot screen.
+- The page now asks whether your Machinedrum has the UW option before you go on,
+  remembers the answer and saves it in layout and project files. With No,
+  models that play UW samples are not selectable, machines that normally sit on
+  ID 128 or above (OSCPW) move to a free ID below 128, the ID map marks 128 and
+  up as unusable, and the menu preview shows your categories in place of ROM
+  and RAM. `--no-uw` does the same on the command line, leaving out (and
+  naming) the models that play UW samples.

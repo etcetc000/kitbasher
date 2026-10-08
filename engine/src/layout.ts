@@ -27,6 +27,12 @@ export interface Layout {
   base: string;
   categories: string[];
   machines: Record<string, MachinePlace>;
+  /**
+   * The answer to "does your Machinedrum have the UW option?": true, false (then no machine on IDs
+   * 128 and up: plan's `noUw`), or absent when the file does not say (a layout from before the
+   * question; the page asks again).
+   */
+  uw?: boolean;
 }
 
 /**
@@ -169,6 +175,7 @@ export function checkLayout(l: Layout, base: Base, stock: BaseFamily[]): string[
   }
   for (const [k, m] of Object.entries(l.machines)) {
     if (!seen.has(m.category)) p.push(`${k} is in category "${m.category}", which the map does not list`);
+    if (!Number.isInteger(m.id) || m.id < 0 || m.id > 191) p.push(`${k} is on ID ${m.id}, outside 0..191`);
   }
   return p;
 }
@@ -176,7 +183,8 @@ export function checkLayout(l: Layout, base: Base, stock: BaseFamily[]): string[
 /** Canonical JSON: category order kept, machines sorted by key, fixed field order. */
 export function canonical(l: Layout): string {
   const machines = Object.keys(l.machines).sort().map((k) => [k, l.machines[k].id, l.machines[k].category, l.machines[k].order]);
-  return JSON.stringify({ format: l.format, base: l.base, categories: l.categories, machines });
+  // uw only when answered, so a layout without it keeps the fingerprint it always had
+  return JSON.stringify({ format: l.format, base: l.base, categories: l.categories, machines, ...(l.uw === undefined ? {} : { uw: l.uw }) });
 }
 
 /** A short fingerprint two users can read to each other: same layout, same fingerprint. */
@@ -192,19 +200,24 @@ export function parseLayout(json: string): Layout {
   if (typeof o.base !== 'string' || !Array.isArray(o.categories) || typeof o.machines !== 'object') throw new Error('map file: base, categories and machines are required');
   for (const [k, m] of Object.entries(o.machines)) {
     if (!Number.isInteger(m.id) || typeof m.category !== 'string' || !Number.isInteger(m.order)) throw new Error(`map file: ${k} needs an integer id and order and a category`);
+    if (m.id < 0 || m.id > 191) throw new Error(`map file: ${k} is on ID ${m.id}, outside 0..191`);
   }
-  return { format: o.format, base: o.base, categories: o.categories.map(String), machines: o.machines };
+  if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('map file: uw must be true or false');
+  return { format: o.format, base: o.base, categories: o.categories.map(String), machines: o.machines, ...(o.uw === undefined ? {} : { uw: o.uw }) };
 }
 
 // ---- the table in flash --------------------------------------------------------------------------
 //
-//   'MDLY' u8 version (1) u8 categories u8 machines u8 base-id length, base id,
+//   'MDLY' u8 version (1, or 2 when the layout records the UW answer) u8 categories u8 machines
+//   u8 base-id length, base id, [version 2: u8 UW answer, 1 yes / 0 no,]
 //   per category 4 name bytes (0-padded), per machine u8 key length, key, u8 id, u8 category, u8 order,
 //   0-padding to 4, then the trailer: u32 CRC-32 of all before it, u32 table length, 'MDLY'.
 // The trailer ends the OS area, so the table is found from the end of the update backwards.
 
 const MAGIC = [0x4d, 0x44, 0x4c, 0x59];   // 'MDLY'
 export const LAYOUT_TABLE_VERSION = 1;
+/** the table with the UW answer after the base id; a layout without the answer is still written as version 1 */
+export const LAYOUT_TABLE_VERSION_UW = 2;
 
 function crc32(b: Uint8Array): number {
   let c = 0xffffffff;
@@ -225,7 +238,8 @@ export function encodeLayout(l: Layout): Uint8Array {
   const cats = l.categories;
   const keys = Object.keys(l.machines).sort();
   if (cats.length > 255 || keys.length > 255) throw new Error('layout too large for its table');
-  const b: number[] = [...MAGIC, LAYOUT_TABLE_VERSION, cats.length, keys.length, l.base.length, ...ascii(l.base, 'base id')];
+  const b: number[] = [...MAGIC, l.uw === undefined ? LAYOUT_TABLE_VERSION : LAYOUT_TABLE_VERSION_UW, cats.length, keys.length, l.base.length, ...ascii(l.base, 'base id')];
+  if (l.uw !== undefined) b.push(l.uw ? 1 : 0);
   for (const c of cats) {
     const n = ascii(c, 'category');
     if (n.length > 4) throw new Error(`category "${c}" is longer than 4 bytes`);
@@ -248,10 +262,13 @@ export function decodeLayout(t: Uint8Array): Layout {
   if (t.length < 20 || MAGIC.some((v, i) => t[i] !== v)) bad('no magic');
   const body = t.subarray(0, t.length - 12);
   if (u32(t, t.length - 12) !== crc32(body)) bad('CRC mismatch');
-  if (t[4] !== LAYOUT_TABLE_VERSION) bad(`version ${t[4]}, this engine reads ${LAYOUT_TABLE_VERSION}`);
+  if (t[4] !== LAYOUT_TABLE_VERSION && t[4] !== LAYOUT_TABLE_VERSION_UW) bad(`version ${t[4]}, this engine reads ${LAYOUT_TABLE_VERSION} and ${LAYOUT_TABLE_VERSION_UW}`);
   let o = 8;
   const str = (n: number): string => { const s = String.fromCharCode(...t.subarray(o, o + n)); o += n; return s; };
   const base = str(t[7]);
+  const uwByte = t[4] === LAYOUT_TABLE_VERSION_UW ? t[o++] : undefined;
+  if (uwByte !== undefined && uwByte > 1) bad(`UW answer byte ${uwByte}, not 0 or 1`);
+  const uw = uwByte === undefined ? undefined : uwByte === 1;
   const categories: string[] = [];
   for (let i = 0; i < t[5]; i++) { categories.push(String.fromCharCode(...Array.from(t.subarray(o, o + 4)).filter((c) => c))); o += 4; }
   const machines: Record<string, MachinePlace> = {};
@@ -264,7 +281,7 @@ export function decodeLayout(t: Uint8Array): Layout {
     machines[key] = { id, category: categories[cat], order };
   }
   if (o > body.length) bad('truncated');
-  return { format: LAYOUT_FORMAT, base, categories, machines };
+  return { format: LAYOUT_FORMAT, base, categories, machines, ...(uw === undefined ? {} : { uw }) };
 }
 
 /** The layout table a patched OS carries at the end of its OS area, or null. */

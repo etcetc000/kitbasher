@@ -11,6 +11,7 @@ import { be32, Buf, fromBase64, h, wordsLE } from './bytes.js';
 import type { Base } from './bases.js';
 import { hostSendReorder, levBarStub } from './coldfire.js';
 import { menuRefreshSite, menuRefreshCode, type MenuRefreshSite } from './menu_refresh.js';
+import { hiddenIndex, recordName, uwMenuCode } from './uw_menu.js';
 import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
@@ -77,6 +78,14 @@ export interface Selection extends ModelFilter {
    * go to their default menu category (`menus`). Absent: every machine in its default category.
    */
   layout?: Layout;
+  /**
+   * The Machinedrum has no UW option (or the layout says so): no machine on IDs 128 and up (a
+   * pinned one moves below 128 and the move is reported), and no model that plays a UW sample
+   * (engine/src/selection.ts allocateIds).
+   */
+  noUw?: boolean;
+  /** the user's answer to "does your Machinedrum have the UW option?" (false = noUw); recorded in the layout */
+  uw?: boolean;
   /**
    * Default menu categories: 'sound' (the default) files each machine under its browsing
    * category's menu code (engine/src/sound_catalog.ts: KIK, SNR, ... in browsing order);
@@ -163,6 +172,8 @@ export interface RamImage {
   base: number; bytes: number; limit: number; image: Uint8Array; descs: [Selected, number][];
   family: number; levStub: number | null;
   menuRefresh: {site: MenuRefreshSite; entry: number; code: Uint8Array} | null;
+  /** the non-UW menu routine (engine/src/uw_menu.ts), on a base that counts its families at init */
+  uwMenu: { entry: number; code: Uint8Array } | null;
   flashBlock: Uint8Array;          // descriptors (then label blocks) that live in OS-area flash
   dyn: { blob: Uint8Array; base: number; limit: number; update: number; values: number; page: number } | null;
   dsp1: { entry: number; pairs: [number, number][]; link: DriveLink } | null;
@@ -321,6 +332,17 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
   });
   ext.push(new Uint8Array(8));
   ext.align(4, 0);
+  // on a unit without UW the base hides ROM and RAM: a routine of ours removes those two records
+  // from our copy before the base counts the families (engine/src/uw_menu.ts)
+  let uwMenu: RamImage['uwMenu'] = null;
+  const names = Array.from({ length: nf }, (_, k) => String.fromCharCode(...Array.from(main.subarray(fo + 8 * k, fo + 8 * k + 4)).filter((c) => c)));
+  const hidden = O.uwMenu ? hiddenIndex(O.uwMenu, names) : null;
+  if (O.uwMenu && hidden !== null) {
+    const entry = E + ext.length;
+    const code = uwMenuCode(O.uwMenu, family + 8 * hidden, recordName(main, O.cfBase, O.familyTable, hidden));
+    ext.push(code).align(4, 0);
+    uwMenu = { entry, code };
+  }
   let dyn: RamImage['dyn'] = null;
   if (opt.dyn) {
     const seg = base.features.dynLabels!.segment;
@@ -390,7 +412,7 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     menuRefresh={site:menuSite,entry:E+ext.length,code:menuRefreshCode(menuSite)};
     ext.push(menuRefresh.code).align(4,0);
   }
-  return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh,
+  return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh, uwMenu,
            flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator };
 }
 
@@ -508,22 +530,31 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const problems: string[] = [];
   // a map saved before a model was renamed names it by its former key
   const lay = opt.layout && resolveLayout(opt.layout, aliases);
-  const { sel, moves, problems: idProblems } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base));
+  const noUw = !!opt.noUw || opt.uw === false || (opt.uw === undefined && lay?.uw === false);
+  const { sel, moves, problems: idProblems, reused } = allocateIds(base, main, fams, !!opt.allowIdMove, lay, listedFreeIds(fw, base),
+    // bottom-up in menu order (the sound categories by default), so a selection always gets the same IDs
+    { noUw, rank: opt.menus === 'family' ? undefined : (m) => menuOrder(menuCategory(m)) });
   problems.push(...idProblems);
   const byFamily = opt.menus === 'family';
   const menus = lay ? menusFor(sel, lay, byFamily) : byFamily ? fams : soundMenus(sel);
   const stock = baseFamilies(fw, base);
   if (lay) problems.push(...checkLayout(lay, base, stock));
   const lim = menuLimits(base);
-  if (stock.length + menus.length > lim.maxFamilies) {
-    problems.push(`the machine-select menu takes ${lim.maxFamilies} categories and this build has ${stock.length + menus.length} ` +
-                  `(${stock.length} of ${base.name}'s own): merge or delete ${stock.length + menus.length - lim.maxFamilies}`);
+  // without UW the unit shows two fewer of the base's own (ROM and RAM): their places are ours
+  const shown = stock.length - (noUw ? 2 : 0);
+  if (shown + menus.length > lim.maxFamilies) {
+    problems.push(`the machine-select menu takes ${lim.maxFamilies} categories and this build has ${shown + menus.length} ` +
+                  `(${shown} of ${base.name}'s own): merge or delete ${shown + menus.length - lim.maxFamilies}`);
   }
   for (const f of menus) {
     const n = f.models.filter((m) => sel.some((s) => s.m.key === m.key)).length;
     if (n > lim.maxPerList) problems.push(`category ${f.name} has ${n} machines and a menu list takes ${lim.maxPerList}`);
   }
   const notes: string[] = [];
+  if (reused.length) {
+    notes.push(`IDs kept for machines of your restored session that are not selected were the only ones left, so they were given to new models: ` +
+      `${reused.map((r) => `ID ${r.id} (was ${r.key})`).join(', ')}; kits that use those machines will find another machine there`);
+  }
   if (moves.length) {
     notes.push(`moved off their preferred ID: ${moves.map((m) => `${m.name} ${m.preferred}->${m.id} (${m.why})`).join(', ')}; ` +
                'kits saved with these machines on another firmware will not find them');
@@ -706,7 +737,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const { ram, feats } = placeRam(base, main, core, driveLaws(core, packs), menus, sel, opt.features ?? {}, flashAt ?? base.features.descFlash?.alias ?? 0);
   problems.push(...feats.problems);
   return {
-    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
+    ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel, noUw ? false : opt.uw ?? lay.uw) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
     dsp2: { fits: !overflow && (!workspace || trim.end <= D.workspace.base),
       regions, capacity, demand, free, padding: overflow ? 0 : capacity - demand - free, records: problems.length ? [] : recs, machines },
     ram, features: { dynLabels: feats.dyn, dsp1Drive: feats.dsp1, hostReorder: feats.host, descFlash: feats.descFlash, notes: feats.notes },
@@ -744,8 +775,12 @@ function soundMenus(sel: Selected[]): Family[] {
 }
 
 /** The layout this build has: the map, with every selected machine where the build put it. */
-function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[]): Layout {
-  const machines = { ...l.machines };
+export function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[], uw: boolean | undefined): Layout {
+  // the session's machines that are not selected keep their entries, but never on an ID a machine
+  // of this build has: this build's machines win, and no ID is listed twice
+  const used = new Set(sel.map((s) => s.id));
+  const selected = new Set(sel.map((s) => s.m.key));
+  const machines = Object.fromEntries(Object.entries(l.machines).filter(([k, p]) => selected.has(k) || !used.has(p.id)));
   const cats = [...l.categories];
   for (const f of menus) {
     if (!cats.includes(f.name)) cats.push(f.name);
@@ -754,6 +789,6 @@ function effectiveLayout(base: Base, l: Layout, menus: Family[], sel: Selected[]
       machines[m.key] = { id: s.id, category: f.name, order: i };
     });
   }
-  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines };
+  return { format: LAYOUT_FORMAT, base: base.id, categories: cats, machines, ...(uw === undefined ? {} : { uw }) };
 }
 

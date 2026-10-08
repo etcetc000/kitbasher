@@ -108,6 +108,85 @@ finds the new patch sites; nothing is reused from the older DEV profile.
   category's cached length. The patch refreshes that cache first, so the list of
   added machines draws in full.
 
+## Machinedrum without UW
+
+The same OS files run on a Machinedrum with and without the UW option. At boot
+the OS reads which one it is on and, without UW, takes the ROM and RAM machine
+categories out of the machine-select menu. The same boot step counts the
+categories and records, for every machine, which category and place the
+machine menu opens on.
+
+- Stock 1.63 and the DEV builds drop the *last two* categories. With added
+  categories after the base's own, that would hide two of them and show ROM and
+  RAM, which play nothing without UW.
+- X.13 and X.14 move the categories after ROM and RAM down over them, but only
+  after recording where each machine is, so the menu would open on the wrong
+  category for every added machine (and NFX). X.13's move also ended on an
+  address that no longer matched once the menu table moved, which hung the unit
+  at the boot screen.
+
+Every build therefore adds a short routine that, on a unit without UW, removes
+ROM and RAM from its menu table *before* the base counts the categories, and
+turns the base's own step off. The menu then shows the base's categories
+without ROM and RAM followed by yours, and opens on the right one. The
+`uw-menu` check in the build report names the routine and the base's step it
+replaced; a build for a Machinedrum without UW fails if the base's step is not
+found.
+
+Two things need a UW Machinedrum, so the page asks first: *Does your
+Machinedrum have the UW option?* It does not go on without a Yes or a No (Not
+sure explains how to check: a UW unit's machine menu has ROM and RAM). The
+answer is remembered in this browser and saved as `uw` in layout and project
+files and in the layout table of the OS it builds. Loading a file with a
+different answer does not change yours; the page says so. With a No:
+
+- **No machine IDs of 128 and up.** Without UW the OS takes 128 off any machine
+  ID of 128 or more, so a machine there would be selected as another, empty one.
+  New IDs stay below 128; a machine a restored session puts at 128 or above
+  (OSCPW was on 175 in earlier builds) moves to the lowest free ID below 128, and
+  the page, the ID map and the build report show the move. The build fails,
+  saying so, only if no ID below 128 is left. On the command line: `--no-uw`.
+- **No models that play a UW sample** (marked *needs UW* on the page; WAVTB,
+  WAVCH and WAVMR today). They cannot be selected; `--no-uw` leaves them out and
+  names them.
+- The ID map hatches 128 and up as unusable, and the menu preview shows your
+  categories where ROM and RAM would be.
+
+With a Yes nothing changes.
+
+## Machine IDs
+
+Saved kits find machines by ID. Kitbasher gives each selected model the lowest
+free ID, in menu order: the same selection on the same OS, with the same UW
+answer and the same menu layout, always gets the same IDs. A model's pack no
+longer fixes its ID.
+
+**This changed in October 2026.** Earlier builds put some models on fixed IDs
+(OSCPW 175, WAVTB 124, OSC8B 126, VOXVO 127, WAVCH 6, FMSSW 10, FMS2O 11,
+FMS3O 12, OSCSW 13, OSCCH 14, WAVMR 30) and the rest after them. To keep kits
+made with an earlier build working, restore that build's IDs on the first
+step, under *Restore an earlier layout* (a Kitbasher build dropped as the OS
+file is read the same way; the page then asks for the stock OS it was built on):
+
+- drop the **.syx you flashed** (or the .bin): Kitbasher reads the layout table
+  every build carries, or, failing that, the machines it added, matched to the
+  catalog by their names now or before the October 2026 rename (the page names
+  any it does not know, and keeps their IDs free);
+- or your **project file** or **layout file**;
+- or choose **the IDs Kitbasher gave before October 2026**: the earlier
+  allocator run on the models you select, recomputed as you change the
+  selection. It gives what an earlier build of the same selection gave as long
+  as the model catalog has not changed since; the .syx is the exact record.
+
+Every machine the restored session names keeps its ID; models it does not name
+take free IDs. Machines of the session that you do not select now keep their
+IDs reserved, so a later build that selects them again finds them free; only
+when no other ID is left is one given to a new model, and the build report says
+so. A session made for another OS is applied to the one you load: machines keep
+their IDs where that OS has them free, and the others move (each move is
+listed). On the command line: `--restore <file>` or `--legacy-ids`; a session
+that records the UW answer sets it unless `--uw` or `--no-uw` is given.
+
 ## Adding a base
 
 To request support for another OS build, open a

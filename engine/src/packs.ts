@@ -152,6 +152,10 @@ export function checkAliases(m: PackModel): void {
   if (m.aliases.includes(m.key)) throw new Error(`${m.key}: a model cannot alias its own key`);
 }
 
+/** Whether a model reads a UW sample (or its contract declares samples): a Machinedrum without UW cannot play it. */
+export const needsUwSamples = (m: PackModel): boolean =>
+  (m.needs ?? []).some((n) => n.kind === 'uw-sample') || (m.contract?.samples?.length ?? 0) > 0;
+
 export function needLines(m: PackModel): string[] {
   return (m.needs ?? []).map((n) => `${m.name.trim()}: ${n.without} without the ${n.name} sample in a UW slot (${n.what})` +
     (n.install ? `. Load ${n.install.file} using handshaken SDS; check the file's destination slot before sending.` : ''));

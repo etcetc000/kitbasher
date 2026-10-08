@@ -2,6 +2,7 @@ import { isaGate, rewrittenCode } from './isa_gate.js';
 import { assertBootRamWrites } from './boot_safety.js';
 import { decodeLinear } from './isa.js';
 import { menuRefreshPatches } from './menu_refresh.js';
+import { uwMenuPatches } from './uw_menu.js';
 export { isaGate, rewrittenCode } from './isa_gate.js';
 // Build orchestration: discovered base + relocatable packs -> gated OS image.
 // Planning owns placement; selection.ts owns catalog/IDs; isa_gate.ts independently reads
@@ -208,8 +209,12 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   // Every machine on its own ID, or the one the user's map gives it, unless moves were allowed:
   // saved kits depend on it.
   const mapped = sel.filter((s) => s.mapped && s.id !== s.preferred);
-  gate('machine-ids', sel.every((s) => s.id === s.preferred || s.mapped) || !!opt.allowIdMove,
-       (pl.moves.length ? `moved (allowed): ${pl.moves.map((m) => `${m.name} ${m.preferred}->${m.id}`).join(', ')}`
+  // Without UW a machine whose ID is 128 or more must move below 128 (selection.ts allocateIds):
+  // that move is the point of the answer, not a liberty taken with a saved kit.
+  const noUw = !!opt.noUw || opt.uw === false || (opt.uw === undefined && opt.layout?.uw === false);
+  const uwMove = new Set(pl.moves.filter((m) => noUw && m.preferred >= 128 && m.id < 128).map((m) => m.name.trim()));
+  gate('machine-ids', sel.every((s) => s.id === s.preferred || s.mapped || uwMove.has(s.m.name.trim())) || !!opt.allowIdMove,
+       (pl.moves.length ? `moved (${pl.moves.every((m) => uwMove.has(m.name.trim())) ? 'no IDs of 128 and up without UW' : 'allowed'}): ${pl.moves.map((m) => `${m.name} ${m.preferred}->${m.id}`).join(', ')}`
                         : `${sel.length} machines, each on its preferred ID${mapped.length ? ' or its map ID' : ''}`) +
        (mapped.length ? `; on the map's ID: ${mapped.map((s) => `${s.m.name.trim()} ${s.preferred}->${s.id}`).join(', ')}` : ''));
   // The base's own CTR-range tests, found in its code, against what the profile patches.
@@ -351,7 +356,9 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   // Their run-time addresses are the flash alias plus where the block lands, known only now: plan
   // again at that address. The plan's choices depend on sizes alone, so they cannot change.
   const container = img;
-  const layout = pl.layout ?? defaultLayout(base, pl.menus, (k) => sel.find((s) => s.m.key === k)!.id);
+  // the layout this build embeds, with the UW answer when there is one (decodeLayout reads it back)
+  const answer = opt.noUw || opt.uw === false ? false : opt.uw;
+  const layout = pl.layout ?? { ...defaultLayout(base, pl.menus, (k) => sel.find((s) => s.m.key === k)!.id), ...(answer === undefined ? {} : { uw: answer }) };
   const streamEnd = sD2 + 8 + comp.length - pad;
   const payloadAt = (streamEnd + 3) & ~3;
   if (reclaimTail) {
@@ -461,6 +468,25 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   }
   for (const s of O.familyBaseSites) { patches.push([s, family]); checks.push([s, O.familyTable]); }
   for (const s of O.familyListSites) { patches.push([s, family + 4]); checks.push([s, O.familyTable + 4]); }
+  // a Machinedrum without UW hides ROM and RAM, not two of our categories (engine/src/uw_menu.ts)
+  // Without the fix a non-UW unit shows the wrong categories (1.63, DEV), or opens the machine menu
+  // on the wrong one and, on X.13, hangs at boot. A build for a Machinedrum without UW must have
+  // it; a build for a UW unit still builds without it and says so.
+  let uwWhy: string;
+  let uwOk = true;
+  if (!O.uwMenu || !ram.uwMenu) {
+    uwWhy = !O.uwMenu ? `not found (${base.support.uwMenu?.why ?? 'not discovered'})` : "the base's table has no ROM and RAM records to remove";
+    uwOk = !noUw;
+    if (noUw) uwWhy += ': a Machinedrum without UW would show the wrong categories';
+  } else {
+    try {
+      const u = uwMenuPatches(O.uwMenu, ram.uwMenu.entry);
+      patches.push(...u.patches); checks.push(...u.checks);
+      uwWhy = `without UW, ${h(ram.uwMenu.entry)} removes ROM and RAM from the family table before ${O.uwMenu.kind === 'count' ? 'the count' : "the add-on's family routine"} ` +
+        `(${h(O.uwMenu.entry)}, entered from ${O.uwMenu.callers.map((c) => h(c - 2)).join(', ')}); the base's own non-UW step at ${h(O.uwMenu.branch)} is skipped`;
+    } catch (e) { uwOk = false; uwWhy = (e as Error).message; }
+  }
+  gate('uw-menu', uwOk, uwWhy);
   if (ram.dsp1) {
     const F = base.features.dsp1Drive!;
     for (const s of F.senderSites) { patches.push([s, ram.dsp1.entry]); checks.push([s, F.sender]); }
@@ -652,7 +678,9 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
                        loop_skip: O.ctrLoopSkip ? h(O.ctrLoopSkip.site) : null, patched: caFix, ids: O.ctrMask.ids },
     ctr: { needed: c.needed, tests: c.found.size, patched: c.needed ? O.ctrMask.sites.length : 0,
            missed: c.missed.map(h), extra: c.extra.map(h) },
-    notes: stub && !stub.applied ? [...pl.notes, stub.note] : pl.notes,
+    notes: [...pl.notes, ...(stub && !stub.applied ? [stub.note] : []),
+      // only when the UW question was not answered (with Yes they are fine, with No there are none)
+      ...sel.filter((s) => opt.uw === undefined && !noUw && s.id >= 128).map((s) => `${s.m.name.trim()} is on ID ${s.id}: a Machinedrum without UW cannot use IDs 128 and up (it selects ${s.id - 128} instead); give it an ID below 128 in the layout for such a unit`)],
     features: {
       dyn_labels: ram.dyn ? { bytes: ram.dyn.blob.length, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
       dsp1_drive: ram.dsp1 ? { machines: ram.dsp1.pairs.length, entry: h(ram.dsp1.entry), laws: ram.dsp1.link.laws } : null,

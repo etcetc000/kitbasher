@@ -58,6 +58,15 @@
 //                        On by default; --no-align gives plain first-fit placement, which the parity
 //                        tests compare against
 //   --no-align           turn it off
+//   --no-uw              the Machinedrum has no UW option: no machine on IDs 128 and up (a restored ID
+//                        there moves to the lowest free ID below 128, reported); models that play a UW
+//                        sample are left out, and named
+//   --uw                 the Machinedrum has the UW option (recorded in the embedded layout)
+//   --restore <file>     keep the machine IDs of a previous session: a project file (.kitbasher.json), a
+//                        layout file, or a .syx/.bin Kitbasher built (its layout table, or else its
+//                        descriptor table matched to the catalog). Same as --map for a layout file
+//   --legacy-ids         the IDs earlier Kitbasher builds gave (before 2026-10: OSCPW 175, ...), for kits
+//                        saved with them (engine/src/legacy_ids.ts)
 //   --family-menus       menu categories by pack family in pack order (the layout the parity tests
 //                        use) instead of the sound categories (KIK, SNR, HAT, ...)
 //   --map <file>         the user's layout (md-layout/1: IDs and menu categories); the build honours
@@ -77,14 +86,19 @@ import { NotPatchable, resolveBase, supportLine } from './bases.js';
 import { build } from './build.js';
 import { readFirmware } from './container.js';
 import { loadBases, loadPacks, LOCAL_PACKS } from './node.js';
-import { findLayout, fingerprint, parseLayout } from './layout.js';
+import { findLayout, fingerprint, listedFreeIds, parseLayout } from './layout.js';
+import { legacyLayout } from './legacy_ids.js';
+import { needsUwSamples } from './packs.js';
+import { select } from './selection.js';
+import { recoverSession } from './restore.js';
+import { decodeProject } from './project.js';
 import { containerOf, encodeSyx } from './syx.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
-                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim']);
+                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw', 'legacy-ids']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -155,14 +169,59 @@ async function main(): Promise<void> {
   for (const d of disagreements) console.log(`  CACHE DISAGREES (discovery wins): ${d}`);
   for (const [k, v] of Object.entries(base.support)) if (!v.ok) console.log(`  not supported on this base: ${supportLine(k, v)}`);
   const cap = a['trim-cap'] === undefined ? 0.55 : Number(a['trim-cap']);
+  if (a['no-uw'] && a.uw) throw new Error('--uw and --no-uw: choose one');
+  let uw = a['no-uw'] ? false : a.uw ? true : undefined;
+  const all = select(packs, {}).fams.flatMap((f) => f.models);
+  // the session whose IDs to keep
+  let layout = a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined;
+  if (a.restore) {
+    const bytes = readFileSync(a.restore);
+    if (/\.(syx|bin)$/i.test(a.restore)) {
+      const r = recoverSession(readFirmware(bytes), all, base.os.descriptorTable);
+      if (!r) throw new Error(`${a.restore}: not an OS Kitbasher built (no layout table, no added machines found)`);
+      layout = { ...r.layout, base: r.layout.base || base.id };
+      console.log(`restored from ${a.restore} (${r.how === 'table' ? 'its layout table' : 'its descriptor table'}): ${Object.keys(layout.machines).length} machines` +
+        (r.unknown.length ? `; not in this catalog: ${r.unknown.map((u) => `${u.name} on ${u.id}`).join(', ')}` : ''));
+    } else {
+      const text = bytes.toString('utf8');
+      layout = JSON.parse(text).format === 'kitbasher-project/1' ? (await decodeProject(text)).layout ?? undefined : parseLayout(text);
+    }
+  }
+  let allowIdMove = !!a['allow-id-move'];
+  // a session made on another base: rebased onto this one; machines whose ID this base uses move
+  if (layout && layout.base && layout.base !== base.id) {
+    console.log(`the restored session was made for ${layout.base}: applied to ${base.name}; any machine whose ID it uses moves (listed below)`);
+    layout = { ...layout, base: base.id };
+    allowIdMove = true;
+  }
+  // the session's UW answer, when no flag gives one
+  if (uw === undefined && layout?.uw !== undefined) {
+    uw = layout.uw;
+    console.log(`the restored session was made for a Machinedrum ${uw ? 'with' : 'without'} UW (--uw / --no-uw to override)`);
+  }
+  // without UW, models that play a UW sample cannot work: leave them out, and say so
+  let exclude = a.exclude ? a.exclude.split(',') : undefined;
+  if (uw === false) {
+    const want = new Set(a.families ? a.families.split(',') : select(packs, {}).fams.map((f) => f.name));
+    const out = select(packs, {}).fams.filter((f) => want.has(f.name)).flatMap((f) => f.models).filter(needsUwSamples)
+      .filter((m) => !(exclude ?? []).includes(m.module));
+    if (out.length) { console.log(`left out (they play UW samples, which a Machinedrum without UW does not have): ${out.map((m) => m.name.trim()).join(', ')}`); exclude = [...(exclude ?? []), ...out.map((m) => m.module)]; }
+  }
+  if (a['legacy-ids']) {
+    if (layout) throw new Error('--legacy-ids is a layout of its own: do not combine it with --map or --restore');
+    const fw0 = readFirmware(input);
+    const chosen = select(packs, { families: a.families ? a.families.split(',') : undefined, exclude }).fams;
+    layout = legacyLayout(base, fw0.slots[0].raw, chosen, listedFreeIds(fw0, base));
+  }
   const { output, report, gateReport } = await build(input, base, packs, core, {
-    allowIdMove: !!a['allow-id-move'],
+    allowIdMove,
+    uw,
     ctrControlAll: !!a['ctr-control-all'] || !!a['clean-recovery'],
-    layout: a.map ? parseLayout(readFileSync(a.map, 'utf8')) : undefined,
+    layout,
     align: a['no-align'] ? false : a['cache-align'] ? true : undefined,
     menus: a['family-menus'] ? 'family' : undefined,
     families: a.families === 'none' ? [] : a.families ? a.families.split(',') : undefined,
-    exclude: a.exclude ? a.exclude.split(',') : undefined,
+    exclude,
     trim: { db: Number(a['trim-db'] ?? -30), minSeconds: Number(a['trim-min'] ?? 0.5), cap: cap || null },
     stubTrim: a['no-stub-trim'] ? false : undefined,
     dsp1Watchdog: a['dsp1-watchdog'] === undefined ? undefined : Number(a['dsp1-watchdog']),

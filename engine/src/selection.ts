@@ -2,7 +2,10 @@
 import type { Base } from './bases.js';
 import type { Layout } from './layout.js';
 import { u32 } from './bytes.js';
-import { checkPack, type Pack, type PackModel, type PackTable } from './packs.js';
+import { checkPack, needsUwSamples, type Pack, type PackModel, type PackTable } from './packs.js';
+
+/** Machine IDs a Machinedrum without UW can use: below 128 (it takes 128 off any higher one). */
+export const NO_UW_ID_LIMIT = 128;
 
 export interface ModelFilter {
   modelKeys?: string[];
@@ -97,7 +100,7 @@ export function resolveLayout(l: Layout, aliases: Map<string, string>): Layout {
     from.set(key, k);
     machines[key] = p;
   }
-  return { format: l.format, base: l.base, categories: l.categories, machines };
+  return { format: l.format, base: l.base, categories: l.categories, machines, ...(l.uw === undefined ? {} : { uw: l.uw }) };
 }
 
 export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; shared: PackTable[]; aliases: Map<string, string> } {
@@ -129,78 +132,97 @@ export function select(packs: Pack[], opt: ModelFilter): { fams: Family[]; share
 }
 
 /**
- * Every machine on its preferred ID. Saved kits address machines by ID, so an ID that is not
- * free is an error naming why; only with `allowMove` does the machine take the next free ID up,
- * and every such move is returned.
+ * Machine IDs, bottom-up. Every selected model takes the lowest free ID, in a fixed order (`rank`,
+ * then catalog order), so the same selection on the same base always gets the same IDs. A model's
+ * own `id` in its pack is not a pin any more (engine/src/legacy_ids.ts keeps the IDs it gave).
+ *
+ * Saved kits find machines by ID, so what keeps a kit working is the session it was made with: a
+ * `layout` (from a project file, a layout file or a patched OS) puts every machine it names on its
+ * ID, and only the models it does not name fill free IDs. An ID the layout gives that the base
+ * cannot take is an error naming why (with `allowMove`: the machine takes the lowest free ID and
+ * the move is reported).
+ *
+ * `noUw` (a Machinedrum without UW, which takes 128 off any machine ID of 128 and up): nothing goes
+ * on 128 and up. A layout ID there moves to the lowest free ID below 128, reported as a move; a
+ * model that plays a UW sample is refused. The build fails, saying so, if no ID below 128 is left.
  */
 export function allocateIds(base: Base, main: Uint8Array, fams: Family[], allowMove: boolean, layout: Layout | undefined,
-  listed: Map<number, string>): { sel: Selected[]; moves: IdMove[]; problems: string[] } {
+  listed: Map<number, string>, opt: { noUw?: boolean; rank?: (m: PackModel) => number } = {}): { sel: Selected[]; moves: IdMove[]; problems: string[]; reused: { id: number; key: string }[] } {
   const o = base.os;
+  const noUw = !!opt.noUw;
+  const top = noUw ? NO_UW_ID_LIMIT : 192;
+  const HIGH = 'an ID a Machinedrum without UW cannot use (128 and up)';
   const taken = new Map<number, string>();
+  const inRange = (id: number): boolean => Number.isInteger(id) && id >= 0 && id < 192;
   const why = (id: number): string | null => {
-    if (!Number.isInteger(id) || id < 0 || id >= 192) return 'outside 0..191';
+    if (!inRange(id)) return 'outside 0..191';
     if (listed.has(id)) return `${base.name}'s own ${listed.get(id)} (its menu lists it)`;
     if (id >= o.deadIds[0] && id <= o.deadIds[1]) return 'in the MIDI range with no parameter packet';
     if (taken.has(id)) return `taken by ${taken.get(id)}`;
     if (u32(main, o.descriptorTable + 4 * id - o.cfBase) !== o.freeDescriptor) return `taken by one of ${base.name}'s own machines`;
+    if (id >= top) return HIGH;
     return null;
   };
+  // A restored session's machines that are not selected now keep their IDs reserved: a kit made
+  // with that session may still use them, and a later build that selects them again must find
+  // them free. Only when no other ID is left is one taken back (the lowest), and that is reported.
+  const reserved = new Map<number, string>();
+  const reused: { id: number; key: string }[] = [];
+  const selectedKeys = new Set(fams.flatMap((f) => f.models.map((m) => m.key)));
+  for (const [k, p] of Object.entries(layout?.machines ?? {})) {
+    if (!selectedKeys.has(k) && inRange(p.id) && !reserved.has(p.id)) reserved.set(p.id, k);
+  }
+  const lowest = (): number => {
+    let v = 0;
+    while (v < top && (why(v) || reserved.has(v))) v++;
+    if (v < top) return v;
+    for (v = 0; v < top && why(v); v++) ;                 // every free ID is reserved: take one back
+    if (v < top) { reused.push({ id: v, key: reserved.get(v)! }); reserved.delete(v); }
+    return v;
+  };
+  const none = (name: string): string => `no free machine ID ${noUw ? 'below 128 ' : ''}left for ${name}: remove a selected model; sample trimming does not free IDs`;
   const sel: Selected[] = [];
   const moves: IdMove[] = [];
   const problems: string[] = [];
-  const blocked: string[] = [];
-  // the map's IDs first: they are the user's, and a machine the map does not name yields to them
-  const mapOk = new Set<string>();
-  const automaticId = (m: PackModel): boolean => !!m.contract?.components.dsp2?.source && m.contract.injection.id === undefined;
-  const ordered = fams.flatMap(f => f.models.map(m => ({ f, m })));
-  // Place existing/pinned models before unassigned contributions. Otherwise an
-  // earlier category's automatic model can steal a later model's existing ID.
-  // Menu order is restored below; it is independent of placement priority.
-  const allocationOrder = [...ordered].sort((a, b) => Number(automaticId(a.m)) - Number(automaticId(b.m)));
-  for (const { m } of ordered) {
+  const catalog = fams.flatMap((f) => f.models.map((m) => ({ f, m })));
+  const rank = opt.rank ?? (() => 0);
+  const ordered = catalog.map((x, i) => ({ ...x, i })).sort((a, b) => rank(a.m) - rank(b.m) || a.i - b.i);
+  if (noUw) {
+    for (const { m } of ordered) {
+      if (needsUwSamples(m)) problems.push(`${m.name.trim()} plays a sample from UW sample memory, which a Machinedrum without UW does not have: leave it out`);
+    }
+  }
+  // 1. the session's IDs: they are the user's kits
+  const later: { f: Family; m: PackModel; from: number; why: string; category: string }[] = [];
+  for (const { f, m } of ordered) {
     const p = layout?.machines[m.key];
     if (!p) continue;
-    const w = why(p.id);
-    if (w) { problems.push(`the map puts ${m.name.trim()} on ID ${p.id}, which is ${w}`); continue; }
-    taken.set(p.id, m.name.trim());
-    mapOk.add(m.key);
-  }
-  for (const { f, m } of allocationOrder) {
     const name = m.name.trim();
-    const want = m.id;
-    const automatic = automaticId(m);
-    const p = layout?.machines[m.key];
-    if (p) {
-      if (mapOk.has(m.key)) sel.push({ m, family: p.category, id: p.id, preferred: want, mapped: true });
-      continue;
-    }
-    const w = why(want);
-    let id = want;
-    if (automatic) {
-      id = 0;
-      while (id < 192 && why(id)) id++;
-      if (id >= 192) { problems.push(`no free machine ID left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
-      taken.set(id, name);
-      sel.push({ m, family: f.name, id, preferred: id, mapped: false });
-      continue;
-    }
-    if (w) {
-      if (!allowMove) {
-        blocked.push(`${name} (ID ${want}, ${w})`);
-        continue;
-      }
-      while (id < 192 && why(id)) id++;
-      if (id >= 192) { problems.push(`no free machine ID left for ${name}: remove a selected model; sample trimming does not free IDs`); continue; }
-      moves.push({ name, module: m.module, preferred: want, id, why: w });
-    }
+    if (!inRange(p.id)) { problems.push(`the map puts ${name} on ID ${p.id}, which is outside 0..191`); continue; }
+    const w = why(p.id);
+    if (!w) { taken.set(p.id, name); sel.push({ m, family: p.category, id: p.id, preferred: p.id, mapped: true }); continue; }
+    if (w === HIGH || allowMove) { later.push({ f, m, from: p.id, why: w, category: p.category }); continue; }
+    problems.push(`the map puts ${name} on ID ${p.id}, which is ${w}`);
+  }
+  // 2. the session's machines that cannot keep theirs (without UW: 128 and up), lowest free first
+  for (const x of later) {
+    const name = x.m.name.trim();
+    const id = lowest();
+    if (id >= top) { problems.push(`${none(name)} (the map puts it on ${x.from})`); continue; }
     taken.set(id, name);
-    sel.push({ m, family: f.name, id, preferred: want, mapped: false });
+    moves.push({ name, module: x.m.module, preferred: x.from, id, why: x.why });
+    sel.push({ m: x.m, family: x.category, id, preferred: x.from, mapped: true });
   }
-  if (blocked.length) {
-    problems.push(`machine ID not free: ${blocked.join(', ')}. Saved kits find machines by ID, so a machine is not ` +
-                  'moved to another ID unless you allow it (--allow-id-move); or leave it out');
+  // 3. every other model, bottom-up
+  for (const { f, m } of ordered) {
+    if (layout?.machines[m.key]) continue;
+    const name = m.name.trim();
+    const id = lowest();
+    if (id >= top) { problems.push(none(name)); continue; }
+    taken.set(id, name);
+    sel.push({ m, family: f.name, id, preferred: id, mapped: false });
   }
-  const menuOrder = new Map(ordered.map(({ m }, i) => [m.key, i]));
-  sel.sort((a, b) => menuOrder.get(a.m.key)! - menuOrder.get(b.m.key)!);
-  return { sel, moves, problems };
+  const menuIndex = new Map(catalog.map(({ m }, i) => [m.key, i]));
+  sel.sort((a, b) => menuIndex.get(a.m.key)! - menuIndex.get(b.m.key)!);
+  return { sel, moves, problems, reused };
 }

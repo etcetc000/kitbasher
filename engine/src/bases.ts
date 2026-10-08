@@ -120,6 +120,8 @@ export interface Base {
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;
     familyTable: number; familyBaseSites: number[]; familyListSites: number[];
+    /** how a unit without UW hides ROM and RAM (engine/src/uw_menu.ts); null: not found */
+    uwMenu: import('./uw_menu.js').UwMenu | null;
     pageDraw: number; redrawStub: number;
     heap: { site: number; old: number };
     heapStart: number;
