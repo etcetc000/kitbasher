@@ -590,9 +590,12 @@ test('firmware: discovery finds what each profile caches for the fix, and the fi
 // changes these: record the new hash from a build without the fix, and say why in the change.
 // 255c0ec: VADSY and VADPC re-assembled with label targets (2b1bd79) changed the catalog's code;
 // the engine of 255c0ec with the catalog from before 2b1bd79 still gives the earlier db5a9921... / a2976aa1...
+// d360e4b: NFX4P joined the catalog (catalog/effects-ladder.json); the engine of d360e4b with that file
+// left out of catalog/ still gives the earlier 95d8fa8a... / 1874e754...
+// golden_catalog.test.ts records the catalog these were built from, so CI notices a catalog change.
 const GOLDEN_OFF: Record<string, string> = {
-  x14: '95d8fa8ac20c959f9b9b2fd58b2889c37ffd277ca325cd4bcf170c6bbbd9a9ed',
-  'stock-163-prepared': '1874e754acdc25c6b9dfa3b85eed46decdb39aa2c88368315e1115e9e082cc16',
+  x14: '4c73c964c58910388b0dc2d15ca9514c7736e8ac85eb5e9059950fafca32a470',
+  'stock-163-prepared': 'e037e2ee58d697ac32fed7e9cbba2c464d956f2b7f0e4544b8066eb18db326b3',
 };
 
 test('firmware: --no-unmute-fix builds the image the build made before the fix', { skip: fwSkip }, async () => {
