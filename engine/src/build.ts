@@ -110,8 +110,8 @@ export interface BuildReport {
   notes: string[];
   features: { dyn_labels: { bytes: number; free: number; page_sites: number } | null; dsp1_drive: { machines: number; entry: string; laws: string[] } | null;
               host_reorder: { entry: string; bytes: number; old: string; sites: string[] } | null;
-              /** the unmute-latency fix: where its routines are, the sites that call them, the grace in ticks */
-              unmute_fix: { at: string; bytes: number; code_bytes: number; home: 'dyn' | 'own'; sites: string[]; grace_ticks: number } | null;
+              /** the unmute-latency fix: where its routines are and the sites that call them (its bytes are not in dyn_labels) */
+              unmute_fix: { at: string; bytes: number; code_bytes: number; home: 'dyn' | 'own'; sites: string[] } | null;
               desc_flash: string[]; notes: string[] };
   /** layout_table..os_end is the layout table, which every build appends after the boot routine */
   flash: { addon: string | null; boot_routine: string; os_end: string; headroom: number; patches: number; layout_table: string; layout_bytes: number };
@@ -554,8 +554,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   const um = ram.unmute ? unmutePatches(base.features.unmute!, ram.unmute.block, reader(live)) : null;
   if (um) {
     const touches = (s: number, lo: number, hi: number): boolean => s + 4 > lo && s < hi;
-    const spans = um.patches.map(([s]) => s);
-    const clash = patches.filter(([s]) => um.ranges.some(([lo, hi]) => touches(s, lo, (lo + ((hi - lo + 3) & ~3)))) && !spans.includes(s));
+    const clash = patches.filter(([s]) => um.ranges.some(([lo, hi]) => touches(s, lo, (lo + ((hi - lo + 3) & ~3)))));
     gate('unmute-sites', clash.length === 0, clash.length ? `other patch-list writes touch the sequencer sites: ${clash.map(([s]) => h(s)).join(', ')}`
       : `${um.ranges.length} sites, ${um.patches.length} longword writes, no other write touches them`);
     patches.push(...um.patches);
@@ -567,6 +566,14 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   });
   gate('patch-sites', bad.length === 0, bad.length ? `unexpected words at ${bad.map(([s]) => h(s)).join(', ')}` :
        `${checks.length} sites hold what this base's profile says`);
+  // every address once: the boot routine applies the list in order, so a second write to an address
+  // would silently replace the first
+  {
+    const seen = new Set<number>();
+    const twice = [...new Set(patches.filter(([a]) => seen.has(a) || !seen.add(a)).map(([a]) => a))];
+    gate('patch-list-unique', twice.length === 0, twice.length ? `addresses written more than once: ${twice.map(h).join(', ')}`
+      : `${patches.length} patch-list writes, each to its own address`);
+  }
   const patchSrc = img.length;
   assertBootRamWrites(patches, base.boot.sram);
   for (const [a, v] of patches) img.push(be32(a), be32(v));
@@ -706,19 +713,23 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     if (!segment || !carried || !equal(carried, B0.bytes)) why.push('the routines are not in the label segment copy the image carries, as assembled');
     const code = checkUnmuteCode(U, B0.bytes.subarray(0, B0.codeBytes), B0.at);
     why.push(...code.problems);
-    const written = new Map(readBootRamWrites(image, u32(image, B.jumpOperand), B.sram).map(([a, v]) => [a, v]));
+    const list = readBootRamWrites(image, u32(image, B.jumpOperand), B.sram);
+    const written = new Map(list.map(([a, v]) => [a, v]));
+    if (written.size !== list.length) why.push('the emitted patch list writes an address more than once');
     for (const [a, v] of um!.patches) if (written.get(a) !== v) why.push(`patch-list write at ${h(a)} reads back ${written.has(a) ? h(written.get(a)!) : 'missing'}`);
     for (const [a] of written) if (a + 4 > B0.at && a < B0.at + B0.bytes.length) why.push(`a patch-list write at ${h(a)} lands in the routines`);
     gate('unmute-fix', why.length === 0, why.length ? why.slice(0, 6).join('; ') :
       `${B0.codeBytes} bytes of code (${code.count} ISA_A instructions) and ${B0.bytes.length - B0.codeBytes} of data at ${h(B0.at)}..${h(B0.at + B0.bytes.length)} ` +
       `(${ram.unmute.home === 'dyn' ? 'after the knob labels' : 'alone'} in the label RAM range); ` +
-      `${U.sites.map((s) => `${s.name} ${h(s.at)}`).join(', ')} call it; grace ${B0.grace} tick`);
+      `${U.sites.map((s) => `${s.name} ${h(s.at)}`).join(', ')} call it`);
   }
 
   // ---- every added instruction, and every one a patched word lands in, is ColdFire ISA_A
   const isa = isaGate(fw, base, back);
   gate('isa', isa.ok, isa.detail + (isa.rejects.length ? `; ${isa.rejects.slice(0, 3).map((i) => `${h(i.at)} ${i.name}: ${i.why}`).join('; ')}` : ''));
 
+  // the label segment's own bytes (with the CPU indicator stub, as before), without the unmute block after them
+  const labelBytes = !ram.dyn ? 0 : ram.unmute?.home === 'dyn' ? ram.unmute.block.at - ram.dyn.base : ram.dyn.blob.length;
   const report: BuildReport = {
     model_runtime:base.modelRuntime,
     base: base.id,
@@ -748,11 +759,11 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
            missed: c.missed.map(h), extra: c.extra.map(h) },
     notes: [...pl.notes, ...(stub && !stub.applied ? [stub.note] : [])],
     features: {
-      dyn_labels: ram.dyn ? { bytes: ram.dyn.blob.length, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
+      dyn_labels: ram.dyn ? { bytes: labelBytes, free: ram.dyn.limit - ram.dyn.blob.length, page_sites: pageSites.length } : null,
       dsp1_drive: ram.dsp1 ? { machines: ram.dsp1.pairs.length, entry: h(ram.dsp1.entry), laws: ram.dsp1.link.laws } : null,
       host_reorder: ram.hostSend ? { entry: h(ram.hostSend.entry), bytes: ram.hostSend.bytes, old: h(ram.hostSend.old), sites: ram.hostSend.sites.map(h) } : null,
       unmute_fix: ram.unmute ? { at: h(ram.unmute.block.at), bytes: ram.unmute.block.bytes.length, code_bytes: ram.unmute.block.codeBytes, home: ram.unmute.home,
-                                 sites: base.features.unmute!.sites.map((s) => h(s.at)), grace_ticks: ram.unmute.block.grace } : null,
+                                 sites: base.features.unmute!.sites.map((s) => h(s.at)) } : null,
       desc_flash: pr.features.descFlash, notes: pr.features.notes,
     },
     flash: { addon: addonAt === null ? null : h(addonAt), boot_routine: h(routine), os_end: h(osEnd), headroom: OS_LIMIT - osEnd, patches: patches.length,
@@ -780,7 +791,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     dsp1: ram.dsp1 ? { id_space: idSpace, cf_code: idSpace + core.dsp1.cache_bytes, transport: h(ram.dsp1.entry),
                        drive: Object.fromEntries(ram.dsp1.pairs.map(([id, v]) => [String(id), v])), laws: ram.dsp1.link.laws }
                    : { drive: {}, laws: [] },
-    dyn_labels: ram.dyn ? { base: h(ram.dyn.base), end: h(ram.dyn.base + ram.dyn.blob.length), bytes: ram.dyn.blob.length } : null,
+    dyn_labels: ram.dyn ? { base: h(ram.dyn.base), end: h(ram.dyn.base + labelBytes), bytes: labelBytes } : null,
     fingerprint: { overlay: false, dynamic: !!ram.dyn, probe: false, flash_high: '0x0', tick_tail_jmp: null, loader_bytes: null },
     recipe: {
       ...(pr.features.descFlash.length ? { MD_DESC_FLASH: pr.features.descFlash.join(',') } : {}),
@@ -829,7 +840,7 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     // present only with the unmute-latency fix: the patched sequencer words and the routines, so a
     // checker that compares the OS against the base can allow those words and verify the routines
     ...(um === null ? {} : { unmute_fix: { at: h(ram.unmute!.block.at), bytes: ram.unmute!.block.bytes.length, code_bytes: ram.unmute!.block.codeBytes,
-                                           grace_ticks: ram.unmute!.block.grace, writes: um.patches.map(([a, v]) => [h(a), h(v)]),
+                                           writes: um.patches.map(([a, v]) => [h(a), h(v)]),
                                            sites: base.features.unmute!.sites.map((s) => ({ name: s.name, at: h(s.at), bytes: s.old.length })) } }),
     ...(opt.features?.cleanRecovery?{clean_recovery:{version:1,threshold:64,diagnostics:false,modelCodeUnchanged:true}}:{}),
     flash: { addon: addonAt === null ? null : h(addonAt), os_end: h(osEnd), headroom: OS_LIMIT - osEnd },

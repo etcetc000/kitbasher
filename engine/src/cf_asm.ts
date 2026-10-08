@@ -3,7 +3,7 @@
 // Reference. Everything assembled here is also decoded by isa.ts (decodeLinear and the ISA gate)
 // before it is written, so an encoding mistake fails the build rather than the instrument.
 //
-// Operands: d0..d7, a0..a7, (aN), -(aN), d16(aN), d8(aN,dM.l[*s]), #imm, #@label (a label's address
+// Operands: d0..d7, a0..a7, (aN), (aN)+, -(aN), d16(aN), d8(aN,dM.l[*s]), #imm, #@label (a label's address
 // as a long immediate), 0x...w / 0x...l (absolute), @label (absolute long to a label), sr.
 
 type Word = [number | (() => number), 2 | 4];
@@ -40,6 +40,7 @@ export class Asm {
     const r = REG(s);
     if (r) return { mode: r.k === 'd' ? 0 : 1, reg: r.r, ext: [] };
     if ((m = /^\(a([0-7])\)$/.exec(s))) return { mode: 2, reg: +m[1], ext: [] };
+    if ((m = /^\(a([0-7])\)\+$/.exec(s))) return { mode: 3, reg: +m[1], ext: [] };
     if ((m = /^-\(a([0-7])\)$/.exec(s))) return { mode: 4, reg: +m[1], ext: [] };
     if ((m = /^(-?\d+)\(a([0-7])\)$/.exec(s))) {
       const d = +m[1];

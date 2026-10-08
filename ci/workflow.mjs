@@ -97,7 +97,7 @@ try {
       inventory();
       pythonInventory();
       run(python(), ['-c', "import sys; sys.path.insert(0, 'build/manifest-deps'); import jsonschema; print('Python:', sys.version.split()[0]); print('jsonschema: available')"]);
-      for (const k of ['packDir', 'uwAssets', 'assembler', 'dspHost'])
+      for (const k of ['packDir', 'uwAssets', 'assembler', 'dspHost', 'firmwareDir'])
         console.log(`${k}: ${c[k] ? (existsSync(c[k]) ? c[k] : `${c[k]} (not found; optional)`) : 'not configured (optional)'}`);
       console.log('Ready for npm run check.');
       break;

@@ -86,20 +86,23 @@ X.14 or DEV 26A01.
 On every 1.63-derived OS the sequencer builds each step's notes one step ahead
 and leaves a muted track out of them, so a track unmuted less than about one
 step before its next trig stays silent for that trig. Builds fix this by
-default (`engine/src/unmute.ts`): muted tracks are queued too, and their notes
-are dropped when the step plays if the track is still muted. An unmute up to
-the trig plays it on time; one up to a tick (1/6 of a step) after it plays it
-one tick late. Muting is unchanged, and so are MIDI machines, which keep the
-base's behaviour.
+default (`engine/src/unmute.ts`): muted tracks are queued too, and the mute is
+tested when each queue is played instead. The rule is that a trig plays when its
+track is unmuted on the tick that plays it: the step's tick, or for a swung trig
+the swing tick (the same tick at 50% swing, up to 0.6 of a step later at 80%).
+An unmute that lands before that tick plays the trig on time;
+one that lands after it does not, as on a base without the fix. Muting is
+unchanged, and so are MIDI machines, which keep the base's behaviour.
 
-Five instructions of the OS's sequencer call 642 bytes of code (and 78 of data)
+Five instructions of the OS's sequencer call 360 bytes of code (and 44 of data)
 placed after the knob labels in their RAM range, or alone in that range when no
-selected machine has labels. Discovery finds the sequencer by signature; on OS
-1.63 (prepared), X.13 and X.14 it is the same code, and the routines take the
-base's own MIDI send and interrupt level from it. The DEV builds enter their own
-code from the sequencer's tick handler and buffer toggle, so the fix is not
-offered there. Turn it off with *Fix unmute latency* on the Download step or
-`--no-unmute-fix`; the image is then the one a build without the fix makes.
+selected machine has labels. Discovery finds the sequencer by signature, and the
+base's profile must record the fix as run on it: OS 1.63 (prepared) and X.14
+have it. X.13 has the same sequencer but is not offered the fix, as its support
+is ending; the DEV builds enter their own code from the sequencer's tick handler
+and buffer toggle, so discovery does not find it there. Turn it off with *Fix
+unmute latency* on the Download step or `--no-unmute-fix`; the image is then
+the one a build without the fix makes.
 
 ## X.14
 

@@ -26,15 +26,19 @@
   "by": "Tested in the emulator only"
  },
  "options": {
+  "unmuteFix": {
+   "ok": true,
+   "evidence": "Emulator: unmute by MIDI CC and MUTE-mode keys at 30 and 120 BPM, swing 50/58/80%, muting unchanged; not yet on hardware."
+  },
   "hostSend": {
    "ok": false,
    "why": "in the emulator the prepared 1.63 base goes silent with the reorder (DSP2 renders the silence stub on every track) and plays with the stock sender. The failing reference is the per-track send loop in the DSP interrupt's SRAM code (jsr at 0x100055c). DEV has the same loop and plays, but DEV feeds MIDI through its own per-block queue and 1.63 does not. The cause is not yet known, so the option stays off on this base."
   }
  },
  "cache": {
-  "unmute.sites": "0x23a92c,0x23a9a2,0x23aa20,0x2397e0,0x23976a",
-  "unmute.calls": "0x206c8e,0x213dc4,0x23abfa,0x23aac0",
-  "unmute.data": "0x1001520,0x28d152,0x7120ca,0x71217a,0x7120dc,0x1001560",
+  "unmute.sites": "0x23a92c,0x23a9a2,0x23aa20,0x2397e0,0x239f7e",
+  "unmute.calls": "0x23abfa,0x23aac0",
+  "unmute.data": "0x1001520,0x28d152,0x28d166,0x28d13c,0x7120ca,0x71217a,0x7120dc",
   "boot.routine": "0xe96e0",
   "boot.jump_operand": "0xe96e2",
   "os_main": "0x213a0c",

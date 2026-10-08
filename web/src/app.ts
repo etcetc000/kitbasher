@@ -455,6 +455,7 @@ async function onFile(f: File): Promise<void> {
   input = null; base = null; fw = null; current = null; cachedBuild = null;
   $('room').hidden = true;
   $('firmware-options').hidden = true;
+  $<HTMLInputElement>('unmute-fix').checked = true;   // a new OS starts from the default
   $('firmware-details').hidden = true;
   layoutEd.render(null);
   syncWizard();
