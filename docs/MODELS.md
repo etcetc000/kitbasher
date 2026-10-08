@@ -11,11 +11,12 @@ assigned machine ID; none replaces a stock machine.
 | Community voices | [`examples/community`](../examples/community/README.md) | OSCAC, FMS4O, OSCSP, VOXFR, WAVSP (archived: not on the site) | GPL v3 or later |
 | Noise Plethora | [`examples/noise-plethora`](../examples/noise-plethora/README.md) | NZEPL (30 programs) | GPL-3.0-or-later; Teensy Audio parts MIT |
 | Physical models | [`examples/physical`](../examples/physical/README.md) | PHYKS | MIT |
+| Effects | [`examples/effects`](../examples/effects/README.md) | NFX4P | GPL v3 or later |
 | Scaffold | [`examples/scaffold`](../examples/scaffold/README.md) | A silent starting point for your own model | GPL v3 or later |
 
 Model names say what engine they are: VAD (analog-style drum voices), FMS (FM),
 OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant),
-NZE (noise) and PHY (physical models). Renamed models keep their former keys as aliases, so a
+NZE (noise), PHY (physical models) and NFX (effects on the previous track). Renamed models keep their former keys as aliases, so a
 layout saved before the rename still loads and keeps every ID.
 
 ### Pitch
@@ -78,6 +79,17 @@ DAMP and a decaying pitch bend shape the string. Each trigger clears the slice i
 three chunks and stays silent for those 96 samples (about 2 ms). It has not been
 tested on hardware yet ([details](../examples/physical/ks/README.md)).
 
+## Effects
+
+NFX4P is a Moog-style 4-pole ladder filter (after Kocmoc uLADR) that processes the
+previous track's output. A trig runs an AD envelope on the cutoff, and the output
+VCA follows the envelope or opens a gate. It is a port of a custom OS 1.63
+machine, bit-exact with the original in a DSP kernel harness, and checked sample
+for sample against an integer model of it on a DSP instruction host
+(`npm run test:ladder`). It reads the source track before its level: turn that
+track's level down to hear only the filtered signal. It has not been tested on
+hardware in Kitbasher yet ([details](../examples/effects/ladder/README.md)).
+
 ## Building packs from these sources
 
 Export any model directory with the native assembler (see the
@@ -87,7 +99,7 @@ Export any model directory with the native assembler (see the
 python packs/assembly_export.py examples/analog/bd --out my-packs/vad-bd --assembler /path/to/asm56.exe
 ```
 
-`npm run test:community` exports every community, analog and physical model and checks
+`npm run test:community` exports every community, analog, physical and effect model and checks
 each one at eight relocation placements. Put the resulting packs in
 [`catalog/`](../catalog/README.md) to bundle them into the site, or load them in
 the page.
@@ -117,6 +129,7 @@ compete for the same cache, and the whole OS adds its own work.
 | WAVSP | 106.8 |
 | NZEPL | 125.4 (grainGlitchII, its costliest program) |
 | PHYKS | 120.2 (estimate) |
+| NFX4P | 141 (estimate; 110 with a constant cutoff) |
 
 When a kit asks for more than the DSP can give, overload recovery silences voices
 instead of letting the instrument stall. It does not make an expensive model

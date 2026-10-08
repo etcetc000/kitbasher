@@ -3,6 +3,7 @@
     "asm_targets_test",
     "assembly_source_test",
     "ksstr_test",
+    "ladder_test",
     "live_reload_test",
     "local_catalog_test",
     "manifest_test",

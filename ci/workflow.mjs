@@ -6,9 +6,11 @@
 //   build       typecheck, then bundle the site into web/dist
 //   check       typecheck, unit suites and build: the full gate CI runs
 //   assembly    instruction-encoding tests; needs the native assembler
-//   community-check  export examples/community, examples/analog and examples/physical and check
+//   community-check  export examples/community, examples/analog, examples/physical and examples/effects and check
 //               each pack holds exactly its model; needs the native assembler
 //   ksstr       run PHYKS from catalog/ on the DSP instruction host against its integer model;
+//               needs dspHost
+//   ladder      run NFX4P from catalog/ on the DSP instruction host against its integer model;
 //               needs dspHost
 //   dev         build and serve the site on 127.0.0.1 with live reload: dev [PACK_DIR] [PORT]
 //
@@ -118,12 +120,18 @@ try {
       run(python(), ['-B', 'ci/ksstr_check.py', '--pack', 'catalog/physical-ks.json', '--host', c.dspHost, '--out', out]);
       break;
     }
+    case 'ladder': {
+      required(c, ['dspHost']);
+      const out = join(root, 'build', `ladder-check-${Date.now()}`);
+      run(python(), ['-B', 'ci/ladder_check.py', '--pack', 'catalog/effects-ladder.json', '--host', c.dspHost, '--out', out]);
+      break;
+    }
     case 'assembly':
       required(c, ['assembler']);
       pythonTests('assembly');
       break;
     case 'dev': dev(process.argv.slice(3)); break;
-    default: throw new Error('Use doctor, typecheck, unit, build, check, assembly, community-check, ksstr or dev');
+    default: throw new Error('Use doctor, typecheck, unit, build, check, assembly, community-check, ksstr, ladder or dev');
   }
   console.log(`\n${command}: PASS (${((performance.now() - started) / 1000).toFixed(1)} s)`);
 } catch (e) { console.error(`\n${command}: FAIL: ${e.message}`); process.exitCode = 1; }

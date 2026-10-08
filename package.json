@@ -18,6 +18,7 @@
     "dev": "node ci/workflow.mjs dev",
     "test:community": "node ci/workflow.mjs community-check",
     "test:ksstr": "node ci/workflow.mjs ksstr",
+    "test:ladder": "node ci/workflow.mjs ladder",
     "install-hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {

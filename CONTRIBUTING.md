@@ -35,7 +35,7 @@ from an environment variable:
 | `packDir` | `MD_PACKS` | `npm run dev` and the CLI: your local pack directory (default `~/Documents/kitbasher-packs`) |
 | `uwAssets` | `MD_UW_ASSETS` | `npm run dev`: UW sample files to offer as downloads |
 | `assembler` | `MD_ASSEMBLER` | `npm run test:assembly`, `npm run test:community` and the model exporter |
-| `dspHost` | `MD_DSP_HOST` | `npm run test:ksstr`: a DSP56300 instruction host (see `ci/ksstr_check.py`) |
+| `dspHost` | `MD_DSP_HOST` | `npm run test:ksstr` and `npm run test:ladder`: a DSP56300 instruction host (see `ci/ksstr_check.py`) |
 | `firmwareDir` | `MD_FIRMWARE_DIR` | `npm test`: a directory of OS files you own, for the engine tests that need firmware (skipped without it; never commit firmware) |
 
 Values must be absolute paths. Only `packDir` has a default.
@@ -49,8 +49,9 @@ Values must be absolute paths. Only `packDir` has a default.
 | `npm run build` | Bundle the site into `web/dist` |
 | `npm run dev -- [PACK_DIR] [PORT]` | Build and serve the site on `127.0.0.1` (default port 8767), rebuilding as you edit |
 | `npm run test:assembly` | Instruction-encoding tests; needs the native assembler |
-| `npm run test:community` | Export every model in `examples/community`, `examples/analog` and `examples/physical`; needs the native assembler |
+| `npm run test:community` | Export every model in `examples/community`, `examples/analog`, `examples/physical` and `examples/effects`; needs the native assembler |
 | `npm run test:ksstr` | Run PHYKS on the DSP instruction host and compare every sample with its integer model; needs `dspHost` |
+| `npm run test:ladder` | Run NFX4P on the DSP instruction host and compare every sample with its integer model; needs `dspHost` |
 | `npm run doctor` | Check your toolchain and local paths |
 
 Run `npm run check` before opening a pull request.

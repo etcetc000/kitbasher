@@ -69,6 +69,13 @@ class Assembly(unittest.TestCase):
         fresh.pop('source')
         self.assertEqual(json.loads(json.dumps(fresh)),bundled)
 
+    def test_bundled_ladder_pack_matches_a_fresh_export(self):
+        bundled=json.loads((ROOT/'catalog/effects-ladder.json').read_text(encoding='utf-8'))
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh=exporter.export(ROOT/'examples/effects/ladder',Path(tmp)/'out')
+        fresh.pop('source')
+        self.assertEqual(json.loads(json.dumps(fresh)),bundled)
+
     def test_bundled_example_code_matches_a_fresh_export(self):
         # Code and DSP1 drive only: a source fix must reach the pack the site serves
         bundled={}
