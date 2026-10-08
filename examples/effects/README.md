@@ -7,10 +7,10 @@ places code and tables; no stock machine is replaced.
 
 | Directory | Machine | What it is | Worst cycles per sample |
 |---|---|---|---:|
-| [`ladder`](ladder/README.md) | NFX4P | Moog-style 4-pole ladder filter with a trig envelope and a VCA | 141 (estimate) |
+| [`ladder`](ladder/README.md) | NFX4P | Moog-style 4-pole ladder filter with a trig envelope and a VCA | 146 (estimate) |
 
-The cost is a cold-cache estimate for one voice, not a guarantee for any 16-track
-kit (see [Models](../../docs/MODELS.md#cpu-cost)).
+The cost is a hardware estimate for one voice (cold cache, pipeline interlocks and
+external table reads included), not a guarantee for any 16-track kit (see [Models](../../docs/MODELS.md#cpu-cost)).
 
 An effect hears the raw DSP2 voice of the track before it, before that track's
 DSP1 effects and level. On the first track it outputs silence.

@@ -23,6 +23,10 @@ original; [what the port changed](#what-the-port-changed) is listed below.
 The input is the previous track's raw DSP2 voice, before its DSP1 effects and
 level. On the first track NFX4P outputs silence.
 
+Because NFX4P reads the source track before its level, the source track still
+plays on its own at whatever level it is set to. To hear only the filtered
+signal, turn the source track's LEVEL down: NFX4P's input does not change.
+
 ## Ladder
 
 Semi-implicit Euler, two steps per sample (pseudo 2× oversampling):
@@ -63,7 +67,7 @@ Semi-implicit Euler, two steps per sample (pseudo 2× oversampling):
 
 | Original (custom OS machine) | Port (`md-voice/1`) |
 |---|---|
-| A ColdFire handler turned knobs into control words | `controls` rounds each raw knob exactly as the handler did and copies the control word from `ctl` (8 × 128 words) into `Y:+$21..+$28`. It runs at the start of every render and trigger. |
+| A ColdFire handler turned knobs into control words | `controls` rounds each raw knob exactly as the handler did and copies the control word from `ctl` (8 × 128 words) into `Y:+$21..+$28`. At the start of every render and trigger, `knobs` compares each raw knob word with its snapshot in `X:+1..+8`, exactly, and runs `controls` only when one differs or after init. |
 | Control words at `Y:+1..+8` | `Y:+$21..+$28`; `Y:+1..+8` hold the raw knobs, read only |
 | tanh table in DSP2 internal `X:$280` | `tanh` in the model's tables, read through the external X alias. On hardware this adds 128 external reads per block, about 1 wait state each. |
 | Per-render scratch `X:$0`/`X:$1` | `N7` and `Y:+$19` |
@@ -80,7 +84,20 @@ move is dropped without an error.
 
 ## Checks
 
-The pack ran in a DSP56300 kernel harness (machinedrum-kit's `md-kernel`, both
+`npm run test:ladder` (`ci/ladder_check.py`) runs the bundled pack on a DSP56300
+instruction host and compares every output sample with an independent integer
+model of the envelope, ladder and VCA: 31 cases and 109,696 samples, covering
+RESO 127, both cutoff extremes, both output poles, the envelope up and down with
+both time extremes, every VCA zone, GAIN 0 and 127, silence, full-scale and square
+input, the first track, knob motion with fractional raw words, a 400-block random
+stress test and two interleaved tracks. Each case starts from a poisoned voice
+block whose knob snapshot already holds the case's knobs, so a missed controls
+run after init fails. The filter and envelope state, the snapshot and the other
+voice blocks are checked too. The reference model reproduces the original port's
+output exactly, and every optimization below was checked against it; the audio of
+all 31 cases is identical, sample for sample, before and after.
+
+Before that, the pack ran in a DSP56300 kernel harness (machinedrum-kit's `md-kernel`, both
 DSP engines, registers randomized and memory poisoned on every call) against the
 original's integer reference model, with raw knob words as kitbasher delivers
 them (`knob << 16`, including slewed fractions). The audio, the ladder and
@@ -91,17 +108,35 @@ envelope state, and the eight control words were compared on every block.
 | Cases | 49 cases, 9,976 blocks per engine: impulses in 5 modes × 3 resonances, enveloped sweeps, a 2,500-block random stress test, every value of every knob with trigs, all VCA zones, the tanh clamp, tracks 0 and 15 |
 | Reference comparison | Exact; 0 mismatches |
 | Booted Kitbasher image | Stock OS 1.63 prepared, core pack plus NFX4P (ID 4), every build gate passing, in a Machinedrum emulator: GND-NS on track 1, NFX4P on track 2. Three settings (4th and 2nd pole, envelope and gate VCA, bypass, drive up to 127) × 48 consecutive live blocks matched the reference exactly, from the knob words Kitbasher's knob callback delivered |
-| Worst render block, emulated | 3,560 cycles (111.3 per sample); constant cutoff with the VCA bypassed 2,964 |
-| Init / trigger | About 20 / 120 cycles |
-| Cold-cache estimate | About 141 cycles per sample with the envelope on the cutoff (about 318 code words per block, 3 cycles each); about 110 with a constant cutoff |
+| Worst render block, emulated | 3,419 cycles (106.8 per sample), in a block where a knob moves; about 3,270 when none does; constant cutoff with the VCA bypassed 2,798 |
+| Init / trigger, emulated | 33 / 66 cycles; a trigger that has to remake the control words 179 |
+| Hardware estimate | About 146 cycles per sample at worst, 138 with no knob motion, 116 with a constant cutoff (below) |
 | Hardware | Not tested |
 
-The cold-cache figures are estimates, not measurements, and they are over the
-129-cycle target with the envelope on the cutoff. They do not include pipeline
-interlocks or data wait states. The original measured about 460 hidden cycles per
-instance on hardware with the envelope VCA. The port adds the knob conversion
-(about 100 cycles) and the external table reads. The original ran 14 instances
-plus a generator on hardware with the envelope VCA on every track.
+The hardware estimate adds to the emulated cycles what the emulator does not
+charge, for the worst measured block of each kind:
+
+| Part | Envelope on the cutoff, knob moving | No knob motion | Constant cutoff, VCA bypassed |
+|---|---:|---:|---:|
+| Emulated | 106.8 | 102.0 | 87.4 |
+| Pipeline interlocks | 0.9 | 0.7 | 8.1 |
+| External table reads, 1 wait state each | 4.3 (136 reads) | 4.0 (128) | 4.0 (128) |
+| Cold instruction cache, 3 cycles a code word | 33.8 (360 words) | 31.1 (332) | 16.7 (178) |
+| **Total, cycles per sample** | **145.8** | **137.8** | **116.2** |
+
+Interlocks are counted on the executed path with the DSP56300 rules (an
+accumulator read by the move right after the instruction that wrote it; a move
+reading an accumulator the move before it wrote; an address register used within
+three clocks of a move that wrote it). Before the reordering they were 543 cycles
+a block with the envelope, 15 a sample in the ladder loops plus 40 in the knob
+conversion; now 29. The constant-cutoff loops keep 6 a sample: their table
+address has no independent work to fill the three clocks before it is used.
+
+These are estimates, not measurements, and all are over the 129-cycle target with
+the envelope on the cutoff; the cache term is the largest and the least certain.
+The original measured about 460 hidden cycles per instance on hardware with the
+envelope VCA, and ran 14 instances plus a generator with the envelope VCA on every
+track.
 
 ## Export
 

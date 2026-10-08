@@ -65,8 +65,8 @@
   ],
   "samples": [],
   "budget": {
-    "render_cps": 142,
-    "trigger_cycles": 130,
+    "render_cps": 146,
+    "trigger_cycles": 200,
     "init_cycles": 40
   },
   "provenance": [

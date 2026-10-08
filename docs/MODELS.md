@@ -84,8 +84,11 @@ tested on hardware yet ([details](../examples/physical/ks/README.md)).
 NFX4P is a Moog-style 4-pole ladder filter (after Kocmoc uLADR) that processes the
 previous track's output. A trig runs an AD envelope on the cutoff, and the output
 VCA follows the envelope or opens a gate. It is a port of a custom OS 1.63
-machine, bit-exact with the original in a DSP kernel harness. It has not been
-tested on hardware in Kitbasher yet ([details](../examples/effects/ladder/README.md)).
+machine, bit-exact with the original in a DSP kernel harness, and checked sample
+for sample against an integer model of it on a DSP instruction host
+(`npm run test:ladder`). It reads the source track before its level: turn that
+track's level down to hear only the filtered signal. It has not been tested on
+hardware in Kitbasher yet ([details](../examples/effects/ladder/README.md)).
 
 ## Building packs from these sources
 
