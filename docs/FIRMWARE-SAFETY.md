@@ -91,7 +91,10 @@ this, so only hardware-proven ranges are used.
 
 **Enforced.** The `ext-ram` and `dyn-segment` gates, together with the
 `ram.window` in each `bases/*.json` profile. The CPU indicator stub is refused by
-name if it would end past the window. See [Supported bases](BASES.md).
+name if it would end past the window. With MIDI chromatic note input the whole RAM
+image must end inside the span earlier images ran from on hardware
+(`0x2bc000..0x2bce14`): descriptors move to flash first, and the `midi-chroma`
+gate refuses an image that still ends past it. See [Supported bases](BASES.md).
 
 **Rule.** Boot-time code must not use the stack before the OS sets one up: no
 register pushes as the boot routine's first action.

@@ -46,6 +46,11 @@ Kitbasher is a community project. It is not affiliated with or endorsed by Elekt
 6. **Send it.** Hold FUNCTION while powering on, choose [5 LT] MIDI UPGRADE, and
    send the file from a SysEx tool with a 20 ms gap between messages.
 
+On OS X.14 the Download step also offers **MIDI chromatic note input** (off by
+default): notes on MIDI channel 5 (base channel + 4) play the selected track at
+pitch, record a pitch p-lock in live record, and p-lock every held step in grid
+record. See [MIDI chromatic note input](docs/MIDI-CHROMATIC.md).
+
 Some models use a sample in UW memory; the page lists those and offers the
 sample files with instructions.
 
