@@ -36,8 +36,8 @@ checks, run in `npm test` (`ci/ksstr_test.py`).
 
 `npm run test:ladder` does the same for the bundled NFX4P pack: 31 cases and
 109,696 samples against an independent integer model of its envelope, ladder and
-VCA (`ci/ladder_check.py`), plus the filter and envelope state and the other
-tracks' voice blocks; see the
+VCA (`ci/ladder_check.py`), plus the filter and envelope state, the knob snapshot
+and the other tracks' voice blocks; see the
 [NFX4P README](../examples/effects/ladder/README.md#checks). The reference model's
 host-independent checks run in `npm test` (`ci/ladder_test.py`).
 

@@ -443,6 +443,9 @@ def main():
                 if state != group['state'][track]:
                     failures.append(dict(case=group['name'], track=track, error='state', actual=state,
                                          expected=group['state'][track]))
+                # The knob snapshot (X:+1..+8) follows the knobs, or every render would remake the controls.
+                if group['name'] != 'first-track' and xmemory[64*track+1:64*track+9] != [v & 0xffffff for v in group['knobs'][track]]:
+                    failures.append(dict(case=group['name'], track=track, error='knob snapshot'))
             elif block != [CANARY]*64 or xmemory[64*track:64*track+64] != [CANARY]*64:
                 failures.append(dict(case=group['name'], track=track, error='voice block escape'))
         if group['name'] == 'first-track' and any(actual):

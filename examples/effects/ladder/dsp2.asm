@@ -3,41 +3,68 @@
 ; Ported from NFX-4P v6 (a custom Machinedrum OS 1.63 machine): the filter, envelope
 ; and VCA code is unchanged; see README.md for what the port changed.
 ;
-; Voice block (Y, S = R6):
-;   +$01..+$08  raw knobs (FREQ RESO MODE ENVA ATK DEC GAIN VCA), read only
-;   +$09..+$0c  ladder poles p0..p3
-;   +$11..+$13  envelope stage, level, dt
-;   +$16..+$18  envelope level fraction, VCA gain, gate count
-;   +$19        per-render scratch: the per-sample c2 step
-;   +$21..+$28  control words converted from the knobs (controls, below)
+; Voice block (S = R6):
+;   Y:+$01..+$08  raw knobs (FREQ RESO MODE ENVA ATK DEC GAIN VCA), read only
+;   X:+$01..+$08  the raw knobs the control words were last made from (knobs, below)
+;   Y:+$09..+$0c  ladder poles p0..p3
+;   Y:+$11..+$13  envelope stage, level, dt
+;   Y:+$14        nonzero after init: the control words are not made yet
+;   Y:+$16..+$18  envelope level fraction, VCA gain, gate count
+;   Y:+$19        per-render scratch: the per-sample c2 step
+;   Y:+$20        scratch for the controls pipeline
+;   Y:+$21..+$28  control words converted from the knobs (controls, below)
 .equ VCA_SLEW 190218                  ; VCA gain slew per sample: full scale / 44.1 (1 ms)
 
+; Make the control words only when they can have changed: after init, or when any
+; raw knob word differs from its snapshot. Each of the eight words is compared
+; exactly, so any change, however small, runs controls.
+knobs:
+        lua (r6)+,r0                  ; X:S+1: the snapshot
+        lua (r6)+,r4                  ; Y:S+1: the raw knobs
+        move y:(r6+$14),b             ; nonzero after init: one run is due
+        move #>1,x1
+        move x:(r0)+,x0  y:(r4)+,a
+        do #8,knobs_end
+        cmp x0,a        x:(r0)+,x0  y:(r4)+,a
+        tne x1,b                      ; a difference makes B nonzero
+knobs_end:
+        tst b
+        jne controls                  ; controls returns to knobs' caller
+        rts
 ; Raw knob words -> control words: k = min(127, round(raw / 2^16)), then
 ; ctl[128 * knob + k] (tables.asm). Same rounding as the original ColdFire handler.
+; Each raw word also goes to the snapshot. Software-pipelined: a pass stores the
+; control word the pass before it read (the first store goes to the scratch +$20).
 controls:
-        move r6,r0
+        lua (r6)+,r4                  ; Y:S+1: the raw knobs
+        lua (r6)+,r0                  ; X:S+1: their snapshot
         move r6,r3
-        move #>$21,n3
-        move (r0)+                    ; S+1: the raw knobs
-        move (r3)+n3                  ; S+$21: the control words
+        move #>$20,n3
         move #>ctl,y1                 ; this knob's table
         move #>128,x1
         move #>127,x0
+        move #>$8000,y0
+        move y:(r4)+,a                ; the first raw knob
+        move (r3)+n3
         do #8,controls_end
-        move y:(r0)+,a
-        add #>$8000,a
+        add y0,a        a,x:(r0)+     ; snapshot <- raw; raw + 2^15
         asr #16,a,a
-        cmp x0,a
+        cmp x0,a        b1,y:(r3)+    ; the control word the pass before read
         tgt x0,a                      ; k = min(127, (raw + 2^15) >> 16)
         add y1,a        y1,b
-        add x1,b        a1,r2         ; the next knob's table
+        add x1,b                      ; the next knob's table
+        move a1,r2
+        move y:(r4)+,a                ; the next raw knob (the last pass reads +9)
         move b1,y1
-        move y:(r2),b
-        move b1,y:(r3)+
+        move y:(r2),b                 ; ctl[128 * knob + k]
 controls_end:
+        clr a
+        move b1,y:(r3)
+        move a1,y:(r6+$14)            ; the control words are made
         rts
 init:
         clr a
+        move #>1,b
         move a,y:(r6+$9)
         move a,y:(r6+$a)
         move a,y:(r6+$b)
@@ -45,12 +72,13 @@ init:
         move a,y:(r6+$11)
         move a,y:(r6+$12)
         move a,y:(r6+$13)
+        move b1,y:(r6+$14)            ; the first render or trigger makes the control words
         move a,y:(r6+$16)
         move a,y:(r6+$17)
         move a,y:(r6+$18)
         rts
 trigger:
-        jsr controls
+        jsr knobs
 ; Every trig discharges the envelope capacitor; audio integrators remain intact.
         clr a
         move a,y:(r6+$12)
@@ -61,7 +89,7 @@ trigger:
         move a1,y:(r6+$18)
         rts
 render:
-        jsr controls
+        jsr knobs
         move y:>md_output,r7
         move y:>md_track,a
         tst a
