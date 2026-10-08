@@ -265,9 +265,13 @@ export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved>
   for (const [k, flag] of Object.entries(PROFILE_GATED)) {
     const o = profile?.options?.[k];
     const sup = (base.support as unknown as Record<string, { ok: boolean; why: string }>)[k];
-    if (o?.ok || !sup?.ok) continue;
-    const why = o ? `refused on this base: ${o.why ?? 'its profile says so'}` : `${flag} is not qualified on ${profile ? profile.id : 'a base without a profile'}: ` +
-      'it is found in the code, but only a base whose profile records it running is given it';
+    if (o?.ok) continue;
+    // a profile that refuses the option says why, whether or not discovery found it (its reason is
+    // the one that matters to the user; discovery's, when it failed too, follows)
+    if (!o && !sup?.ok) continue;
+    const why = o ? `refused on this base: ${o.why ?? 'its profile says so'}${sup && !sup.ok ? ` (discovery: ${sup.why})` : ''}`
+      : `${flag} is not qualified on ${profile ? profile.id : 'a base without a profile'}: ` +
+        'it is found in the code, but only a base whose profile records it running is given it';
     (base.support as unknown as Record<string, { ok: boolean; why: string }>)[k] = { ok: false, why };
     if (k === 'hostSend') base.features.hostSend = null;
     if (k === 'unmuteFix') base.features.unmute = null;

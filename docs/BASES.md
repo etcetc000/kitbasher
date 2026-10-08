@@ -90,7 +90,11 @@ reason):
 
 A parity check (`engine/test/parity.test.ts`) runs with the tests: every profile
 must qualify each of these options or refuse it with a reason, and the list of
-refusals above is fixed there, so a new gap is a deliberate change.
+refusals above is fixed there, so a new gap is a deliberate change. Every other
+feature discovery reports must be on a list of features found on every base;
+with your OS files (`firmwareDir`) the check also resolves each profiled base and
+fails when a feature is missing on one base but not exempted. A refused option
+shows the profile's reason first, then discovery's when it did not find it either.
 
 ## Unmute latency
 

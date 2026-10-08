@@ -57,6 +57,12 @@ export interface Discovery {
   values: Record<string, string>;
 }
 
+/** Every feature discovery reports on (Discovery['support']), each once; the compiler checks none is missing. */
+export const SUPPORT_KEYS = ['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover',
+  'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'uwMenu', 'unmuteFix', 'midiChroma'] as const satisfies readonly (keyof Discovery['support'])[];
+const allSupportKeys: Exclude<keyof Discovery['support'], (typeof SUPPORT_KEYS)[number]> extends never ? true : never = true;
+void allSupportKeys;
+
 class NotFound extends Error {}
 
 const DESC_TABLE_IDS = 192;
@@ -72,7 +78,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
   const at1 = (k: string, v: number): string => (A[k] === undefined ? '' : num(A[k]) === v ? ' (the 1.63 address)' : ` (1.63 has it at ${A[k]}: moved)`);
   const fail = (kind: Discovery['kind'], why: string): Discovery => ({
     kind, lineage: kind !== 'unknown', findings, values, base: null, refused: why,
-    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'unmuteFix', 'midiChroma'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
+    support: Object.fromEntries(SUPPORT_KEYS.map((k) => [k, { ok: false, why }])) as Discovery['support'],
   });
   /** exactly one match, else NotFound naming the signature and the count */
   const one = (name: string, imgs: CodeImage[], sig = S[name]): Hit => {

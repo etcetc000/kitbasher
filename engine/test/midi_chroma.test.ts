@@ -716,7 +716,8 @@ test('firmware: on X.14 the 1.63 signatures for the OS routines find the address
 // --midi-chroma must be the same byte for byte on both bases, and X.14 with it too: the X.14 routines
 // are the ones run on hardware. The 1.63 build with it is recorded so a change to it is deliberate.
 const GOLDEN: Record<string, Record<string, string>> = {
-  x14: { '': '0b743978980cc452a41ee5c768f283811f56512ad4f37bd5578bc84e23289663', '--midi-chroma': '4bab8efe1bb77e14f084b48cb742c2763f72931bc81d44d7405138c2841f2b61' },
+  x14: { '': '0b743978980cc452a41ee5c768f283811f56512ad4f37bd5578bc84e23289663', '--no-midi-chroma': '0b743978980cc452a41ee5c768f283811f56512ad4f37bd5578bc84e23289663',
+         '--midi-chroma': '4bab8efe1bb77e14f084b48cb742c2763f72931bc81d44d7405138c2841f2b61' },
   'stock-163-prepared': { '': '59bec81709bd731831322ab5f9fdfee7766e1e5150504bfb05cefc50cb559914', '--midi-chroma': '243ce93002890d7f070a3f1e081ee416a2441ed631fee6acdf98f69078e79647' },
 };
 
@@ -742,4 +743,97 @@ test('firmware: builds without the option are main\'s byte for byte; X.14 with i
     }
     assert.ok(checked, `none of ${Object.keys(GOLDEN).join(', ')} in ${FW}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- with firmware: the real OS code of prepared 1.63 run in the interpreter, stock and patched
+
+class Stop extends Error {}
+const ORG163 = 0x2bca04;
+
+/** A CPU holding prepared 1.63's code images; patched: our routines at ORG163 and the hook words applied. */
+async function cpu163(patched: boolean): Promise<{ cpu: Cpu; L: Record<string, number>; t: ChromaTable }> {
+  const got = (await firmware()).get('stock-163-prepared');
+  assert.ok(got, `no OS 1.63 file in ${FW}`);
+  const cpu = new Cpu(0x00f00000);
+  for (const im of codeImages(readFirmware(got.bytes), got.resolved.base)) cpu.load(im.ram, im.bytes);
+  const t = buildTable(SYN);
+  const c = assemble(ORG163, T163, t, channelByte());
+  if (patched) {
+    cpu.load(ORG163, c.bytes);
+    for (const [a, v] of chromaPatches(T163, c.labels).patches) cpu.w32(a, v);
+  }
+  return { cpu, L: c.labels, t };
+}
+
+test('firmware: the real MIDI task loop of 1.63, stock and patched, over every base, status and velocity: only chromatic note-ons differ', { skip: fwSkip }, async () => {
+  const MSG163 = 0x00e00000;
+  const runAll = async (patched: boolean): Promise<string[]> => {
+    const { cpu } = await cpu163(patched);
+    const log: string[] = [];
+    let fed = false;
+    cpu.stubs.set(0x212994, (x) => { if (fed) throw new Stop(); fed = true; x.d[0] = MSG163; });   // the queue get: one message, then stop
+    const table = 0x252d1e;
+    for (let k = 0; k < 16; k++) {
+      const at = cpu.r32(table + 4 * k);
+      cpu.stubs.set(at, (x) => {
+        const m = x.arg(0);
+        log.push(`${at.toString(16)}(${[0, 1, 2].map((i) => x.r8(m + i).toString(16)).join(' ')}${m === MSG163 ? '' : ' built'}, port ${x.arg(1)})`);
+      });
+    }
+    cpu.w32(T163.selTrack, 2);
+    cpu.w32(T163.machineIds + 8, 11);                       // QUART on the selected track
+    const out: string[] = [];
+    for (let base = 0; base < 16; base++) {
+      for (let st = 0x80; st <= 0xff; st++) {
+        for (const vel of [0, 64]) {
+          cpu.w32(T163.baseCh, base);
+          cpu.load(MSG163, [st, 60, vel]);
+          log.length = 0; fed = false;
+          cpu.a[7] = 0x00f00000;
+          try { cpu.call(0x209de6, [], 100_000); assert.fail('the task loop returned'); } catch (e) { if (!(e instanceof Stop)) throw e; }
+          out.push(`${base} ${st.toString(16)} ${vel}: ${log.join('; ')}`);
+        }
+      }
+    }
+    return out;
+  };
+  const stock = await runAll(false), ours = await runAll(true);
+  assert.equal(stock.length, 4096);
+  // the stock loop really ran: base-range channel messages and everything from 0xC0 up are dispatched, the rest dropped
+  const dispatched = (s: string): boolean => !/: $/.test(s);
+  assert.equal(stock.filter(dispatched).length, Array.from({ length: 16 }, (_, b) => Math.min(4, 16 - b) * 4 * 2 + 64 * 2).reduce((x, y) => x + y));
+  assert.ok(stock.includes('3 93 64: 20cc48(93 3c 40, port 1)'), 'a base-range note-on reaches the note-on handler');
+  const diff = stock.map((s, i) => [s, ours[i]]).filter(([a, b]) => a !== b);
+  assert.equal(diff.length, 16, diff.slice(0, 4).join('\n'));
+  for (let base = 0; base < 16; base++) {
+    const ch = (base + 4) & 15;
+    const [a, b] = diff[base];
+    assert.ok(a.startsWith(`${base} ${(0x90 | ch).toString(16)} 64:`), a);
+    assert.match(a, /: $/, 'stock drops it');
+    // the pitch CC on the track's base channel (track 3: CC 72), then the direct-track trigger, both port 1
+    const raw = lookup(buildTable(SYN), 11, 60)!.raw;
+    const want = `20c8de(${(0xb0 | base).toString(16)} 48 ${raw.toString(16)} built, port 1); 20cc48(${(0x90 | base).toString(16)} fd 40 built, port 1)`;
+    assert.equal(b.slice(b.indexOf(':') + 2), want, b);
+  }
+});
+
+test('firmware: the real UI loop of 1.63 through drain: the queue count returned, the stack and registers as they were', { skip: fwSkip }, async () => {
+  for (const patched of [false, true]) {
+    const { cpu, L } = await cpu163(patched);
+    const locks: number[][] = [];
+    cpu.stubs.set(T163.lockWriter, (x) => { locks.push([0, 1, 2, 3, 4].map((k) => x.arg(k))); x.d[0] = 1; });
+    cpu.w8(0x22552a, 0x4e); cpu.w8(0x22552b, 0x75);        // stop after `tst.l d0`: rts in place of the idle test
+    cpu.w32(T163.uiQueue + 4, 3);                           // three messages waiting
+    if (patched) { cpu.w32(L.ring, 0x23110506); cpu.w8(L.dat + 5, 0); cpu.w8(L.dat + 4, 1); }   // one request: track 3 knob 2, raw 17, step 5, pattern 6
+    for (let r = 2; r < 8; r++) cpu.d[r] = 0x1000 * r;
+    for (let r = 2; r < 7; r++) cpu.a[r] = 0x2000 * r;
+    const sp = cpu.a[7];
+    cpu.call(0x22551c);
+    assert.equal(cpu.d[0], 3, 'the count');
+    assert.equal(cpu.a[7], sp, 'the stack');
+    for (let r = 2; r < 8; r++) assert.equal(cpu.d[r], 0x1000 * r, `d${r}`);
+    for (let r = 2; r < 7; r++) assert.equal(cpu.a[r], 0x2000 * r, `a${r}`);
+    assert.deepEqual(locks, patched ? [[6, 3, 2, 5, 17]] : []);
+    if (patched) assert.equal(cpu.r8(L.dat + 5), 1, 'the ring drained');
+  }
 });
