@@ -36,6 +36,7 @@ same code builds the same image in both places.
 | Overload recovery | `clean_recovery.ts`, `retire.ts`, `outputpace.ts` |
 | Unmute-latency fix | `unmute.ts`, `cf_asm.ts` ([Supported bases](BASES.md#unmute-latency)) |
 | MIDI chromatic note input | `midi_chroma.ts` ([user guide](MIDI-CHROMATIC.md)) |
+| Pitch note names | `pitch_labels.ts` ([user guide](PITCH-LABELS.md)) |
 | Model source export | `packs/assembly_export.py`, `model_manifest.py`, `model_panel.py` |
 | Browsing data inside a pack | `packs/annotate_browse.mjs` |
 | Bundled model packs | `catalog/` |

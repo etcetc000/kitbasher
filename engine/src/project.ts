@@ -46,6 +46,11 @@ export interface ProjectFile {
   midi_chroma?: { channel: string };
   /** false when the unmute-latency fix (engine/src/unmute.ts) was turned off; absent: on (the default) */
   unmute_fix?: false;
+  /**
+   * true when pitch note names (engine/src/pitch_labels.ts) were turned on; absent: off (the
+   * default). Kept whatever OS the project was saved with: it applies where the OS supports it.
+   */
+  pitch_labels?: true;
 }
 
 /** A project in memory: what the page and the build use. */
@@ -63,6 +68,8 @@ export interface Project {
   midiChroma?: { channel: string };
   /** false: the unmute-latency fix was turned off; undefined: the default (on where the OS has it) */
   unmuteFix?: false;
+  /** true: pitch note names were turned on; undefined: off (the default) */
+  pitchLabels?: true;
 }
 
 export function osOf(base: Base): ProjectOs {
@@ -129,6 +136,7 @@ export async function encodeProject(p: Project): Promise<ProjectFile> {
     ...(p.uw === undefined ? {} : { uw: p.uw }),
     ...(p.midiChroma ? { midi_chroma: { channel: p.midiChroma.channel } } : {}),
     ...(p.unmuteFix === false ? { unmute_fix: false as const } : {}),
+    ...(p.pitchLabels ? { pitch_labels: true as const } : {}),
   };
 }
 
@@ -167,6 +175,7 @@ export async function decodeProject(json: string): Promise<Project> {
   const layout = o.layout === null || o.layout === undefined ? null : parseLayout(JSON.stringify(o.layout));
   if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('project file: uw must be true or false');
   if (o.unmute_fix !== undefined && (o.unmute_fix as unknown) !== false) throw new Error('project file: unmute_fix must be false or absent');
+  if (o.pitch_labels !== undefined && (o.pitch_labels as unknown) !== true) throw new Error('project file: pitch_labels must be true or absent');
   const mc = o.midi_chroma;
   if (mc !== undefined) {
     if (!mc || typeof mc !== 'object' || typeof mc.channel !== 'string') throw new Error('project file: midi_chroma must be { "channel": "base+4" } or absent');
@@ -175,5 +184,6 @@ export async function decodeProject(json: string): Promise<Project> {
   return { os: { base: os.base, name: String(os.name ?? os.base), tag: os.tag, coldfire_sha256: os.coldfire_sha256, dsp2_sha256: os.dsp2_sha256, dsp1_sha256: os.dsp1_sha256 },
            swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout, uw: o.uw ?? layout?.uw,
            ...(mc ? { midiChroma: { channel: mc.channel } } : {}),
-           ...(o.unmute_fix === false ? { unmuteFix: false as const } : {}) };
+           ...(o.unmute_fix === false ? { unmuteFix: false as const } : {}),
+           ...(o.pitch_labels === true ? { pitchLabels: true as const } : {}) };
 }

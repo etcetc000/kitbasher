@@ -30,6 +30,7 @@ import {qualifyModelRuntime} from './model_runtime.js';
 import { findUwMenu } from './uw_menu.js';
 import { findUnmute, unmuteValues } from './unmute.js';
 import { callees, chromaSites, discoverChroma, isTask, NoChroma, type Chroma } from './midi_chroma.js';
+import { findPitchLabels, NoPitchLabels, pitchLabelValues, type PitchLabelSite } from './pitch_labels.js';
 
 export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
@@ -49,7 +50,9 @@ export interface Discovery {
     /** the unmute-latency fix: the sequencer sites it replaces (engine/src/unmute.ts) */
     unmuteFix: Support;
     /** --midi-chroma: X.14's real-time MIDI path or OS 1.63's MIDI task (engine/src/midi_chroma.ts) */
-    midiChroma: Support };
+    midiChroma: Support;
+    /** --pitch-labels: the knob-value painter's string draw (engine/src/pitch_labels.ts) */
+    pitchLabels: Support };
   /** the patchable base; null with `refused` saying why */
   base: Base | null;
   refused: string | null;
@@ -59,7 +62,7 @@ export interface Discovery {
 
 /** Every feature discovery reports on (Discovery['support']), each once; the compiler checks none is missing. */
 export const SUPPORT_KEYS = ['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover',
-  'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'uwMenu', 'unmuteFix', 'midiChroma'] as const satisfies readonly (keyof Discovery['support'])[];
+  'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'uwMenu', 'unmuteFix', 'midiChroma', 'pitchLabels'] as const satisfies readonly (keyof Discovery['support'])[];
 const allSupportKeys: Exclude<keyof Discovery['support'], (typeof SUPPORT_KEYS)[number]> extends never ? true : never = true;
 void allSupportKeys;
 
@@ -497,6 +500,19 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       }
     } catch (e) { if (!(e instanceof NoChroma)) throw e; chromaWhy = e.message; note('MIDI chromatic input (--midi-chroma)', false, chromaWhy); }
 
+    // ---- 9e. pitch note names (--pitch-labels, engine/src/pitch_labels.ts): the knob-value painter's
+    //      string draw, and the page, track, machine IDs and kit values it reads, by signature
+    let pitchLabels: PitchLabelSite | null = null;
+    let labelsWhy = '';
+    try {
+      pitchLabels = findPitchLabels(images);
+      const P = pitchLabels;
+      note('pitch note names (--pitch-labels)', true, `the knob-value painter ${h(P.painter)}: its value's string draw at ${h(P.call)} (operand ${h(P.site)}) ` +
+           `calls the OS's ${h(P.draw)}, after the width ${h(P.width)} in the font ${h(P.font)}; page ${h(P.page)}, track ${h(P.track)}, machine IDs ${h(P.machineIds)}, ` +
+           `kit values ${h(P.kitParams)}`);
+      for (const [k, v] of Object.entries(pitchLabelValues(P))) val(k, v);
+    } catch (e) { if (!(e instanceof NoPitchLabels)) throw e; labelsWhy = e.message; note('pitch note names (--pitch-labels)', false, labelsWhy); }
+
     // ---- 10. descriptors in flash: the OS reads its own container through the flash alias
     let alias: number | null = null;
     let aliasWhy = '';
@@ -588,7 +604,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       },
       layout,
       ext: { base: env[0][0], end: env[0][1] },
-      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush, unmute: dyn2 ? um.unmute : null, midiChroma },
+      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush, unmute: dyn2 ? um.unmute : null, midiChroma, pitchLabels },
       os: {
         cfBase, osMain, descriptorTable, freeDescriptor, descriptorSize: dsz,
         familyTable, familyBaseSites, familyListSites, uwMenu: uw.menu, pageDraw, redrawStub,
@@ -648,6 +664,8 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
         ? { ok: true, why: `discovered: OS 1.63's MIDI task (channel test ${h(midiChroma.filter.site)}, note-on ${h(midiChroma.noteOn)}, CC ${h(midiChroma.ccHandler)}), by signature` }
         : midiChroma ? { ok: true, why: `discovered: X.14's real-time MIDI path (parser ${h(midiChroma.parser.site)}, note-on call ${h(midiChroma.consumer.site)}), byte for byte` }
         : { ok: false, why: chromaWhy },
+      pitchLabels: pitchLabels ? { ok: true, why: `discovered: the knob-value painter's string draw at ${h(pitchLabels.call)}, by signature` }
+        : { ok: false, why: labelsWhy },
     };
     base.support = support;
     return { kind, lineage: true, findings, support, base, refused: ramWhy ? `no ColdFire RAM for the machines: ${ramWhy}` : null, values };

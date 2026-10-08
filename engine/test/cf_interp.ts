@@ -1,6 +1,7 @@
-// A small ColdFire interpreter for tests: only the instruction forms engine/src/midi_chroma.ts
-// assembles, and the few more the OS's MIDI-task and UI loops use (the firmware tests run them),
-// decoded from the bytes themselves. Memory is sparse (unset bytes read 0). Calls to
+// A small ColdFire interpreter for tests: only the instruction forms engine/src/midi_chroma.ts and
+// engine/src/pitch_labels.ts assemble, and the few more the OS's MIDI-task and UI loops, its
+// knob-value painter and its string draw use (the firmware tests run them), decoded from the bytes
+// themselves. Memory is sparse (unset bytes read 0). Calls to
 // addresses with a stub run the stub (a JS function) instead, as if it were the OS routine there;
 // the stub sees the stack with its return address on top and returns like `rts`.
 
@@ -126,6 +127,11 @@ export class Cpu {
     const top = op >> 12;
     if (op === 0x4e75) { this.pc = this.pop(); return; }                       // rts
     if (op === 0x4e71) return;                                                 // nop
+    if ((op & 0xfff8) === 0x4e50) {                                            // link.w An,#d
+      const d = (this.fetch16() << 16) >> 16;
+      this.push(this.a[reg]); this.a[reg] = this.a[7]; this.a[7] = (this.a[7] + d) >>> 0; return;
+    }
+    if ((op & 0xfff8) === 0x4e58) { this.a[7] = this.a[reg]; this.a[reg] = this.pop(); return; }   // unlk An
     if ((op & 0xfff8) === 0x40c0) {                                            // move.w sr,Dn
       const ccr = (this.n ? 8 : 0) | (this.z ? 4 : 0) | (this.v ? 2 : 0) | (this.c ? 1 : 0);
       this.d[reg] = (this.d[reg] & ~0xffff) | ((this.sr & 0xff00) | ccr); return;
@@ -167,6 +173,18 @@ export class Cpu {
       return;
     }
     if ((op & 0xfff8) === 0x0c80) { const v = this.fetch32(); this.sub(this.d[reg], v, 4); return; }    // cmpi.l
+    if ((op & 0xfff8) === 0x0680) { const v = this.fetch32(); this.d[reg] = this.add(this.d[reg], v); return; }           // addi.l
+    if ((op & 0xfff8) === 0x0480) { const v = this.fetch32(); this.d[reg] = this.sub(this.d[reg], v, 4); return; }        // subi.l
+    if ((op & 0xffc0) === 0x4c40) {                                            // divs.l / divu.l <ea>,Dq
+      const ext = this.fetch16(), dq = (ext >> 12) & 7, y = this.ea(mode, reg, 4).read();
+      if (ext & 0x0400) throw new Error('64-bit divide not supported');
+      const signed = !!(ext & 0x800), x = signed ? this.d[dq] : this.d[dq] >>> 0, yy = signed ? y | 0 : y >>> 0;
+      if (yy === 0) throw new Error('divide by zero');
+      const q = Math.trunc(x / yy), rem = x - q * yy, dr = ext & 7;
+      if (dr !== dq) this.d[dr] = rem; else this.d[dq] = q;
+      if (dr !== dq) this.d[dq] = q;
+      this.logic(this.d[dq], 4); return;
+    }
     if ((op & 0xfff8) === 0x0080) { const v = this.fetch32(); this.d[reg] |= v; this.logic(this.d[reg], 4); return; }   // ori.l
     if ((op & 0xfff8) === 0x0280) { const v = this.fetch32(); this.d[reg] &= v; this.logic(this.d[reg], 4); return; }   // andi.l
     if ((op & 0xf1c0) === 0xb080) { this.sub(this.d[rx], this.ea(mode, reg, 4).read(), 4); return; }     // cmp.l
@@ -174,8 +192,15 @@ export class Cpu {
     if ((op & 0xf1c0) === 0x8080) { this.d[rx] |= this.ea(mode, reg, 4).read(); this.logic(this.d[rx], 4); return; }   // or.l
     if ((op & 0xf1c0) === 0xc080) { this.d[rx] &= this.ea(mode, reg, 4).read(); this.logic(this.d[rx], 4); return; }   // and.l
     if ((op & 0xf1c0) === 0xd080) { this.d[rx] = this.add(this.d[rx], this.ea(mode, reg, 4).read()); return; }          // add.l
+    if ((op & 0xf1f8) === 0x9180) {                                            // subx.l Dy,Dx (X taken as the last C)
+      const x = this.d[rx] >>> 0, y = this.d[reg] >>> 0, borrow = this.c ? 1 : 0;
+      const r = (x - y - borrow) >>> 0;
+      this.c = y + borrow > x; this.n = (r >>> 31) === 1; if (r !== 0) this.z = false;
+      this.d[rx] = r; return;
+    }
     if ((op & 0xf1c0) === 0x9080) { this.d[rx] = this.sub(this.d[rx], this.ea(mode, reg, 4).read(), 4); return; }      // sub.l
     if ((op & 0xf1c0) === 0xd1c0) { this.a[rx] = (this.a[rx] + this.ea(mode, reg, 4).read()) >>> 0; return; }         // adda.l
+    if ((op & 0xf1c0) === 0x91c0) { this.a[rx] = (this.a[rx] - this.ea(mode, reg, 4).read()) >>> 0; return; }         // suba.l
     if ((op & 0xf1c0) === 0xc1c0) {                                            // muls.w
       const y = (this.ea(mode, reg, 2).read() << 16) >> 16, x = (this.d[rx] << 16) >> 16;
       this.d[rx] = x * y; this.logic(this.d[rx], 4); return;
@@ -196,6 +221,27 @@ export class Cpu {
       const n = rx || 8, x = this.d[reg] | 0;
       this.d[reg] = x >> n; this.logic(this.d[reg], 4); this.c = ((x >> (n - 1)) & 1) === 1;
       return;
+    }
+    if ((op & 0xf1f8) === 0xe1a8 || (op & 0xf1f8) === 0xe0a8 || (op & 0xf1f8) === 0xe0a0) {      // lsl.l / lsr.l / asr.l Dx,Dy
+      const n = this.d[rx] & 63, x = this.d[reg] >>> 0;
+      const r = n === 0 ? x : n > 31 ? ((op & 0xf1f8) === 0xe0a0 && (x >>> 31) ? 0xffffffff : 0) :
+        (op & 0xf1f8) === 0xe1a8 ? (x << n) >>> 0 : (op & 0xf1f8) === 0xe0a8 ? x >>> n : (x | 0) >> n;
+      this.d[reg] = r; this.logic(r, 4);
+      if (n) this.c = (op & 0xf1f8) === 0xe1a8 ? n <= 32 && ((x >>> (32 - n)) & 1) === 1 : n <= 32 && ((x >>> (n - 1)) & 1) === 1;
+      return;
+    }
+    if ((op & 0xffc0) === 0x4c00) {                                            // muls.l / mulu.l <ea>,Dl
+      const ext = this.fetch16(), dl = (ext >> 12) & 7, y = this.ea(mode, reg, 4).read();
+      const r = ext & 0x800 ? Math.imul(this.d[dl], y | 0) : Number((BigInt(this.d[dl] >>> 0) * BigInt(y >>> 0)) & 0xffffffffn) | 0;
+      this.d[dl] = r; this.logic(r, 4); return;
+    }
+    if ((op & 0xff00) === 0x4200) {                                            // clr.b / clr.w / clr.l
+      const size = [1, 2, 4][(op >> 6) & 3];
+      this.ea(mode, reg, size).write(0); this.logic(0, size); return;
+    }
+    if ((op & 0xf1c0) === 0x8180) {                                            // or.l Dn,<ea>
+      const e = this.ea(mode, reg, 4), v = (e.read() | this.d[rx]) >>> 0;
+      e.write(v); this.logic(v, 4); return;
     }
     if ((op & 0xfff8) === 0x4680) { this.d[reg] = ~this.d[reg]; this.logic(this.d[reg], 4); return; }   // not.l
     if ((op & 0xfff8) === 0x4480) { this.d[reg] = this.sub(0, this.d[reg], 4); return; }                 // neg.l

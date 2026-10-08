@@ -75,6 +75,14 @@
 //                        A project restored with --restore that had the option on turns it on with
 //                        its own channel; --midi-chroma [--midi-chroma-channel] overrides that
 //   --no-midi-chroma     off, even when the restored project had it on
+//   --pitch-labels       pitch note names (X.14, prepared 1.63): on the parameter page the pitch knob of
+//                        a model with a quarter or chromatic pitch law shows the note it plays (C-3,
+//                        C#3, C+3 for a quarter tone) under its dial instead of a number, as Elektron's
+//                        DEV firmware shows a TONAL track's pitch; a model whose law follows a MODE
+//                        knob follows it (engine/src/pitch_labels.ts). Off by default; asked for on a
+//                        base whose profile does not qualify it (DEV), the build is refused. A
+//                        project restored with --restore that had it on turns it on
+//   --no-pitch-labels    off, even when the restored project had it on
 //   --cache-align        put every machine whose executed code can outgrow the 8-sector instruction
 //                        cache on one of its measured 128-word cache offsets (engine/src/align.ts).
 //                        On by default; --no-align gives plain first-fit placement, which the parity
@@ -119,7 +127,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
                           'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw',
-                          'unmute-fix', 'no-unmute-fix', 'midi-chroma', 'no-midi-chroma']);
+                          'unmute-fix', 'no-unmute-fix', 'midi-chroma', 'no-midi-chroma', 'pitch-labels', 'no-pitch-labels']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -193,6 +201,9 @@ async function main(): Promise<void> {
   if (a['midi-chroma-channel'] && !a['midi-chroma']) throw new Error('--midi-chroma-channel needs --midi-chroma');
   // MIDI chromatic note input: the flags, or a restored project's choice
   let chroma: { channel: string } | undefined = a['midi-chroma'] ? { channel: a['midi-chroma-channel'] ?? MIDI_CHROMA_CHANNEL } : undefined;
+  if (a['pitch-labels'] && a['no-pitch-labels']) throw new Error('--pitch-labels and --no-pitch-labels: choose one');
+  // pitch note names: the flag, or a restored project's choice
+  let pitchLabels: boolean | undefined = a['pitch-labels'] ? true : a['no-pitch-labels'] ? false : undefined;
   const bases = loadBases(a.bases ?? resolve(ROOT, 'bases'));
   if (a.catalog && many.packs?.length) throw new Error('--catalog selects a complete set; do not combine it with --packs');
   const { packs, core, dirs } = loadPacks(a.catalog ? [resolve(a.catalog)] :
@@ -223,6 +234,10 @@ async function main(): Promise<void> {
         if (p.midiChroma && !chroma && !a['no-midi-chroma']) {
           chroma = p.midiChroma;
           console.log(`the restored project has MIDI chromatic note input on (channel ${chroma.channel}): building with it (--no-midi-chroma to leave it out)`);
+        }
+        if (p.pitchLabels && pitchLabels === undefined) {
+          pitchLabels = true;
+          console.log('the restored project has pitch note names on: building with them (--no-pitch-labels to leave them out)');
         }
         if (p.unmuteFix === false && unmuteFix === undefined) {
           unmuteFix = false;
@@ -276,6 +291,7 @@ async function main(): Promise<void> {
       cpuIndicator: a['no-cpu-indicator'] ? false : a['cpu-indicator'] ? true : undefined,
       unmuteFix,
       midiChroma: chroma,
+      pitchLabels: pitchLabels || undefined,
     },
   });
   writeFileSync(a.out, output);
@@ -303,6 +319,11 @@ async function main(): Promise<void> {
     const c = f.midi_chroma;
     console.log(`MIDI chromatic input: channel ${c.channel}, ${c.code_bytes + c.data_bytes} bytes at ${c.at}..${c.end}`);
     for (const m of c.machines) console.log(`  ${m.name.padEnd(5)} ${String(m.id).padStart(3)}: ${m.plays}`);
+  }
+  if (f.pitch_labels) {
+    const l = f.pitch_labels;
+    console.log(`pitch note names: ${l.code_bytes + l.data_bytes} bytes at ${l.at}..${l.end}, entered from ${l.site}`);
+    for (const m of l.machines) console.log(`  ${m.name.padEnd(5)} ${String(m.id).padStart(3)}: ${m.shows}`);
   }
   for (const n of [...report.notes, ...f.notes]) console.log(`  note: ${n}`);
   for (const g of report.gates) console.log(`  gate ${g.name}: ${g.ok ? 'pass' : 'FAIL'}  ${g.detail}`);

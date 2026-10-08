@@ -26,6 +26,10 @@
   "midiChroma": {
    "ok": true,
    "evidence": "Hardware (Machinedrum with UW): chromatic notes played, with live-record and held-step pitch p-locks, on X.14-based builds running these chroma routines byte for byte; a Kitbasher X.14 build with NFX4P, MIDI chromatic input and the unmute fix ran without problems. Emulator: note -> pitch-knob readbacks for every model and MODE segment, live record under every quantize setting, held-step locks, locks full and a stress run; base-channel notes, CCs and Enhanced-MIDI masks unchanged."
+  },
+  "pitchLabels": {
+   "ok": true,
+   "evidence": "Emulator, an X.14 build with the bundled catalog and --pitch-labels: after a turn of knob 1 the LCD shows C-3, C+3, C#3 and D‡5 (VADBD raw 72, 73, 74, 127); VADPC shows C--2 and follows its MODE knob to G#-2 at the next stop; VADRC's no-note stop, VADHH, a stock machine and every other knob keep their numbers. Interpreter: the OS's own knob-value painter and string draw run into the routine, and the framebuffer reads back the expected note. Not yet on hardware."
   }
  },
  "cache": {
@@ -77,6 +81,9 @@
   "dsp2.pi_slice": "0x600",
   "dsp2.pi_track": "0x142",
   "ram.window": "0x2bc000,0x2bd000,0x2be100,0x2bef60",
-  "midi_chroma.sites": "0x2dcb54,0x2dcf08,0x2cf974,0x225530"
+  "midi_chroma.sites": "0x2dcb54,0x2dcf08,0x2cf974,0x225530",
+  "pitch_labels.site": "0x228a24,0x22999e",
+  "pitch_labels.calls": "0x211384,0x211634",
+  "pitch_labels.data": "0x259954,0x2818de,0x2818da,0x7001aa,0x70001a"
  }
 }

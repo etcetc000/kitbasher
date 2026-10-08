@@ -24,6 +24,7 @@ import { callCode, drivePairs, dsp1Transport, dynSegment, linkDrive, type DriveL
 import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recovery.js';
 import { unmuteBlock, type UnmuteBlock } from './unmute.js';
 import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type Chroma, type ChromaTable } from './midi_chroma.js';
+import { assemble as labelAssemble, buildLabelTable, type LabelCode, type LabelTable, type PitchLabelSite } from './pitch_labels.js';
 import { linkCode, words, type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
 import { ctrCoverage, type CtrCoverage } from './scan.js';
 import { baseFamilies, checkLayout, listedFreeIds, LAYOUT_FORMAT, menuLimits, type Layout } from './layout.js';
@@ -78,6 +79,13 @@ export interface Features {
    * Off by default: a build without it is byte-identical to one from before the option existed.
    */
   midiChroma?: boolean | { channel: string };
+  /**
+   * Pitch note names (engine/src/pitch_labels.ts): the pitch knob of a model with a quarter or
+   * chromatic pitch law shows its note (C-3, C#3, C+3) under the dial instead of a number, as DEV
+   * shows a TONAL track's pitch. Off by default: a build without it is byte-identical to one from
+   * before the option existed.
+   */
+  pitchLabels?: boolean;
 }
 
 /** The default chromatic channel: the first one above the four base channels (channel 5 with base channel 1). */
@@ -206,6 +214,8 @@ export interface RamImage {
   unmute: { block: UnmuteBlock; home: 'dyn' | 'own'; segment: Uint8Array | null; base: number; limit: number } | null;
   /** --midi-chroma: the routines and their note table, at the end of the RAM image */
   chroma: { at: number; code: ChromaCode; table: ChromaTable; site: Chroma; channel: string; cfg: number } | null;
+  /** --pitch-labels: the routine and its table, at the end of the RAM image (after --midi-chroma's) */
+  pitchLabels: { at: number; code: LabelCode; table: LabelTable; site: PitchLabelSite } | null;
 }
 
 /**
@@ -302,7 +312,8 @@ export const IND_EXT_SPAN = 0xe14;
 
 export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Family[], sel: Selected[],
   opt: { dyn: boolean; dsp1: DriveLink | null; host: boolean; toFlash: Set<string>; dynFlash: Set<string>; idSpace: number; flashAt: number;
-         redrawValues: number; ind: Site | null; chroma?: { site: Chroma; channel: string; cfg: number } | null; unmute?: boolean }): RamImage {
+         redrawValues: number; ind: Site | null; chroma?: { site: Chroma; channel: string; cfg: number } | null; unmute?: boolean;
+         labels?: PitchLabelSite | null }): RamImage {
   const O = base.os;
   const E = base.ext.base;
   let cb = fromBase64(core.knob_callback);
@@ -460,8 +471,21 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     ext.push(code.bytes).align(4, 0);
     chroma = { at, code, table, ...opt.chroma };
   }
+  // --pitch-labels: after everything else, so the rest of the image is laid out exactly as without it.
+  // A selection with no labelled pitch knob builds no routine (and no hook).
+  let pitchLabels: RamImage['pitchLabels'] = null;
+  if (opt.labels) {
+    const table = buildLabelTable(sel.map((s) => ({ id: s.id, name: s.m.name.trim(), pitch: s.m.pitch, dyn_labels: s.m.dyn_labels })), !!dyn);
+    if (table.entries.length) {
+      ext.align(4, 0);
+      const at = E + ext.length;
+      const code = labelAssemble(at, opt.labels, table);
+      ext.push(code.bytes).align(4, 0);
+      pitchLabels = { at, code, table, site: opt.labels };
+    }
+  }
   return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh, uwMenu,
-           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, unmute, chroma };
+           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, unmute, chroma, pitchLabels };
 }
 
 /**
@@ -541,17 +565,24 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
       catch (e) { problems.push((e as Error).message); }
     }
   }
+  // --pitch-labels: the knob-value painter's string draw, verified by discovery (engine/src/pitch_labels.ts)
+  let labels: PitchLabelSite | null = null;
+  if (f.pitchLabels) {
+    if (!base.features.pitchLabels) problems.push(`pitch note names: not supported on ${base.name}: ${base.support.pitchLabels?.why ?? 'the knob-value painter was not found'}`);
+    else labels = base.features.pitchLabels;
+  }
   // --dsp1-recover: the base's DSP1/DSP2 code the handler is written against, word for word
   if (f.dsp1Recover && base.support.dsp1Recover && !base.support.dsp1Recover.ok) {
     problems.push(`--dsp1-recover: not supported on ${base.name}: ${base.support.dsp1Recover.why}`);
   }
   const make = (): RamImage => ramImage(base, main, core, fams, sel,
-    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, chroma, unmute: r.unmute });
-  // --midi-chroma's routines sit at the end of the RAM image, which then has to stay inside the span
-  // earlier images ran from on hardware (IND_EXT_SPAN), not just the base's window
-  const pastProven = (x: RamImage): boolean => !!x.chroma && x.bytes > IND_EXT_SPAN;
+    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, chroma, unmute: r.unmute, labels });
+  // --midi-chroma's and --pitch-labels' routines sit at the end of the RAM image, which then has to
+  // stay inside the span earlier images ran from on hardware (IND_EXT_SPAN), not just the base's window
+  const pastProven = (x: RamImage): boolean => (!!x.chroma || !!x.pitchLabels) && x.bytes > IND_EXT_SPAN;
   const tooBig = (x: RamImage): boolean => x.bytes > x.limit || pastProven(x);
   let ram = make();
+  if (labels && !ram.pitchLabels) notes.push('pitch note names: no selected machine has a pitch knob with a note law, so none are built');
   // the unmute fix is on by default, so a selection whose labels leave no room for it builds without
   // it (said so); asked for explicitly, the overflow is a problem below
   const over = (x: RamImage): boolean => !!x.unmute && (x.unmute.segment ?? x.dyn!.blob).length > x.unmute.limit;
@@ -569,7 +600,7 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
       toFlash.add(n);
       ram = make();
     }
-    if (toFlash.size) notes.push(`descriptors in flash (auto, for the RAM image to fit its ${ram.chroma ? Math.min(ram.limit, IND_EXT_SPAN) : ram.limit}-byte window): ${[...toFlash].join(', ')}`);
+    if (toFlash.size) notes.push(`descriptors in flash (auto, for the RAM image to fit its ${ram.chroma || ram.pitchLabels ? Math.min(ram.limit, IND_EXT_SPAN) : ram.limit}-byte window): ${[...toFlash].join(', ')}`);
   }
   const outside = drive ? drivePairs(drive.selector, sel).filter(([id]) => id >= idSpace) : [];
   if (outside.length) problems.push(`machine IDs ${outside.map(([id]) => id).join(', ')} are outside the DSP1 ID table (0..${idSpace - 1})`);
@@ -579,11 +610,15 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
   }
   if (pastProven(ram) && ram.bytes <= ram.limit) {
     const over = ram.bytes - IND_EXT_SPAN;
+    const both = !!ram.chroma && !!ram.pitchLabels;
+    const what = both ? 'MIDI chromatic note input and pitch note names' : ram.chroma ? 'MIDI chromatic note input' : 'pitch note names';
+    const off = both ? 'turn MIDI chromatic note input or pitch note names off' : `turn ${what} off`;
+    const bytes = (ram.chroma?.code.bytes.length ?? 0) + (ram.pitchLabels?.code.bytes.length ?? 0);
     const fix = mode === 'auto' && canFlash
-      ? 'untick a machine (one with dynamic knob labels frees the most) or turn MIDI chromatic note input off'
-      : canFlash ? `let descriptors move to flash (descriptors in flash: auto${mode === 'none' ? ', not none' : ''}), untick a machine, or turn MIDI chromatic note input off`
-      : 'untick a machine or turn MIDI chromatic note input off';
-    problems.push(`MIDI chromatic note input needs ${over} more byte${over === 1 ? '' : 's'} of RAM: its ${ram.chroma!.code.bytes.length}-byte routines ` +
+      ? `untick a machine (one with dynamic knob labels frees the most) or ${off}`
+      : canFlash ? `let descriptors move to flash (descriptors in flash: auto${mode === 'none' ? ', not none' : ''}), untick a machine, or ${off}`
+      : `untick a machine or ${off}`;
+    problems.push(`${what} need${both ? '' : 's'} ${over} more byte${over === 1 ? '' : 's'} of RAM: ${both ? 'their' : 'its'} ${bytes}-byte routines ` +
                   `go at the end of the RAM image, which then ends at ${(ram.base + ram.bytes).toString(16)}, past the hardware-proven ` +
                   `${(ram.base + IND_EXT_SPAN).toString(16)}${mode === 'auto' && canFlash && toFlash.size ? `, even with ${toFlash.size} descriptors moved to flash` : ''}: ${fix}`);
   }
