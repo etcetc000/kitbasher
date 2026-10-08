@@ -19,15 +19,15 @@ const child: Dsp1Law = {name: 'child', rank: 1, emit: 1, requires: ['parent'],
   relocs: [[1, '@parent', 1], [3, '@org', 1]], records: []};
 const laws = new Map([['parent', parent], ['child', child]]);
 
-test('drive sender discovery includes direct add-on calls and preserves register-loop routing',()=>{
+test('drive sender discovery includes direct add-on calls and refuses a register loop',()=>{
   const image=(ram:number,hex:string)=>({what:'synthetic code',ram,bytes:Buffer.from(hex,'hex')});
   const os=[image(0x200000,'4eb9010007024e75'),image(0x1000000,'4eb9010007024e75')];
   const addon=image(0x2c0000,'4eb9010007024eb9010007564e75');
-  assert.deepEqual(dsp1SenderSites(os,[addon],0x1000702),
-    {sites:[0x200002,0x1000002,0x2c0002],immediates:false});
-  assert.deepEqual(dsp1SenderSites(os,[],0x1000702),{sites:[0x200002,0x1000002],immediates:false});
+  assert.deepEqual(dsp1SenderSites(os,[addon],0x1000702),[0x200002,0x1000002,0x2c0002]);
+  assert.deepEqual(dsp1SenderSites(os,[],0x1000702),[0x200002,0x1000002]);
+  // a piece that keeps the sender in a register runs its own loop: never half-hooked
   const registerLoop=image(0x2d0000,'203c010007024e75');
-  assert.deepEqual(dsp1SenderSites(os,[registerLoop],0x1000702),{sites:[0x2d0002],immediates:true});
+  assert.throws(()=>dsp1SenderSites(os,[registerLoop],0x1000702),/as an immediate at 0x2d0002/);
 });
 
 test('drive discovery avoids occupied words, including uploaded zero padding', () => {

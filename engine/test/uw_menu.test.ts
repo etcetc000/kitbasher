@@ -14,7 +14,7 @@ function os(parts: [number, string][], size = 0x40000): CodeImage {
   return { what: 'slot', ram: 0x200000, bytes };
 }
 
-// ---- discovery, on the shapes of 1.63, X.13 and X.14
+// ---- discovery, on the shapes of 1.63 and X.14
 
 const COUNT = os([
   [0x22544c, '4eb90022c1a0'],                                       // jsr the count
@@ -29,7 +29,6 @@ const addonOs = (entryAt: number, entry: string, branchAt: number, branch: strin
   addon.bytes.set(hex(branch.replace(/\s+/g, '')), branchAt - 0x2c0000);
   return [slot, addon];
 };
-const X13 = addonOs(0x2c239c, '4fefffe4 48d70c7c 2c390029f306', 0x2c2424, '23c00028c2d4 4a86 6644 2204');
 const X14 = addonOs(0x2c2402, '20390029f306 4fefffe4 2f400018 103900252396', 0x2c249c, '23c10028c2d4 4aaf0018 6646 226f');
 
 test('1.63: the count is entered through our routine and its -2 is skipped', () => {
@@ -41,13 +40,12 @@ test('1.63: the count is entered through our routine and its -2 is skipped', () 
   assert.deepEqual(checks, [[0x22544e, 0x22c1a0], [0x22c1ec, 0x66085582]]);
 });
 
-test('X.13 and X.14: the thunk at 0x22c1a0 is entered through our routine and the add-on\'s move is skipped', () => {
-  for (const [images, branch, old] of [[X13, 0x2c242c, 0x66442204], [X14, 0x2c24a6, 0x6646226f]] as const) {
-    const { menu, why } = findUwMenu(images, TABLE);
-    assert.ok(menu, why);
-    assert.deepEqual([menu.kind, menu.entry, menu.callers, menu.branch, menu.branchOld, menu.hides], ['addon', 0x22c1a0, [0x22544e], branch, old, 'rom']);
-    assert.equal(menu.branchNew, ((0x60 << 24) | (old & 0xffffff)) >>> 0);   // bne -> bra, same displacement
-  }
+test('X.14: the thunk at 0x22c1a0 is entered through our routine and the add-on\'s move is skipped', () => {
+  const old = 0x6646226f;
+  const { menu, why } = findUwMenu(X14, TABLE);
+  assert.ok(menu, why);
+  assert.deepEqual([menu.kind, menu.entry, menu.callers, menu.branch, menu.branchOld, menu.hides], ['addon', 0x22c1a0, [0x22544e], 0x2c24a6, old, 'rom']);
+  assert.equal(menu.branchNew, ((0x60 << 24) | (old & 0xffffff)) >>> 0);   // bne -> bra, same displacement
 });
 
 test('a partial 1.63 match falls through to the other shapes; nothing found says why', () => {
@@ -63,11 +61,11 @@ test('a partial 1.63 match falls through to the other shapes; nothing found says
 });
 
 test('which records a non-UW unit hides', () => {
-  const m163 = findUwMenu([COUNT], TABLE).menu!, m13 = findUwMenu(X13, TABLE).menu!;
+  const m163 = findUwMenu([COUNT], TABLE).menu!, m14 = findUwMenu(X14, TABLE).menu!;
   const stock = ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM'];
   assert.equal(hiddenIndex(m163, stock), 8);
-  assert.equal(hiddenIndex(m13, [...stock, 'NFX']), 8);              // ROM by name, not the last two
-  assert.equal(hiddenIndex(m13, ['GND', 'TRX']), null);
+  assert.equal(hiddenIndex(m14, [...stock, 'NFX']), 8);              // ROM by name, not the last two
+  assert.equal(hiddenIndex(m14, ['GND', 'TRX']), null);
 });
 
 // ---- behaviour: our routine run on a table, then the base's count, as the OS does at init
@@ -119,7 +117,7 @@ function count(mem: Map<number, number>): { names: string[]; family: Map<number,
 
 for (const [label, menu, stock] of [
   ['1.63', () => findUwMenu([COUNT], TABLE).menu!, ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM']],
-  ['X.13', () => findUwMenu(X13, TABLE).menu!, ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM', 'NFX']],
+  ['X.14', () => findUwMenu(X14, TABLE).menu!, ['GND', 'TRX', 'EFM', 'E12', 'P-I', 'INP', 'MID', 'CTR', 'ROM', 'RAM', 'NFX']],
 ] as [string, () => UwMenu, string[]][]) {
   test(`${label}: without UW ROM and RAM go, later families move up two and the reverse table follows; with UW nothing changes`, () => {
     const m = menu();

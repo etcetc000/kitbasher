@@ -2,7 +2,7 @@
 //
 //   baseScan   the base's own code as it runs, walked from its entry points: the reset code, the OS
 //              entry, the base's boot routine and add-on init, every descriptor's knob callback,
-//              every jsr/jmp abs.l target in its code. Stock X.13 and 1.63 must come out with 0
+//              every jsr/jmp abs.l target in its code. Stock X.14 and 1.63 must come out with 0
 //              rejects: that is the decoder's positive control.
 //   imageScan  the same walk over the patched run-time memory (patch list applied, our RAM image
 //              and label segment in place, our boot routine in flash), seeded as well with every
