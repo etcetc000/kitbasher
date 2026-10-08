@@ -7,6 +7,8 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Changed (breaking)
 
+- X.13 is no longer supported.
+
 - **The UW question is mandatory.** The page offers only Yes and No (the "Not
   sure" choice is gone; one line under the question says how to check), selects
   neither, and does not remember the answer in the browser. A restored layout,

@@ -9,13 +9,13 @@
 //     in flash instead;
 //   * the hook routine is `jmp $213a0c` (and a nop): it does nothing but continue into the OS, so
 //     the prepared base behaves exactly as 1.63 does. It sits right after the container, where
-//     X.13 keeps its add-on (flash 0xe96e0);
+//     X.14 keeps its add-on (flash 0xe96e0);
 //   * the ColdFire slot is re-packed (UCL NRV2B, the shorter of levels 10 and 8) with that one
 //     operand changed. The stream fits the stock slot's length, so the slot header keeps it and
 //     nothing after it moves; the slot's checksum is rewritten.
 //
 // The patcher then treats it as a base with a hook (discover kind 'hook'): its build chains
-// through the hook's jmp, as it chains through X.13's routine. The flash after the DSP1 slot is
+// through the hook's jmp, as it chains through X.14's routine. The flash after the DSP1 slot is
 // pinned (the jump naming the hook is inside the packed ColdFire slot), so the build is keep-end.
 // Further base code can later be added as an add-on behind the same hook.
 

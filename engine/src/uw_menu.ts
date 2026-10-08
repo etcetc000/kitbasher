@@ -9,16 +9,15 @@
 //   count  OS 1.63 and DEV (init 0x22c1a0): count every record, then `subq.l #2` from the count.
 //          That hides the LAST two records, two of ours once they are appended, and leaves ROM and
 //          RAM showing (they load GND--: a non-UW unit takes 128 off any ID of 128 and up).
-//   addon  X.13 (add-on 0x2c239c) and X.14 (0x2c2402), entered through `jmp` at 0x22c1a0: find the
-//          family named ROM and move the later records down over ROM and RAM, AFTER writing the
-//          reverse table, so every family after ROM and RAM (NFX, and all of ours) is recorded two
-//          too high and the menu opens on the wrong category. X.13's move loop also ends on an
-//          absolute `addi.l #<table - 0x10>`, which with our table never matches: the unit hung.
+//   addon  X.14 (add-on 0x2c2402), entered through `jmp` at 0x22c1a0: find the family named ROM
+//          and move the later records down over ROM and RAM, AFTER writing the reverse table, so
+//          every family after ROM and RAM (NFX, and all of ours) is recorded two too high and the
+//          menu opens on the wrong category.
 //
 // The fix is the same for both: the caller of the init enters a routine of ours, which on a
 // non-UW unit moves the records after ROM and RAM down over them in our copy of the table and then
 // enters the init, so the init counts, and writes the reverse table for, the menu the unit shows.
-// The init's own non-UW step (1.63's -2, the add-ons' move) is turned off: its `bne` on the UW
+// The init's own non-UW step (1.63's -2, the add-on's move) is turned off: its `bne` on the UW
 // flag becomes `bra`. The routine checks the record still holds the base's name (ROM) first, so a
 // second call changes nothing.
 //
@@ -67,9 +66,8 @@ export function findUwMenu(images: CodeImage[], table: number): { menu: UwMenu |
     }
     whys.push(near.length !== 1 ? `the family count at ${h(e)} has ${near.length} UW tails` : `no call of the family count at ${h(e)}`);
   } else if (entry.length > 1) whys.push(`${entry.length} family counts`);
-  // addon: X.13's and X.14's routines, by their entry and their store-count / test-UW / bne
+  // addon: X.14's routine, by its entry and its store-count / test-UW / bne
   const shapes: { name: string; entry: string; branch: string }[] = [
-    { name: 'X.13', entry: '4fefffe4 48d70c7c 2c39 <uw>', branch: '23c0 0028c2d4 4a86 @br 66' },
     { name: 'X.14', entry: '2039 <uw> 4fefffe4 2f400018 1039 <table>', branch: '23c1 0028c2d4 4aaf0018 @br 66' },
   ];
   for (const s of shapes) {

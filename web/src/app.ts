@@ -12,7 +12,7 @@
 // they are read with the File API, never uploaded, and planned and checked exactly like the
 // bundled ones.
 
-import { baseSet, identify, NotPatchable, type Base, type BaseProfileFile, type BaseSet, type LineageFile } from '../../engine/src/bases.js';
+import { baseSet, identify, NotPatchable, unsupported, type Base, type BaseProfileFile, type BaseSet, type LineageFile } from '../../engine/src/bases.js';
 import { prepare163 } from '../../engine/src/prepare.js';
 import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
@@ -467,6 +467,7 @@ async function onFile(f: File): Promise<void> {
         parsed = readFirmware(bytes);
         b = (await identify(parsed, data.bases)).base;
       } else {
+        if (unsupported(parsed.tag)) throw e;              // X.13, stock or built on: refused, nothing restored
         // an OS this page patched: not a base, but it carries its layout, which comes back
         // a Kitbasher build is not built on: its layout comes back, and the stock OS is asked for
         const got = findLayout(parsed);

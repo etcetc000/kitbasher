@@ -8,13 +8,14 @@ removing any stock machine.
 |---|---|---|
 | OS 1.63 (stock) | `bases/stock-163.json` | Prepared once with a boot hook, then patched as the prepared base |
 | OS 1.63, prepared | `bases/stock-163-prepared.json` | Patched directly |
-| OS X.13 | `bases/x13.json` | Patched directly, chaining onto X.13's own add-on |
 | OS X.14 | `bases/x14.json` | Patched directly, chaining onto X.14's own add-on |
 | Em's DEV firmware (md-26912-190450) | `bases/dev-26912.json` | Patched directly, chaining onto DEV's add-on; nothing after the DSP2 slot moves |
 | Em's DEV firmware (md-26A01-183521) | `bases/dev-26a01.json` | Patched directly, as for the earlier DEV build |
 
-Each profile also records how far that base has been tested. X.13 and DEV 26912
-images have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,
+X.13 is no longer supported: an OS tagged `X13 ` is refused before anything else.
+
+Each profile also records how far that base has been tested. DEV 26912 images
+have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,
 X.14 and DEV 26A01 have passed the engine's gates and emulator checks of
 controls, labels, kits, memory and audio. The page and the build report show the
 level for the base you load.
@@ -83,13 +84,11 @@ X.14 or DEV 26A01.
 
 ## X.14
 
-X.14 uploads the same DSP1 and DSP2 programs as X.13; its ColdFire code, SRAM
-routines and add-on differ, so it has its own profile and runtime entry. Two
-details matter to the patcher:
+X.14 has its own profile and runtime entry. Two details matter to the patcher:
 
 - X.14's add-on calls the DSP1 sender directly. Discovery finds that call as well
   as the OS's own, so DSP1 drive curves reach every track.
-- X.13 and X.14 upload the DSP2 voice-retirement code twice. Clean recovery
+- X.14 uploads the DSP2 voice-retirement code twice. Clean recovery
   patches every copy, and refuses the build if any copy differs from the stock
   instructions it expects.
 
@@ -119,11 +118,9 @@ machine menu opens on.
 - Stock 1.63 and the DEV builds drop the *last two* categories. With added
   categories after the base's own, that would hide two of them and show ROM and
   RAM, which play nothing without UW.
-- X.13 and X.14 move the categories after ROM and RAM down over them, but only
-  after recording where each machine is, so the menu would open on the wrong
-  category for every added machine (and NFX). X.13's move also ended on an
-  address that no longer matched once the menu table moved, which hung the unit
-  at the boot screen.
+- X.14 moves the categories after ROM and RAM down over them, but only after
+  recording where each machine is, so the menu would open on the wrong category
+  for every added machine (and NFX).
 
 Every build therefore adds a short routine that, on a unit without UW, removes
 ROM and RAM from its menu table *before* the base counts the categories, and

@@ -12,7 +12,7 @@
 //
 // DSP1's memory map, and where the garbage comes from
 // ---------------------------------------------------
-// DSP1 is the mixer. The addresses below are DSP1's, read from the disassembly of the DEV, X.13
+// DSP1 is the mixer. The addresses below are DSP1's, read from the disassembly of the DEV, X.14
 // and 1.63 uploads, which are identical here:
 //
 //   Y:$600..$7ff   the DSP2 voice feed. DMA4 (DSR4 = $ffffb8 = ESSI0's receiver, DDR4 = Y:$600,
@@ -581,7 +581,7 @@ export const VECTOR_WORD = 0x0bb4a0;
  * DSP2's end-of-block spin at P:$bb..$bf on the PDRC level DSP1's P:$270 toggles. None of that is
  * findable by a signature that could sit anywhere -- the addresses are the contract -- so each is
  * required here, word for word, as stock 1.63's upload has it (DEV's DSP1 and DSP2 uploads are
- * byte-identical to 1.63's; X.13 re-records its DSP2 but keeps these words). A base that differs in
+ * byte-identical to 1.63's; X.14 re-records its DSP2 but keeps these words). A base that differs in
  * any one of them does not get the option: the build refuses it by name.
  */
 export interface Anchor { what: string; dsp: 1 | 2; at: number; words: number[] }

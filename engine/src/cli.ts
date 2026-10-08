@@ -145,7 +145,8 @@ async function main(): Promise<void> {
       const d = (e as NotPatchable).discovery;
       for (const f of d?.findings ?? []) console.log(`  ${f.ok ? 'found' : 'NOT FOUND'}  ${f.what}: ${f.detail}`);
       console.error(`not patchable: ${(e as Error).message}`);
-      if (a.report && d) writeFileSync(a.report, JSON.stringify({ refused: (e as Error).message, findings: d.findings, values: d.values }, null, 1));
+      // an OS refused before discovery (X.13) has no findings: the report says why
+      if (a.report) writeFileSync(a.report, JSON.stringify(d ? { refused: (e as Error).message, findings: d.findings, values: d.values } : { refused: (e as Error).message }, null, 1));
       process.exit(1);
     }
     console.log(`base: ${r.base.name} [${r.base.qualification.level}: ${r.base.qualification.by}]`);
