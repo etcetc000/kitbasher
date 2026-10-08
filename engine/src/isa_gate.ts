@@ -16,7 +16,8 @@ import { readBootRamWrites } from './boot_safety.js';
  * operand), found by signature in the base and kept only when a patch-list site falls inside one:
  *   ctr-controlall's per-track skip (engine/src/ctr_controlall.ts findLoopSkip): 18 bytes re-encoded
  *     as one range test, so the base's instruction boundaries no longer hold there;
- *   --cpu-indicator's hook (engine/src/indicator.ts): the LCD flush's `move.l <prev>,d5` as `jsr <stub>`.
+ *   --cpu-indicator's hook (engine/src/indicator.ts): the LCD flush's `move.l <prev>,d5` as `jsr <stub>`;
+ *   the unmute-latency fix (engine/src/unmute.ts): five sequencer instructions as `jsr <routine>` (+ `nop`).
  * [lo, hi) is the replaced CODE; the ISA gate decodes it linearly from lo.
  */
 export function rewrittenCode(baseFw: Firmware, base: Base, sites: number[]): [number, number][] {
@@ -28,6 +29,8 @@ export function rewrittenCode(baseFw: Firmware, base: Base, sites: number[]): [n
   for (const L of codeImages(baseFw, base).flatMap((i) => findLoopSkip(i.bytes, i.ram))) {
     if (hit(L.site, L.site + L.old.length)) out.push([L.codeAt, L.site + L.old.length]);
   }
+  // the unmute-latency fix: each sequencer instruction it replaces becomes `jsr` (+ `nop`)
+  for (const s of base.features.unmute?.sites ?? []) if (hit(s.at, s.at + s.old.length)) out.push([s.at, s.at + s.old.length]);
   try {
     const F = findFlushHook(cf, org);
     if (hit(F.site, F.site + 6)) out.push([F.site, F.site + 6]);

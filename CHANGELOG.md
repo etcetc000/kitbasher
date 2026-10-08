@@ -46,6 +46,19 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Added
 
+- **Unmuting plays the next trig.** On every 1.63-derived OS, a track unmuted
+  less than about one step before its next trig stayed silent for that trig, so
+  an unmute on the beat was heard about two steps late. The sequencer queues each
+  step one step ahead and skipped muted tracks while queuing. Builds now queue
+  muted tracks too and drop their notes when the step plays if the track is still
+  muted, so an unmute up to the trig plays it, and one up to a tick (1/6 of a
+  step) after it plays it one tick late. Muting, MIDI machines, accents, swing and
+  MIDI out behave as before. On by default on OS 1.63 (prepared), X.13 and X.14:
+  *Fix unmute latency* on the Download step, `--unmute-fix` / `--no-unmute-fix`
+  on the command line. The DEV firmware rewrites the sequencer code the fix
+  changes, so it is not offered there. Five instructions of the OS call 642
+  bytes of code (78 of data) placed after the knob labels in their RAM range.
+  Tested in the emulator, not yet on hardware.
 - Pitch metadata: `panel.pitch` in the model manifest and `pitch` on pack models
   (knob, law, steps, base note, range, per-mode overrides), with `rawToNote` /
   `noteToRaw` in `engine/src/pitch.ts`.

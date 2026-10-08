@@ -116,6 +116,8 @@ export interface Base {
     descFlash: { alias: number } | null;
     /** --cpu-indicator: the LCD flush's diff (engine/src/indicator.ts), once in the base's code */
     lcdFlush: import('./indicator.js').Site | null;
+    /** the unmute-latency fix's sequencer sites (engine/src/unmute.ts); null: not found, or no label RAM range */
+    unmute: import('./unmute.js').Unmute | null;
   };
   os: {
     cfBase: number; osMain: number; descriptorTable: number; freeDescriptor: number; descriptorSize: number;

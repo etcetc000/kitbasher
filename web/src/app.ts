@@ -305,9 +305,14 @@ function trimmed(opt = trimOptions()): Trimmed {
 
 // Existing layout IDs remain pinned; newly selected models can use an available ID.
 const allowIdMove = (): boolean => true;
+/** The default firmware fixes, with the unmute-latency fix as the Download step's toggle says (on: wherever this OS has it). */
+const firmwareFixes = (): ReturnType<typeof currentFirmwareFixes> => {
+  const f = currentFirmwareFixes();
+  return { ...f, features: { ...f.features, unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false } };
+};
 
 function planFor(exclude: string[], opt = trimOptions()): Plan {
-  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
+  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareFixes() }, trimmed(opt));
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
@@ -449,6 +454,7 @@ async function onFile(f: File): Promise<void> {
   revision++;
   input = null; base = null; fw = null; current = null; cachedBuild = null;
   $('room').hidden = true;
+  $('firmware-options').hidden = true;
   $('firmware-details').hidden = true;
   layoutEd.render(null);
   syncWizard();
@@ -490,6 +496,8 @@ async function onFile(f: File): Promise<void> {
     $('firmware-info').textContent = `${b.qualification.profile ? b.name : 'Unrecognized firmware version'}.` +
       (b.qualification.level === 'hardware-proven' ? '' : " We haven't tested this version on a Machinedrum yet.");
     $('firmware-details').hidden = false;
+    // the unmute-latency fix is offered only where this OS has the sequencer it is written against
+    $('firmware-options').hidden = !b.support.unmuteFix?.ok;
     status(`Loaded ${f.name}.`, 'ok');
     if (pendingProject) applyProject(pendingProject.project, pendingProject.name);
   } catch (e) {
@@ -568,7 +576,7 @@ function buildWith(trim: TrimOptions): Promise<BuildResult> {
   // throws without a Yes or a No (and engine build refuses a missing answer too)
   const uw = uwForBuild(uwAnswer);
   return build(input!, base!, data.packs, data.core!,
-    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...firmwareFixes() }, trimmed(trim));
 }
 
 function showStorage(report: BuildReport): void {
@@ -911,6 +919,7 @@ async function main(): Promise<void> {
   document.querySelectorAll('input[name=e12]').forEach((r) => r.addEventListener('change', syncTrim));
   syncTrim();
   $('build').addEventListener('click', () => void onBuild());
+  $('unmute-fix').addEventListener('change', () => refresh());
   const packFiles = $('pack-files') as HTMLInputElement;
   packFiles.addEventListener('change', () => { if (packFiles.files?.length) void onPackFiles(Array.from(packFiles.files)); });
 }

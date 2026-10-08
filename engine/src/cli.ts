@@ -55,6 +55,13 @@
 //                        P:$e8..$f3 no longer spins on HSR RXDF waiting for the ColdFire. No DSP2 word
 //                        changes and the DSP1 half of the sender is untouched (engine/src/coldfire.ts)
 //   --no-host-reorder    turn it off: the stock sender, unchanged
+//   --unmute-fix         an unmuted track plays its next trig, also when the unmute comes less than a
+//                        step before it (or up to one tick after it, then one tick late), instead of
+//                        about two steps later: five sequencer instructions call a routine in the
+//                        label RAM range (engine/src/unmute.ts). On by default wherever discovery
+//                        finds the sequencer it is written against; asked for on a base without it,
+//                        the build is refused
+//   --no-unmute-fix      turn it off: the base's sequencer, unchanged
 //   --cache-align        put every machine whose executed code can outgrow the 8-sector instruction
 //                        cache on one of its measured 128-word cache offsets (engine/src/align.ts).
 //                        On by default; --no-align gives plain first-fit placement, which the parity
@@ -100,7 +107,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
-                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw', 'legacy-ids']);
+                          'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw', 'legacy-ids',
+                          'unmute-fix', 'no-unmute-fix']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -115,6 +123,12 @@ function args(argv: string[]): { a: Record<string, string>; many: Record<string,
     i++;
   }
   return { a: out, many };
+}
+
+/** --unmute-fix / --no-unmute-fix: true, false, or undefined (the default: on where the base has it). */
+function unmuteFlag(a: Record<string, string>): boolean | undefined {
+  if (a['unmute-fix'] && a['no-unmute-fix']) throw new Error('--unmute-fix and --no-unmute-fix: choose one');
+  return a['no-unmute-fix'] ? false : a['unmute-fix'] ? true : undefined;
 }
 
 async function main(): Promise<void> {
@@ -162,6 +176,7 @@ async function main(): Promise<void> {
   }
   // the UW answer is required before anything is read (a restored layout's answer, below, only reported)
   const uw = uwFromFlags({ uw: !!a.uw, noUw: !!a['no-uw'] });
+  const unmuteFix = unmuteFlag(a);
   const bases = loadBases(a.bases ?? resolve(ROOT, 'bases'));
   if (a.catalog && many.packs?.length) throw new Error('--catalog selects a complete set; do not combine it with --packs');
   const { packs, core, dirs } = loadPacks(a.catalog ? [resolve(a.catalog)] :
@@ -238,6 +253,7 @@ async function main(): Promise<void> {
       dsp1IdSpace: a['dsp1-id-space'] ? Number(a['dsp1-id-space']) : undefined,
       dsp1Recover: a['no-dsp1-recover'] ? false : a['dsp1-recover'] ? true : undefined,
       cpuIndicator: a['no-cpu-indicator'] ? false : a['cpu-indicator'] ? true : undefined,
+      unmuteFix,
     },
   });
   writeFileSync(a.out, output);
@@ -259,7 +275,8 @@ async function main(): Promise<void> {
   console.log(`dynamic labels: ${f.dyn_labels ? `${f.dyn_labels.bytes} bytes, ${f.dyn_labels.page_sites} page sites` : 'off'}; ` +
               `DSP1 drive: ${f.dsp1_drive ? `${f.dsp1_drive.machines} machines` : 'off'}; ` +
               `host-command reorder: ${f.host_reorder ? `${f.host_reorder.bytes} bytes at ${f.host_reorder.entry}, ${f.host_reorder.sites.length} sites` : 'off'}; ` +
-              `descriptors in flash: ${f.desc_flash.length ? f.desc_flash.join(', ') : 'none'}`);
+              `descriptors in flash: ${f.desc_flash.length ? f.desc_flash.join(', ') : 'none'}; ` +
+              `unmute fix: ${f.unmute_fix ? `${f.unmute_fix.bytes} bytes at ${f.unmute_fix.at}` : 'off'}`);
   for (const n of [...report.notes, ...f.notes]) console.log(`  note: ${n}`);
   for (const g of report.gates) console.log(`  gate ${g.name}: ${g.ok ? 'pass' : 'FAIL'}  ${g.detail}`);
   console.log(`wrote ${a.out}`);

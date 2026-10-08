@@ -69,7 +69,7 @@ node engine/dist/src/cli.js --prepare-163 --in os163.syx --out os163-prepared.sy
 
 Discovery checks each feature on the base you load: dynamic knob labels, DSP1
 drive curves, menu descriptors in flash, control-all for added machines,
-overload recovery and the CPU indicator. A feature whose sites are not found is
+overload recovery, the CPU indicator and the unmute-latency fix. A feature whose sites are not found is
 switched off and reported, never guessed. To see what a base supports:
 
 ```text
@@ -80,6 +80,26 @@ Some options also need the profile to record them as working on that base. The
 reordered DSP2 host sender (`--host-reorder`) is enabled on DEV 26912 and refused
 elsewhere: on prepared 1.63 it silences output, and it is not yet qualified on
 X.14 or DEV 26A01.
+
+## Unmute latency
+
+On every 1.63-derived OS the sequencer builds each step's notes one step ahead
+and leaves a muted track out of them, so a track unmuted less than about one
+step before its next trig stays silent for that trig. Builds fix this by
+default (`engine/src/unmute.ts`): muted tracks are queued too, and their notes
+are dropped when the step plays if the track is still muted. An unmute up to
+the trig plays it on time; one up to a tick (1/6 of a step) after it plays it
+one tick late. Muting is unchanged, and so are MIDI machines, which keep the
+base's behaviour.
+
+Five instructions of the OS's sequencer call 642 bytes of code (and 78 of data)
+placed after the knob labels in their RAM range, or alone in that range when no
+selected machine has labels. Discovery finds the sequencer by signature; on OS
+1.63 (prepared), X.13 and X.14 it is the same code, and the routines take the
+base's own MIDI send and interrupt level from it. The DEV builds enter their own
+code from the sequencer's tick handler and buffer toggle, so the fix is not
+offered there. Turn it off with *Fix unmute latency* on the Download step or
+`--no-unmute-fix`; the image is then the one a build without the fix makes.
 
 ## X.14
 

@@ -22,6 +22,9 @@
   "by": "Tested on hardware (Machinedrum MKII +Drive UW)"
  },
  "cache": {
+  "unmute.sites": "0x23a92c,0x23a9a2,0x23aa20,0x2397e0,0x23976a",
+  "unmute.calls": "0x206c8e,0x2d7daa,0x23abfa,0x23aac0",
+  "unmute.data": "0x1001520,0x28d152,0x7120ca,0x71217a,0x7120dc,0x1001560",
   "boot.routine": "0x2be00",
   "boot.jump_operand": "0x2be1c",
   "os_main": "0x213a0c",

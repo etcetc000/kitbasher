@@ -28,6 +28,7 @@ import { findSite as findFlushHook, NoIndicator, type Site as FlushSite } from '
 import { recoverProblems, ANCHORS } from './recover.js';
 import {qualifyModelRuntime} from './model_runtime.js';
 import { findUwMenu } from './uw_menu.js';
+import { findUnmute, unmuteValues } from './unmute.js';
 
 export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
@@ -43,7 +44,9 @@ export interface Discovery {
              /** the options: --dsp1-recover (its anchors in DSP1/DSP2), --cpu-indicator (the LCD flush hook), --ctr-control-all (its three sites) */
     dsp1Recover: Support; cpuIndicator: Support; ctrControlAll: Support; modelRuntime: Support;
     /** the menu on a Machinedrum without UW: how the base hides ROM and RAM there (engine/src/uw_menu.ts) */
-    uwMenu: Support };
+    uwMenu: Support;
+    /** the unmute-latency fix: the sequencer sites it replaces (engine/src/unmute.ts) */
+    unmuteFix: Support };
   /** the patchable base; null with `refused` saying why */
   base: Base | null;
   refused: string | null;
@@ -66,7 +69,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
   const at1 = (k: string, v: number): string => (A[k] === undefined ? '' : num(A[k]) === v ? ' (the 1.63 address)' : ` (1.63 has it at ${A[k]}: moved)`);
   const fail = (kind: Discovery['kind'], why: string): Discovery => ({
     kind, lineage: kind !== 'unknown', findings, values, base: null, refused: why,
-    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
+    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'unmuteFix'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
   });
   /** exactly one match, else NotFound naming the signature and the count */
   const one = (name: string, imgs: CodeImage[], sig = S[name]): Hit => {
@@ -275,6 +278,10 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     const uw = findUwMenu(images, familyTable);
     note('non-UW menu', uw.menu !== null, uw.why);
     if (uw.menu) { val('os.uw_menu.entry', uw.menu.entry); val('os.uw_menu.callers', uw.menu.callers); val('os.uw_menu.branch', uw.menu.branch); }
+    // the sequencer an unmute waits on (engine/src/unmute.ts)
+    const um = findUnmute(images);
+    note('unmute latency', um.unmute !== null, um.why);
+    if (um.unmute) for (const [k, v] of Object.entries(unmuteValues(um.unmute))) val(k, v);
     // the machine IDs of the base's menu family with this name (the descriptor's ID byte at +4)
     const familyMembers = (table: number, name: string): number[] | null => {
       for (let n = 0; n < 256; n++) {
@@ -554,7 +561,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       },
       layout,
       ext: { base: env[0][0], end: env[0][1] },
-      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush },
+      features: { dynLabels: dyn2, dsp1Drive: dsp1, hostSend, descFlash: alias === null ? null : { alias }, lcdFlush, unmute: dyn2 ? um.unmute : null },
       os: {
         cfBase, osMain, descriptorTable, freeDescriptor, descriptorSize: dsz,
         familyTable, familyBaseSites, familyListSites, uwMenu: uw.menu, pageDraw, redrawStub,
@@ -591,6 +598,9 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     note('model runtime',base.modelRuntime.ok,base.modelRuntime.why);
     const support: Discovery['support'] = {
       modelRuntime:{ok:base.modelRuntime.ok,why:base.modelRuntime.why},
+      unmuteFix: !um.unmute ? { ok: false, why: `the sequencer it is written against was not found: ${um.why}` }
+        : !dyn2 ? { ok: false, why: `its routines go in the label segment's RAM range, which this base does not have: ${dynWhy || ramWhy || 'no RAM for the label segment'}` }
+        : { ok: true, why: `discovered: ${um.why}` },
       uwMenu: uw.menu ? { ok: true, why: `discovered: ${uw.why}` } : { ok: false, why: `${uw.why}: on a Machinedrum without UW the menu hides the last two added categories and shows ROM and RAM` },
       idFixes: { ok: true, why: `discovered: ${ctrSites.length} CTR-range tests, high defaults, LEV bar, preview` },
       ramWindow: ramWhy ? { ok: false, why: ramWhy } : { ok: true, why: `discovered free: ${env.map(([a, b]) => `${h(a)}..${h(b)}`).join(' + ')}` },

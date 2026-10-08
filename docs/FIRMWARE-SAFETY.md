@@ -375,7 +375,8 @@ down before you flash, and let hardware decide.
    - `patch-sites`, `readback`, `os-area`;
    - `dsp2-records`, `dsp2-slot`, `stub-trim`, `cache-align`, `pi-clean`;
    - `dsp1-drive-layout`, `dsp1-recover`, `clean-recovery`, `cpu-indicator`;
-   - `ctr-coverage`, `ctr-controlall`, `model-runtime`, `machine-ids`.
+   - `ctr-coverage`, `ctr-controlall`, `model-runtime`, `machine-ids`;
+   - `unmute-sites`, `unmute-fix`.
 3. Independent image checks, re-derived from the base and the exact output
    rather than from the build's own plan: the boot block and bootstrap routine
    are identical, flash after the OS is erased, DSP records sit only in free
