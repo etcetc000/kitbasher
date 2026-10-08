@@ -540,14 +540,11 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
     patches.push(...hp.patches);
     checks.push(...hp.checks);
   }
-  // --midi-chroma: the parser's range test rewritten, three calls retargeted; no other write may touch them
+  // --midi-chroma: the parser's range test rewritten, three calls retargeted (checked against the
+  // final patch list below)
   let chromaWrites: [number, number][] = [];
   if (ram.chroma) {
     const cp = chromaPatches(ram.chroma.site, ram.chroma.code.labels);
-    const ranges = chromaRanges(ram.chroma.site);
-    const clash = patches.filter(([s]) => ranges.some(([lo, hi]) => s + 4 > lo && s < hi));
-    gate('midi-chroma-sites', clash.length === 0, clash.length ? `other patches write ${clash.map(([s]) => h(s)).join(', ')}, inside the hook sites`
-      : `${cp.patches.length} longwords at ${ranges.map(([lo, hi]) => `${h(lo)}..${h(hi)}`).join(', ')}, written by nothing else`);
     chromaWrites = cp.patches;
     patches.push(...cp.patches);
     checks.push(...cp.checks);
@@ -565,6 +562,26 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
   });
   gate('patch-sites', bad.length === 0, bad.length ? `unexpected words at ${bad.map(([s]) => h(s)).join(', ')}` :
        `${checks.length} sites hold what this base's profile says`);
+  // ---- the final patch list: no address written twice (a later write would silently win)
+  {
+    const seen = new Map<number, number>();
+    const twice = patches.filter(([a]) => { const n = (seen.get(a) ?? 0) + 1; seen.set(a, n); return n === 2; }).map(([a]) => a);
+    gate('patch-list', twice.length === 0, twice.length ? `written more than once: ${twice.map(h).join(', ')}`
+      : `${patches.length} boot writes, each address once`);
+  }
+  // --midi-chroma: nothing but its own writes in the hook sites, and nothing at all in its routines
+  if (ram.chroma) {
+    const ranges = chromaRanges(ram.chroma.site);
+    const mine = new Set(chromaWrites.map(([a]) => a));
+    const into = (lo: number, hi: number) => patches.filter(([a]) => a + 4 > lo && a < hi);
+    const clash = ranges.flatMap(([lo, hi]) => into(lo, hi)).filter(([a]) => !mine.has(a));
+    const code = into(ram.chroma.at, ram.chroma.at + ram.chroma.code.bytes.length);
+    gate('midi-chroma-sites', clash.length === 0 && code.length === 0,
+      clash.length ? `other patches write ${clash.map(([a]) => h(a)).join(', ')}, inside the hook sites`
+        : code.length ? `patches write ${code.map(([a]) => h(a)).join(', ')}, inside the routines at ${h(ram.chroma.at)}`
+        : `${chromaWrites.length} longwords at ${ranges.map(([lo, hi]) => `${h(lo)}..${h(hi)}`).join(', ')}, written by nothing else; ` +
+          `no write into the routines at ${h(ram.chroma.at)}..${h(ram.chroma.at + ram.chroma.code.bytes.length)}`);
+  }
   const patchSrc = img.length;
   assertBootRamWrites(patches, base.boot.sram);
   for (const [a, v] of patches) img.push(be32(a), be32(v));
