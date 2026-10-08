@@ -38,7 +38,7 @@
   },
   "os": {
     "descriptor": { "size": 86, "ids": 192, "about": "192 longword pointers, then a zero longword; a free ID points at GND's empty descriptor (the most common entry, ID byte 0). Found by that shape among the lea operands of the base's code." },
-    "dead_ids": { "from": "0x60", "to": "0x77", "why": "no parameter packet (0x262824): silent on every hit" },
+    "dead_ids": { "from": "0x60", "to": "0x7b", "why": "no parameter packet (0x262824 tests id-0x60 <=u 0x1b, i.e. 0x60..0x7b: MID 0x60..0x6f, CTR 0x70/0x71/0x78..0x7b and the stock gap 0x72..0x77): silent on every hit, and the MID IDs play MIDI on trig. Never allocate here. 0x78..0x7b also hold CTR descriptors, so they were never free; the range says so outright." },
     "menu": {
       "about": "The machine-select menu. A family record is 4 name bytes and a list pointer; the menu draws 3 of them, stops at a 0 byte, and a 0 first byte ends the table. 256 families, 256 machines per list. charset: the characters the font at 0x259954 has glyphs for (no lowercase but o and p, which are symbols).",
       "name_bytes": 4, "name_shown": 3,

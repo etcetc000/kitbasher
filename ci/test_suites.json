@@ -9,16 +9,21 @@
     "aliases",
     "model_runtime",
     "menu_refresh",
+    "uw_menu",
+    "id_allocation",
+    "restore",
     "model_selection",
     "recover",
     "dsp1_drive",
     "uw_needs",
+    "uw_answer",
     "handoff",
     "outputpace",
     "ordered_recovery",
     "clean_recovery",
     "stub_trim_unit",
-    "samples_unit"
+    "samples_unit",
+    "pitch"
   ],
   "legacy": [],
   "alignment": []

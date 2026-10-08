@@ -19,6 +19,15 @@ OSC (oscillator synths), WAV (wavetable and spectral), VOX (voice and formant),
 NZE (noise), PHY (physical models) and NFX (effects on the previous track). Renamed models keep their former keys as aliases, so a
 layout saved before the rename still loads and keeps every ID.
 
+### Pitch
+
+Every pitched model follows one pitch law: PTCH raw = 2 × (MIDI − 24), so raw 0
+is MIDI 24 (C0, 32.70 Hz), even values are semitones (72 = C3, MIDI 60) and odd
+values are quarter tones, up to MIDI 87.5 at 127. Each model's manifest records
+its law and range (see [Model packs](MODEL-PACKS.md#declaring-what-the-pitch-knob-means)).
+Saved kits and pattern P-locks made before this law play different notes; there is
+no converter.
+
 ## Compiled models
 
 Two packs in [`catalog/`](../catalog/README.md) ship as compiled code only:

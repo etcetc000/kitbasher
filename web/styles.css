@@ -754,6 +754,17 @@ h2 {
   font: 500 11px/1.5 var(--mono);
   white-space: nowrap;
 }
+.machine.unavailable { opacity: .5; }
+.uw-question { margin: 14px 0 6px; border: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.uw-question legend { float: left; font-weight: 600; margin-right: 6px; padding: 0; }
+.uw-question #uw-help, .uw-question #uw-file-hint { flex-basis: 100%; margin: 2px 0 0; }
+.restore { margin: 8px 0; }
+.restore summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.restore p { margin: 6px 0; }
+.restore-drop { display: block; border: 1px dashed var(--line); border-radius: 4px; padding: 10px 12px; margin: 6px 0; cursor: pointer; }
+.restore-drop.over, .restore-drop:hover { border-color: var(--muted); }
+.restore-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.restore-drop:focus-within { outline: 2px solid var(--muted); outline-offset: 2px; }
 .uw-badge {
   padding: 1px 6px;
   border: 1px solid var(--line);
@@ -1761,7 +1772,7 @@ body.wizard .lay-grid{grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr)}
 :root[data-theme=dark] body.bench .wizard-steps button[aria-current=step],
 :root[data-theme=dark] body.bench :is(.wizard-actions .wizard-primary,button.wizard-primary,#build){background:var(--accent);border-color:var(--accent);color:#0b0b0b}
 :root[data-theme=dark] body.bench :is(.wizard-primary,#build):disabled{background:#2c2c2c;border-color:#2c2c2c;color:#7a7a7a}
-:root[data-theme=dark] body.bench :is(#drop,.lay-add){border-color:#444;background:var(--panel)}
+:root[data-theme=dark] body.bench :is(#drop,.lay-add,.restore-drop){border-color:#444;background:var(--panel)}
 :root[data-theme=dark] body.bench :is(.machine,.stat,.inspector,.lay-cat,.lay-cat header,.icon,.lay-actions button,.lay-actions label.btn,.lay-ids .cell[data-state=free]){background:var(--panel);color:var(--ink);border-color:var(--line)}
 :root[data-theme=dark] body.bench .machine{border-bottom-color:var(--line)}
 :root[data-theme=dark] body.bench :is(.machine:hover,.machine-info:hover){background:var(--hover)}

@@ -5,7 +5,7 @@ operators, signed ratio behavior and block envelopes.
 
 | Control | Range |
 |---|---|
-| PTCH | MIDI note, with fractional interpolation |
+| PTCH | Raw = 2 × (MIDI − 24): MIDI 24 (C0, 32.7 Hz) at 0 to 87.5 (1.28 kHz) at 127, in quarter-tone steps; even values are semitones (72 = C3) |
 | DEC | Amp decay, 10 ms to 10 s |
 | ALGO | One of eight algorithms |
 | RAT1, RAT2 | One of sixteen ratios each |

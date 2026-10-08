@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'build/manifest-deps'))
 from jsonschema import Draft202012Validator
+from pitch import check_pitch
 
 def validate(m):
     schema = json.loads((ROOT / 'docs/model-manifest.schema.json').read_text())
@@ -29,6 +30,8 @@ def validate(m):
         if owned & targets:
             raise ValueError('two mode knobs cannot write the same caption')
         owned.update(targets)
+    if 'pitch' in m['panel']:
+        check_pitch(m['panel']['pitch'], m['panel'])
     kinds = set()
     for mem in m['memory']:
         if mem['kind'] in kinds:

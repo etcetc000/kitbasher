@@ -36,6 +36,8 @@ export interface ProjectFile {
   models: string[];
   /** the user's layout (md-layout/1), or null for the default one */
   layout: Layout | null;
+  /** the answer to "does your Machinedrum have the UW option?"; absent: not answered (the page asks) */
+  uw?: boolean;
 }
 
 /** A project in memory: what the page and the build use. */
@@ -47,6 +49,8 @@ export interface Project {
   trim: ProjectFile['trim'];
   models: string[];
   layout: Layout | null;
+  /** the answer to "does your Machinedrum have the UW option?"; undefined: not answered */
+  uw?: boolean;
 }
 
 export function osOf(base: Base): ProjectOs {
@@ -110,6 +114,7 @@ export async function encodeProject(p: Project): Promise<ProjectFile> {
     format: PROJECT_FORMAT, os: p.os,
     samples: { swaps, no_trim: [...p.noTrim].sort((a, b) => a - b) },
     trim: p.trim, models: [...p.models].sort(), layout: p.layout,
+    ...(p.uw === undefined ? {} : { uw: p.uw }),
   };
 }
 
@@ -146,6 +151,7 @@ export async function decodeProject(json: string): Promise<Project> {
   }
   if (!Array.isArray(o.models) || o.models.some((m) => typeof m !== 'string')) throw new Error('project file: models must list module names');
   const layout = o.layout === null || o.layout === undefined ? null : parseLayout(JSON.stringify(o.layout));
+  if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('project file: uw must be true or false');
   return { os: { base: os.base, name: String(os.name ?? os.base), tag: os.tag, coldfire_sha256: os.coldfire_sha256, dsp2_sha256: os.dsp2_sha256, dsp1_sha256: os.dsp1_sha256 },
-           swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout };
+           swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout, uw: o.uw ?? layout?.uw };
 }

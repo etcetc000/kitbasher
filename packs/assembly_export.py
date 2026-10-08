@@ -92,7 +92,7 @@ def export(directory, destination, assembler=None):
             key=m['key'],**({'aliases':m['aliases']} if m.get('aliases') else {}),module=m['key'],name=panel['name'],seq=0,id=0,contract=m,
             labels=[k['label'] for k in panel['knobs']],defaults=[k['default'] for k in panel['knobs']],
             workspace=bool(private),workspace_kind='private' if private else 'pi' if pi else None,wants_shared=[],uses_shared=[],dsp1_drive=law,
-            dyn_labels=dynamic_plans(panel),needs=[],tables=[dict(name=n,words=E.b64words(w)) for n,w in tables.items()],code=code)])
+            dyn_labels=dynamic_plans(panel),**({'pitch':panel['pitch']} if 'pitch' in panel else {}),needs=[],tables=[dict(name=n,words=E.b64words(w)) for n,w in tables.items()],code=code)])
     destination.mkdir(parents=True,exist_ok=True); digest=E.write_pack(destination/'model.json',pack)
     result=dict(key=m['key'],source_sha256=source_hash,pack_sha256=digest,code_words=len(base64.b64decode(code['words']))//3,
                 table_words=sum(map(len,tables.values())),relocations=len(code['relocs']),placements=8,drive=law)

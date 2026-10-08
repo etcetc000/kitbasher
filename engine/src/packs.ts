@@ -10,6 +10,8 @@ import type { AlignEntry } from './align.js';
 import { fromBase64, wordsLE } from './bytes.js';
 import type { DynCore, DynPlan, Dsp1Core, Dsp1Law } from './features.js';
 import { checkModelContract, type ModelContract } from './model_contract.js';
+import { panelModesFromPlans } from './model_panel.js';
+import { checkPitch, type Pitch } from './pitch.js';
 
 export const PACK_FORMAT = 'md-pack/1';
 
@@ -40,6 +42,12 @@ export interface PackModel {
    * page's bundled catalog sort and explain its models in the page.
    */
   browse?: { category?: string; description?: string; help?: Record<string, [string, string]> };
+  /**
+   * What the pitch knob means (engine/src/pitch.ts): its knob, law, base note, steps and range.
+   * An assembly model carries the same object in `contract.panel.pitch`; a compiled pack, which
+   * has no contract, carries it only here.
+   */
+  pitch?: Pitch;
   labels: (string | null)[];        // 8
   defaults: number[];               // 8
   id: number;                       // preferred machine ID, the same on every base (a moved ID is an error)
@@ -124,6 +132,8 @@ export function checkPack(p: Pack | CorePack): void {
     }
     checkAliases(m);
     checkModelContract(m, p.family);
+    if (m.pitch !== undefined) checkPitch(m.pitch, m.contract?.panel ??
+      { knobs: m.labels.map(l => ({ label: l ?? '' })), modes: panelModesFromPlans(m.dyn_labels ?? []) }, m.key);
     for (const n of m.needs ?? []) if (n.install !== undefined &&
       (!n.install || n.install.transport !== 'sds-handshake' || typeof n.install.file !== 'string' ||
        Object.keys(n.install).some(k => k !== 'transport' && k !== 'file') ||
@@ -141,6 +151,10 @@ export function checkAliases(m: PackModel): void {
   if (new Set(m.aliases).size !== m.aliases.length) throw new Error(`${m.key}: an alias is listed twice`);
   if (m.aliases.includes(m.key)) throw new Error(`${m.key}: a model cannot alias its own key`);
 }
+
+/** Whether a model reads a UW sample (or its contract declares samples): a Machinedrum without UW cannot play it. */
+export const needsUwSamples = (m: PackModel): boolean =>
+  (m.needs ?? []).some((n) => n.kind === 'uw-sample') || (m.contract?.samples?.length ?? 0) > 0;
 
 export function needLines(m: PackModel): string[] {
   return (m.needs ?? []).map((n) => `${m.name.trim()}: ${n.without} without the ${n.name} sample in a UW slot (${n.what})` +

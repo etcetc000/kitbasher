@@ -5,7 +5,8 @@
 ; +13 previous delay sample, +14 random seed, +15 loop length, +16 feedback,
 ; +17 damping, +18 amplitude, +19 slice base, +20 pending excitation.
 ; +21 bend envelope, +22 hammer mix, +23 pick brightness, +24 impulse,
-; +25 excitation low-pass state. All addresses in these comments are decimal.
+; +25 excitation low-pass state, +26 fractional delay (Q23), +27 previous interpolated
+; sample (held in B during the sample loop). All addresses in these comments are decimal.
 ; Only this track's 1536-word P-I slice is touched. No global writable state.
 
 init:
@@ -13,7 +14,7 @@ init:
     move #$9,n0
     move (r0)+n0
     clr a
-    do #$11,init_end
+    do #$13,init_end
     move a,y:(r0)+
 init_end:
     move #>$123457,x0
@@ -28,6 +29,7 @@ trigger:
     move a,y:(r6+$a)
     move a,y:(r6+$b)
     move a,y:(r6+$d)
+    move a,y:(r6+$1b)
     move a,y:(r6+$19)
     move #>$7fffff,x0
     move x0,y:(r6+$15)
@@ -35,9 +37,7 @@ trigger:
 
 render:
     ; Recompute the slice address from the dispatcher, not a retained pointer.
-    move #>md_track,r0
-    nop
-    move y:(r0),a
+    move y:>md_track,a
     and #>$f,a
     move a1,a
     move a,b
@@ -69,34 +69,40 @@ cleared:
     move y:(r6+$9),a
     tst a
     jeq silence
-    ; PTCH selects half-semitone steps for a short teaching example.
+    ; PTCH: raw = 2 (MIDI - 24), half-semitone steps. `period` holds the whole loop delay in
+    ; samples with 12 fraction bits (44100 / f x 4096).
     move y:(r6+$1),a
     asr #16,a,a
     and #>$7f,a
-    move a1,a
     add #>period,a
     move a1,r0
     nop
-    move y:(r0),a
-    move a,y:(r6+$f)
+    move y:(r0),x0
     ; A positive pitch bend starts with a shorter delay and decays to PTCH.
     move y:(r6+$7),a
     asr a
     move a,y0
-    move y:(r6+$15),x0
-    mpy x0,y0,a
+    move y:(r6+$15),x1
+    mpy x1,y0,a
     move a,y0
-    move y:(r6+$f),x0
     mpy x0,y0,a
     move a,x1
     move x0,a
     sub x1,a
-    move a,y:(r6+$f)
+    ; The DAMP averager delays the loop by DAMP/256 samples; take it off, then split what is
+    ; left into the integer ring length and a fraction for the interpolating tap.
+    move y:(r6+$3),b
+    asr #12,b,b
+    sub b,a
+    tfr a,b
+    asr #12,a,a
     move a1,n2
+    and #>$fff,b
+    asl #11,b,b
+    move b1,y:(r6+$1a)
     move y:(r6+$8),a
     asr #16,a,a
     and #>$7f,a
-    move a1,a
     add #>bend_decay,a
     move a1,r0
     nop
@@ -108,7 +114,6 @@ cleared:
     move y:(r6+$2),a
     asr #16,a,a
     and #>$7f,a
-    move a1,a
     add #>feedback,a
     move a1,r0
     nop
@@ -122,7 +127,6 @@ cleared:
     move y:(r6+$5),a
     asr #16,a,a
     and #>$7f,a
-    move a1,a
     add #>hammer,a
     move a1,r0
     nop
@@ -131,7 +135,6 @@ cleared:
     move y:(r6+$6),a
     asr #16,a,a
     and #>$7f,a
-    move a1,a
     add #>pick,a
     move a1,r0
     nop
@@ -156,9 +159,8 @@ ready:
 index_valid:
     move a1,n1
     move y:(r6+$13),r2
-    move #>md_output,r0
-    nop
-    move y:(r0),r7
+    move y:(r6+$1b),b
+    move y:>md_output,r7
     do #32,sample_end
     move r2,a
     move n1,x0
@@ -168,13 +170,21 @@ index_valid:
     move y:(r0),x0
     move y:(r6+$d),a
     sub x0,a
-    move a,y0
     move x0,y:(r6+$d)
-    move y:(r6+$11),x1
+    move a,y0
+    ; Fractional delay: a linear tap between this sample and the one before it.
+    move y:(r6+$1a),x1
     move x0,a
     mac x1,y0,a
+    move y:(r6+$11),x1
     move a,x0
+    sub x0,b
+    move b,y0
+    tfr x0,b
+    move x0,a
+    mac x1,y0,a
     move y:(r6+$10),y0
+    move a,x0
     mpy x0,y0,a
     move a,y1
     move y:(r6+$c),a
@@ -233,12 +243,11 @@ next_index:
 sample_end:
     move n1,x0
     move x0,y:(r6+$b)
+    move b,y:(r6+$1b)
     rts
 
 silence:
-    move #>md_output,r0
-    nop
-    move y:(r0),r7
+    move y:>md_output,r7
     clr a
     do #32,silence_end
     move a,y:(r7)+

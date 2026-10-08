@@ -17,7 +17,7 @@ import { prepare163 } from '../../engine/src/prepare.js';
 import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
-import { checkPack, modelWords, needLines, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
+import { checkPack, modelWords, needLines, needsUwSamples, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
 import { merged, plan, trimFor, type Plan, type Trimmed } from '../../engine/src/plan.js';
 import { drawLcd } from './lcd.js';
 import { categories, describeModel } from './catalog.js';
@@ -32,6 +32,12 @@ import { selectCatalog } from '../../engine/src/catalog.js';
 import { readBank } from '../../engine/src/samples.js';
 import { decodeProject, encodeProject, osOf, osProblem, PROJECT_EXTENSION, type Project } from '../../engine/src/project.js';
 import { SamplesStep } from './samples-ui.js';
+import { fileHint, gate, noUwOf, uwForBuild, uwOf, type UwAnswer } from './uw-mode.js';
+import { recoverSession } from '../../engine/src/restore.js';
+import { legacyLayout, LEGACY_LAYOUT_NAME } from '../../engine/src/legacy_ids.js';
+import { listedFreeIds, parseLayout, type Layout } from '../../engine/src/layout.js';
+import { num } from '../../engine/src/bytes.js';
+import { select } from '../../engine/src/selection.js';
 
 interface Data { bases: BaseSet; packs: Pack[]; core: CorePack | null; source: { commit: string } }
 
@@ -88,7 +94,8 @@ function syncWizard(): void {
   if (step > 2) $(`step-${step}`).querySelector('.wizard-actions')!.before($('room'));
   $('room').hidden = !fw || step <= 2;
   const ready = !!current?.ok && current.sel.length > 0 && !packedCapacityProblem;
-  $('firmware-next').toggleAttribute('disabled', !fw || building);
+  const asked = gate(uwAnswer, !!fw);
+  $('firmware-next').toggleAttribute('disabled', !asked.ok || building);
   $('samples-next').toggleAttribute('disabled', !fw || building);
   $('project-save').toggleAttribute('disabled', !fw || building);
   $('models-next').toggleAttribute('disabled', !ready || building);
@@ -96,7 +103,7 @@ function syncWizard(): void {
   $('build').toggleAttribute('disabled', !ready || building);
   document.querySelectorAll<HTMLButtonElement>('[data-step]').forEach(b => {
     const n = Number(b.dataset.step);
-    b.disabled = building || (n > 1 && !fw) || (n > 3 && !ready);
+    b.disabled = building || (n > 1 && !asked.ok) || (n > 3 && !ready);
     if (n === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
   });
   document.querySelectorAll<HTMLButtonElement>('[data-back]').forEach(b => { b.disabled = building; });
@@ -104,6 +111,8 @@ function syncWizard(): void {
 
 function showStep(n: number): void {
   if (building || (n > 1 && !fw) || (n > 3 && (!current?.ok || !current.sel.length || packedCapacityProblem))) return;
+  // the UW question is answered before anything else
+  if (n > 1 && needsUwAnswer()) return;
   if (step <= 3 && n > 3 && !cachedBuild) { void onBuild(n === 4 ? 'categories' : 'download'); return; }
   step = n;
   for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== n;
@@ -122,6 +131,94 @@ function status(msg: string, kind: 'info' | 'ok' | 'error' = 'info'): void {
 }
 
 const boxes = (): HTMLInputElement[] => Array.from(document.querySelectorAll<HTMLInputElement>('#machines input[type=checkbox]'));
+
+// "Does your Machinedrum have the UW option?" (web/src/uw-mode.ts): asked on the first step, which
+// the page does not leave without a Yes or a No clicked in this visit. Nothing is pre-selected and
+// nothing is remembered in the browser; a restored file's answer is only a hint. A No means no
+// machine on IDs 128 and up and no model that plays a UW sample (engine/src/selection.ts
+// allocateIds). Saved in layout and project files.
+let uwAnswer: UwAnswer = null;
+const noUw = (): boolean => noUwOf(uwAnswer);
+/** The restored layout follows the user's answer (none until there is one). */
+function syncLayoutUw(): void {
+  const uw = uwOf(uwAnswer);
+  layoutEd.uw = uw;
+  if (layoutEd.map && layoutEd.map.uw !== uw) {
+    const { uw: _drop, ...rest } = layoutEd.map;
+    layoutEd.map = uw === undefined ? rest : { ...rest, uw };
+  }
+}
+/** Only the user's click on Yes or No sets the answer. */
+function setUwAnswer(a: UwAnswer): void {
+  uwAnswer = a;
+  for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) r.checked = r.value === a;
+  syncLayoutUw();
+  applyNoUw();
+  syncWizard();
+}
+/**
+ * The UW answer a restored file records: shown as a hint next to the question, never taken as the
+ * answer. A different answer from the user's is pointed out; theirs stands.
+ */
+function fileAnswer(uw: boolean | undefined, from: string): void {
+  const hint = fileHint(uw);
+  $('uw-file-hint').textContent = hint ?? '';
+  $('uw-file-hint').hidden = !hint;
+  syncLayoutUw();
+  if (uw === undefined) return;
+  const said = uw ? 'yes' : 'no';
+  if (uwAnswer === null) {
+    status(`${from} was saved for a Machinedrum ${uw ? 'with' : 'without'} UW. Answer the UW question (Yes or No) to continue.`, 'info');
+  } else if (said !== uwAnswer) {
+    status(`${from} was saved for a Machinedrum ${uw ? 'with' : 'without'} UW; you answered ${uwAnswer === 'yes' ? 'Yes' : 'No'}, so that is what this build uses. Change your answer on the first step if ${from} is right.`, 'error');
+  }
+}
+
+// ---- restoring a previous session: the machine IDs saved kits rely on
+const RESTORE_OPEN_KEY = 'kitbasher.restoreOpen';
+const catalogModels = (): PackModel[] => select(data.packs, {}).fams.flatMap((f) => f.models);
+
+/** A layout from a file, a patched OS or the earlier-IDs preset becomes the user's map. */
+function adoptLayout(l: Layout, from: string, extra = ''): void {
+  if (!l.base && base) l = { ...l, base: base.id };
+  layoutEd.adopt(l, from);                              // its UW answer: layoutEd.onAdopt
+  $('project-status').textContent = `Machine IDs restored from ${from}: ${Object.keys(l.machines).length} machines keep their IDs.${extra}`;
+  refresh();
+}
+
+/** A Kitbasher-built OS (.syx or .bin): its layout table, or else its descriptors matched to the catalog. */
+async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> {
+  let parsed: Firmware;
+  try { parsed = readFirmware(bytes); } catch { return false; }
+  const r = recoverSession(parsed, catalogModels(), base?.os.descriptorTable ?? num(data.bases.lineage.anchors.descriptor_table));
+  if (!r) return false;
+  adoptLayout(r.layout, name, (r.how === 'descriptors' ? ' (read from its machines: it has no layout table)' : '') +
+    (r.unknown.length ? ` Not in this catalog, so not restored: ${r.unknown.map((u) => `${u.name} (ID ${u.id})`).join(', ')}.` : ''));
+  return true;
+}
+
+/** The earlier allocator's IDs for the models selected now (recomputed whenever the selection changes). */
+const legacyFor = (): Layout => legacyLayout(base!, fw!.slots[0].raw, select(data.packs, { exclude: excludes() }).fams, listedFreeIds(fw!, base!));
+
+function useLegacyIds(): void {
+  if (!fw || !base) { status('Load your OS file first: the earlier IDs depend on it.', 'error'); return; }
+  layoutEd.adopt(legacyFor(), LEGACY_LAYOUT_NAME);
+  layoutEd.legacy = true;
+  $('project-status').textContent = 'Using the IDs an earlier Kitbasher (before October 2026) gave the models you select, recomputed as you change the selection. ' +
+    'This assumes the model catalog has not changed since that build; the .syx you flashed then is the exact record, so drop it here if you have it.';
+  refresh();
+}
+
+/** Models that play a UW sample: "needs UW", and not selectable on a Machinedrum without UW. */
+function applyNoUw(): void {
+  const on = noUw();
+  for (const i of boxes()) {
+    if (i.dataset.uw !== '1') continue;
+    if (on) i.checked = false;
+    i.disabled = on;
+    i.closest('.machine')?.classList.toggle('unavailable', on);
+  }
+}
 let inspected: PackModel | null = null;
 
 function inspectModel(m: PackModel, scroll = false): void {
@@ -153,14 +250,14 @@ function renderMachines(): void {
     const group = models.filter(({ m }) => describeModel(m).category === category);
     for (const { m, size } of group) {
       // Every model starts selected; auto trim and the meters account for workspace memory.
-      const cb = el('input', { type: 'checkbox', 'aria-label': `Include ${m.name.trim()}`, 'data-module': m.module, checked: '' }) as HTMLInputElement;
+      const requiresUW = needsUwSamples(m);
+      const cb = el('input', { type: 'checkbox', 'aria-label': `Include ${m.name.trim()}`, 'data-module': m.module, checked: '', ...(requiresUW ? { 'data-uw': '1' } : {}) }) as HTMLInputElement;
       cb.addEventListener('change', () => { inspectModel(m); refresh(); });
       const labels = m.labels.filter(Boolean).join(' ');
-      const requiresUW = m.needs?.some(n => n.kind === 'uw-sample') ?? false;
       const info = el('button', { type: 'button', class: 'machine-info', 'aria-label': `Preview ${m.name.trim()}${requiresUW ? ', requires UW' : ''}`, 'aria-controls': 'inspector', 'aria-pressed': 'false' },
         el('span', { class: 'machine-heading' }, el('span', { class: 'mname' }, m.name.trim()),
           el('span', { class: 'model-size', title: `${size.toLocaleString('en')} words of DSP memory` }, wordsLabel(size)),
-          requiresUW ? el('span', { class: 'uw-badge' }, 'requires UW') : ''),
+          requiresUW ? el('span', { class: 'uw-badge', title: 'Plays a sample from UW sample memory: not available on a Machinedrum without UW' }, 'needs UW') : ''),
         el('span', { class: 'machine-description' }, describeModel(m).description));
       info.addEventListener('click', () => inspectModel(m, true));
       list.append(el('div', { class: 'machine', 'data-module': m.module, 'data-labels': labels, title: labels },
@@ -174,6 +271,7 @@ function renderMachines(): void {
     box.append(el('section', { class: 'family', id: `category-${index}` },
       el('header', {}, el('h3', {}, category), el('span', { class: 'count' }, String(group.length)), all, none), list));
   }
+  applyNoUw();
   if (models.length) inspectModel((models.find(({ m }) => m.module === inspected?.module) ?? models[0]).m);
 }
 
@@ -182,7 +280,7 @@ const wordsLabel = (n: number): string => n < 1000 ? `${n} words` : `${(n / 1000
 
 function tickAll(list: HTMLElement): void {
   for (const i of Array.from(list.querySelectorAll<HTMLInputElement>('input'))) {
-    if (i.checked) continue;
+    if (i.checked || i.disabled) continue;
     i.checked = true;
   }
 }
@@ -209,7 +307,7 @@ function trimmed(opt = trimOptions()): Trimmed {
 const allowIdMove = (): boolean => true;
 
 function planFor(exclude: string[], opt = trimOptions()): Plan {
-  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
+  return plan(fw!, base!, data.packs, data.core!, { exclude, trim: opt, allowIdMove: allowIdMove(), uw: uwOf(uwAnswer), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(opt));
 }
 
 // Trimming can fix DSP placement, not ABI, menu, or other compatibility errors.
@@ -251,6 +349,8 @@ function meter(id: string, used: number, cap: number, unit: string, over: boolea
 /** Re-plan and show it: the meters, the problems, which machines can still be added, Build. */
 function refresh(minAutoDb: number | null = null): void {
   revision++;
+  applyNoUw();                                      // before planning: no plan with a model this unit cannot play
+  if (layoutEd.legacy && fw && base) layoutEd.map = legacyFor();   // the earlier IDs, for the selection as it is now
   packedCapacityProblem = false;
   cachedBuild = null;
   $('room').hidden = !fw;
@@ -318,6 +418,9 @@ function refresh(minAutoDb: number | null = null): void {
   $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
   $('download-needs').hidden = !needs.length;
+  // nothing restored: a kit made with an earlier Kitbasher build may not find its machines
+  $('ids-warning').hidden = layoutEd.restoredFrom !== null;
+  $('ids-warning').textContent = 'Machine IDs are assigned fresh. To keep your kits\' machines, drop your previous Kitbasher .syx under "Restore an earlier layout" on step 1.';
   $('download-needs').replaceChildren(...(needs.length ? [
     el('h3', {}, 'UW sample data: a separate step'),
     el('p', {}, needs.join(' ')),
@@ -331,6 +434,7 @@ function refresh(minAutoDb: number | null = null): void {
     label.removeAttribute('data-nofit');
     label.title = label.dataset.labels ?? '';
   }
+  applyNoUw();
   syncWizard();
   scheduleStorageCheck();
 }
@@ -364,14 +468,15 @@ async function onFile(f: File): Promise<void> {
         b = (await identify(parsed, data.bases)).base;
       } else {
         // an OS this page patched: not a base, but it carries its layout, which comes back
+        // a Kitbasher build is not built on: its layout comes back, and the stock OS is asked for
         const got = findLayout(parsed);
-        if (!got) throw e;
         if (request !== fileRequest) return;
-        layoutEd.adopt(got.layout, f.name);
-        const fp = await fingerprint(got.layout);
-        const want = data.bases.profiles.find((x) => x.id === got.layout.base);
-        status(`${f.name} is an OS patched with a layout (${fp}, ${Object.keys(got.layout.machines).length} machines, ` +
-               `${got.layout.categories.length} categories): the layout is restored. Now load the original ${want?.name ?? got.layout.base} file to patch it again.`, 'ok');
+        if (!(await restoreFromOs(bytes, f.name))) throw e;
+        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63)
+        const profile = (id: string | undefined) => data.bases.profiles.find((x) => x.id === id);
+        const built = profile(got?.layout.base);
+        const want = profile((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
+        status(`That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
         refresh();
         return;
       }
@@ -394,7 +499,8 @@ async function onFile(f: File): Promise<void> {
     status(`${f.name}: ${(e as Error).message}`, 'error');
   }
   refresh();
-  if (fw) showStep(2);
+  if (fw && gate(uwAnswer, true).ok) showStep(2);
+  else if (fw) status(`Loaded ${f.name}. ${gate(uwAnswer, true).why}`, 'info');
 }
 
 /** Pack files the user chose: read locally, checked, merged with what is there (same bytes twice is fine). */
@@ -437,7 +543,10 @@ function reportView(r: BuildReport): HTMLElement {
       stat('RAM image free', `${r.ext.free} B`),
       stat('OS flash headroom', `${(r.flash.headroom / 1024).toFixed(1)} KB`),
       stat('E12 words freed', fmt(r.e12.freed_words))),
-    moved.length ? el('p', { class: 'note' }, `Assigned available IDs: ${moved.map((m) => `${m.name.trim()} ${m.preferred}→${m.id}`).join(', ')}. Use the same saved layout when rebuilding for existing kits.`) : '',
+    el('p', { class: 'note', id: 'report-uw' }, noUw()
+      ? 'Built for a Machinedrum without UW: every machine is on an ID below 128, no model needs UW samples, and the ROM and RAM categories make room for yours in the machine menu.'
+      : 'Built for a Machinedrum with UW.'),
+    moved.length ? el('p', { class: 'note' }, `Assigned available IDs: ${moved.map((m) => `${m.name.trim()} ${m.preferred}→${m.id}${/without UW/.test(m.why) ? ' (no IDs of 128 and up without UW)' : ''}`).join(', ')}. Use the same saved layout when rebuilding for existing kits.`) : '',
     r.needs.length ? el('p', { class: 'note' }, `Needs data in a UW slot: ${r.needs.join(' ')} `, uwGuide()) : '',
     r.pi_clean ? el('p', { class: 'note' }, `${r.pi_clean.machines.join(', ')} ${r.pi_clean.machines.length === 1 ? 'keeps' : 'keep'} state in the track's P-I slice: ` +
       `the ${r.pi_clean.ids.length} stock P-I machines now clear it first when put on a track (${r.pi_clean.words} DSP2 words).`) : '',
@@ -456,8 +565,10 @@ const storageFull = (e: unknown): e is CompressedCapacityError | OsAreaCapacityE
   e instanceof CompressedCapacityError || e instanceof OsAreaCapacityError;
 
 function buildWith(trim: TrimOptions): Promise<BuildResult> {
+  // throws without a Yes or a No (and engine build refuses a missing answer too)
+  const uw = uwForBuild(uwAnswer);
   return build(input!, base!, data.packs, data.core!,
-    { exclude: excludes(), trim, allowIdMove: allowIdMove(), layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
+    { exclude: excludes(), trim, allowIdMove: allowIdMove(), uw, layout: layoutEd.mapForPlan(), samples: samples.edits(), ...currentFirmwareFixes() }, trimmed(trim));
 }
 
 function showStorage(report: BuildReport): void {
@@ -495,7 +606,7 @@ let storage: { revision: number; done: Promise<void> } | null = null;
 
 function scheduleStorageCheck(): void {
   storage = null;
-  if (!input || !base || !current?.ok) {
+  if (!input || !base || !current?.ok || !gate(uwAnswer, true).ok) {
     $('m-packed').querySelector('.num')!.textContent = '';
     return;
   }
@@ -548,8 +659,19 @@ async function checkStorage(version: number): Promise<void> {
   showStorage(got.report);
 }
 
+/** Back to the question when it is unanswered: no build, check or download goes ahead without it. */
+function needsUwAnswer(): boolean {
+  const asked = gate(uwAnswer, !!fw);
+  if (asked.ok) return false;
+  status(asked.why!, 'error');
+  if (step !== 1) { step = 1; for (let i = 1; i <= 5; i++) $(`step-${i}`).hidden = i !== 1; syncWizard(); }
+  $('uw-question').querySelector<HTMLInputElement>('input')?.focus();
+  return true;
+}
+
 async function onBuild(destination: 'categories' | 'download' = 'download'): Promise<void> {
   if (!input || !base || !current?.ok || building) return;
+  if (needsUwAnswer()) return;
   building = true;
   let succeeded = false;
   status(destination === 'categories' ? 'Checking that your selection fits…' : 'Building…');
@@ -581,6 +703,7 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
     const name = `${stem}-models.syx`;
     downloadUrl = URL.createObjectURL(blob);
     const a = el('a', { class: 'download', href: downloadUrl, download: name }, `Download ${name}`);
+    a.addEventListener('click', (e) => { if (needsUwAnswer()) e.preventDefault(); });
     $('result').replaceChildren(a, el('details', {}, el('summary', {}, 'Build details and checks'), reportView(report)));
     status(`Built in ${((performance.now() - t) / 1000).toFixed(1)} s.`, 'ok');
   } catch (e) {
@@ -617,6 +740,7 @@ function projectNow(): Project {
             db: Number($<HTMLInputElement>('db').value), cap: Number($<HTMLInputElement>('cap').value) },
     models: boxes().filter((i) => i.checked).map((i) => i.dataset.module!),
     layout: layoutEd.mapForPlan() ?? null,
+    uw: uwOf(uwAnswer),
   };
 }
 
@@ -634,7 +758,13 @@ async function saveProject(): Promise<void> {
 async function onProjectFile(f: File): Promise<void> {
   const note = $('project-status');
   try {
-    const p = await decodeProject(await f.text());
+    if (/\.(syx|bin)$/i.test(f.name)) {
+      if (!await restoreFromOs(new Uint8Array(await f.arrayBuffer()), f.name)) throw new Error(`${f.name} is not an OS Kitbasher built`);
+      return;
+    }
+    const text = await f.text();
+    if (JSON.parse(text)?.format !== 'kitbasher-project/1') { adoptLayout(parseLayout(text), f.name); return; }
+    const p = await decodeProject(text);
     if (fw && base) {
       const problem = osProblem(p.os, base);
       if (problem) throw new Error(`${problem}. Load the ${p.os.name || p.os.base} file it was made with first.`);
@@ -673,9 +803,12 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
-  for (const i of boxes()) i.checked = want.has(i.dataset.module!);
+  if (p.uw !== undefined) fileAnswer(p.uw, name);
+  applyNoUw();
+  // a model this Machinedrum cannot play stays unticked
+  for (const i of boxes()) i.checked = want.has(i.dataset.module!) && !i.disabled;
   const missing = p.models.filter((m) => !have.has(m));
-  if (p.layout) layoutEd.adopt(p.layout, name); else layoutEd.map = null;
+  if (p.layout) layoutEd.adopt(p.layout, name); else layoutEd.clear();
   updateTrimControls();
   $('project-status').textContent = `Loaded ${name}.`;
   status(`Loaded project ${name}: ${p.swaps.size} sample${p.swaps.size === 1 ? '' : 's'} replaced, ${want.size - missing.length} models.` +
@@ -689,7 +822,19 @@ async function main(): Promise<void> {
   trimSlot.append($('make-room'));
   $('room').append(trimSlot);
   $('room').hidden = true;
-  layoutEd = new LayoutEditor($('layout-anchor'), refresh);
+  layoutEd = new LayoutEditor($('layout-anchor'), () => {
+    refresh();
+  });
+  layoutEd.onAdopt = (l, from) => fileAnswer(l.uw, from);
+  $('legacy-ids').addEventListener('click', useLegacyIds);
+  for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) {
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      setUwAnswer(r.value === 'yes' ? 'yes' : 'no');
+      refresh();
+    });
+  }
+  setUwAnswer(null);                                   // never pre-selected: not from storage, not from a file
   document.querySelectorAll<HTMLButtonElement>('[data-step], [data-back]').forEach(b => {
     b.addEventListener('click', () => showStep(Number(b.dataset.step ?? b.dataset.back)));
   });
@@ -742,6 +887,18 @@ async function main(): Promise<void> {
     const f = e.dataTransfer?.files[0];
     if (f) void onFile(f);
   });
+  const rdrop = $('restore-drop');
+  rdrop.addEventListener('dragover', (e) => { e.preventDefault(); rdrop.classList.add('over'); });
+  rdrop.addEventListener('dragleave', () => rdrop.classList.remove('over'));
+  rdrop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    rdrop.classList.remove('over');
+    const f = e.dataTransfer?.files[0];
+    if (f) void onProjectFile(f);
+  });
+  const restore = $<HTMLDetailsElement>('restore');
+  try { restore.open = localStorage.getItem(RESTORE_OPEN_KEY) === '1'; } catch { /* storage unavailable */ }
+  restore.addEventListener('toggle', () => { try { localStorage.setItem(RESTORE_OPEN_KEY, restore.open ? '1' : '0'); } catch { /* storage unavailable */ } });
   // the trim is the expensive part of a plan: re-plan when a slider is let go, label while moving
   for (const id of ['db', 'cap']) {
     $(id).addEventListener('input', () => {

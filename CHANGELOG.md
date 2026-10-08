@@ -5,8 +5,50 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ## Unreleased
 
+### Changed (breaking)
+
+- **The UW question is mandatory.** The page offers only Yes and No (the "Not
+  sure" choice is gone; one line under the question says how to check), selects
+  neither, and does not remember the answer in the browser. A restored layout,
+  project or `.syx` that records an answer shows a hint but never answers for
+  you. Nothing leaves the first step, checks, builds or downloads until you
+  click Yes or No. The command line requires exactly one of `--uw` or `--no-uw`
+  (a restored session's answer is reported, not used), and the engine's `build`
+  refuses to run without an explicit `uw`.
+
+- **Machine IDs are now given bottom-up.** Every selected model takes the lowest
+  free ID, in menu order; packs no longer pin IDs (OSCPW was on 175, WAVTB 124,
+  OSC8B 126, VOXVO 127, ...). The same selection on the same OS, with the same
+  UW answer and menu layout, gets the same IDs. Kits saved with an earlier build
+  refer to the old IDs: on the first step, under *Restore an earlier layout*,
+  drop the `.syx` you flashed (or your
+  project or layout file), or choose "the IDs Kitbasher gave before October
+  2026" (the earlier allocator, on your selection), and every machine keeps its
+  ID. The Download step notes it in one line whenever nothing was restored. On the command
+  line: `--restore <file>` and `--legacy-ids`.
+
+### Changed
+
+- One pitch law for every pitched public model: PTCH raw = 2 × (MIDI − 24), so raw
+  0 is MIDI 24 (C0) and raw 127 is MIDI 87.5, in quarter-tone steps with every even
+  value a semitone; MIDI 60 is named C3. OSCAC, WAVSP, FMS4O, VADBD, VADSD, VADRC,
+  VADPC and VADSY moved to it (major version 2.0.0, new PTCH defaults that play the
+  old default note), and OSCSP, VOXFR and PHYKS already used it. The eleven compiled
+  synths (FMS2O, FMS3O, FMSSW, OSCSW, OSCPW, WAVTB, VOXVO, OSC8B, WAVCH, OSCCH, WAVMR)
+  moved from raw = MIDI to it too (their PTCH 48 still plays MIDI 48). VADHH and VADCY
+  keep their own law, one semitone a step about raw 64, and only gain the pitch
+  metadata (1.1.0; their code is unchanged). **No backward compatibility:** saved kits
+  and pattern P-locks on these machines play different notes, and nothing converts
+  them.
+- PHYKS (1.0.0) reads its string through a fractional, interpolated delay, so every
+  note is in tune to a tenth of a cent instead of up to 40 cents out at
+  the top; it costs about 8 cycles a sample.
+
 ### Added
 
+- Pitch metadata: `panel.pitch` in the model manifest and `pitch` on pack models
+  (knob, law, steps, base note, range, per-mode overrides), with `rawToNote` /
+  `noteToRaw` in `engine/src/pitch.ts`.
 - Browser and command-line patcher that adds sound models to Machinedrum OS 1.63,
   X.13, X.14 and Em's DEV firmware, keeping every stock machine.
 - Support for OS X.14 and for Em's DEV firmware md-26A01-183521, both tested in the
@@ -76,3 +118,16 @@ All notable changes to Kitbasher are recorded here. The format follows
   and early code runs from flash that is already mapped.
 - On X.14, DSP1 drive curves reach every track.
 - On DEV 26A01, the kit editor draws a newly chosen category in full.
+- On a Machinedrum without UW, the machine-select menu shows every added
+  category and hides ROM and RAM, as on stock. Before, OS 1.63 and DEV builds hid
+  the last two added categories and showed ROM and RAM (which load GND--), X.13
+  and X.14 builds opened the machine menu on the wrong category for added
+  machines, and X.13 builds hung at the boot screen.
+- The page now asks whether your Machinedrum has the UW option before you go on
+  (Yes or No, required every visit) and saves the answer in layout and project
+  files. With No,
+  models that play UW samples are not selectable, machines that normally sit on
+  ID 128 or above (OSCPW) move to a free ID below 128, the ID map marks 128 and
+  up as unusable, and the menu preview shows your categories in place of ROM
+  and RAM. `--no-uw` does the same on the command line, leaving out (and
+  naming) the models that play UW samples.

@@ -3445,7 +3445,9 @@ dispatch_table:
       'knobs':[{'label':label,'default':value} for label,value in KNOBS],
       # MODE (knob 2) selects the program and relabels itself and the program's X/Y knobs.
       'modes':[{'knob':2,'zones':[{'min':math.ceil(i*128/len(names)),'max':math.ceil((i+1)*128/len(names))-1,
-          'labels':dict(zip(('2','3','4'),captions[name]))} for i,name in enumerate(names)]}]}
+          'labels':dict(zip(('2','3','4'),captions[name]))} for i,name in enumerate(names)]}],
+      # PTCH is the program's rate multiplier (x1/16 .. x1 over four octaves), not a note.
+      'pitch':{'knob':0,'law':'continuous','cents_per_step':37.5}}
     manifest={'format':'md-model/1','key':'NZE/PL',
       # the former key stays an alias, so layouts saved with it still find the model
       'aliases':['NP/PLETHORA'],'version':'0.1.0','kit_abi':1,

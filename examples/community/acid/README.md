@@ -5,7 +5,7 @@ generator and its slide and tonal behavior.
 
 | Control | Range |
 |---|---|
-| PTCH | Base pitch, about 43 to 673 Hz before random intervals and quantization |
+| PTCH | Base pitch before random intervals and quantization: raw = 2 × (MIDI − 24): MIDI 24 (C0, 32.7 Hz) at 0 to 87.5 (1.28 kHz) at 127, in quarter-tone steps; even values are semitones (72 = C3) |
 | DEC | Amp decay, 10 ms to 10 s |
 | CUT | Filter cutoff, index 0 to 2047 |
 | RES | Resonance, 0 to 127 |
