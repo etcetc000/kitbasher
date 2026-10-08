@@ -7,6 +7,19 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Changed (breaking)
 
+- **X.13 is no longer supported as a base.** For the X-OS releases Kitbasher
+  patches X.14 and later. Loading an X.13 file, stock or a build Kitbasher made
+  on it, stops on the page and on the command line with "OS X.13 is no longer
+  supported — please install OS X.14 first". X.13 is recognised by its OS tag,
+  so it is never patched or mistaken for another base. Machine IDs carry over:
+  restore from the `.syx` or `.bin` you built on X.13 with your X.14 file loaded
+  (or `--restore` it), and each machine keeps its ID where X.14 has it free. A
+  project file made on X.13 gives its machine IDs only. The X.13 patch sites are
+  gone: its non-UW menu routine, the DSP1 sender loaded as an immediate in its
+  add-on, its host-sender references, its runtime fingerprint and its cached
+  addresses. Builds on stock 1.63, X.14 and both DEV releases are unchanged byte
+  for byte.
+
 - **The UW question is mandatory.** The page offers only Yes and No (the "Not
   sure" choice is gone; one line under the question says how to check), selects
   neither, and does not remember the answer in the browser. A restored layout,

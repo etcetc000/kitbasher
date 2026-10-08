@@ -30,7 +30,6 @@ body:
       label: OS base
       options:
         - OS 1.63
-        - OS X.13
         - OS X.14
         - OS DEV
         - Other or unsure

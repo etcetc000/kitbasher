@@ -193,7 +193,7 @@ test('layout and project files round-trip the UW answer; an old file has none an
   }
   assert.equal(decodeLayout(encodeLayout(l)).uw, undefined);
   assert.throws(() => parseLayout(JSON.stringify({ ...l, uw: 'no' })), /uw must be/);
-  const p: Project = { os: { base: 'x13', name: 'X.13', tag: 'X13 ', coldfire_sha256: 'a', dsp2_sha256: 'b', dsp1_sha256: 'c' },
+  const p: Project = { os: { base: 'x14', name: 'X.14', tag: 'X14 ', coldfire_sha256: 'a', dsp2_sha256: 'b', dsp1_sha256: 'c' },
     swaps: new Map(), sources: new Map(), noTrim: new Set(), trim: { mode: 'auto', db: -17, cap: 1 }, models: ['A'], layout: null, uw: false };
   for (const uw of [false, true]) {
     const file = await encodeProject({ ...p, uw });

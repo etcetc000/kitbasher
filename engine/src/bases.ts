@@ -58,6 +58,13 @@ export interface BaseProfileFile {
   qualification?: { level: Qualification; by: string; evidence?: string[]; unproven?: string };
   /** a base the engine refuses as it is, and what to use instead (stock 1.63) */
   refuse?: string;
+  /**
+   * A base Kitbasher no longer supports (X.13): every OS with its tag is refused with `refuse`
+   * before discovery, whatever its slot hashes (a stock file or a build Kitbasher made on it), and
+   * `successor` names the base to install instead. A layout or project made on it is applied to
+   * the base the user loads.
+   */
+  retired?: { successor: string };
   /** the values discovery found when this base was qualified (discover().values) */
   cache?: Record<string, string>;
   /**
@@ -211,9 +218,11 @@ export class NotPatchable extends Error {
 /**
  * Identify and discover. A profile matches by its slot hashes (and add-on, when it has one); with
  * none, the base is still discovered and labelled 'discovered'. A profile with `refuse` (stock
- * 1.63) turns the build away with its message.
+ * 1.63) turns the build away with its message; a retired one (X.13) by its tag alone.
  */
 export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved> {
+  const retired = set.profiles.find((p) => p.retired && p.identify.tag === fw.tag);
+  if (retired) throw new NotPatchable(retired.refuse ?? `${retired.name ?? retired.id} is no longer supported`, null, retired);
   const id = await identity(fw);
   let profile: BaseProfileFile | null = null;
   for (const p of set.profiles) {

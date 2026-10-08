@@ -8,8 +8,9 @@ same code builds the same image in both places.
 ## How a build works
 
 1. **Identify the base.** The engine reads the OS container, hashes its slots and
-   matches a profile in `bases/`. It then discovers every patch site from
-   signatures in `bases/lineage-163.json`, and checks each against the profile.
+   matches a profile in `bases/`. A retired base (X.13) is refused by its tag
+   before anything else. It then discovers every patch site from signatures in
+   `bases/lineage-163.json`, and checks each against the profile.
 2. **Select models.** Packs from the catalog are validated, and each machine gets
    an ID and a place in the menu layout.
 3. **Plan memory.** DSP code, tables, names and menus are placed in the free

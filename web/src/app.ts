@@ -186,6 +186,8 @@ function adoptLayout(l: Layout, from: string, extra = ''): void {
   refresh();
 }
 
+const profileOf = (id: string | undefined): BaseProfileFile | undefined => data.bases.profiles.find((x) => x.id === id);
+
 /** A Kitbasher-built OS (.syx or .bin): its layout table, or else its descriptors matched to the catalog. */
 async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> {
   let parsed: Firmware;
@@ -472,11 +474,13 @@ async function onFile(f: File): Promise<void> {
         const got = findLayout(parsed);
         if (request !== fileRequest) return;
         if (!(await restoreFromOs(bytes, f.name))) throw e;
-        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63)
-        const profile = (id: string | undefined) => data.bases.profiles.find((x) => x.id === id);
-        const built = profile(got?.layout.base);
-        const want = profile((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
-        status(`That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
+        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63);
+        // for a retired one (X.13), the base that replaces it
+        const built = profileOf(got?.layout.base);
+        const next = built?.retired && profileOf(built.retired.successor);
+        const want = profileOf((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
+        status(next ? `That's a Kitbasher build for ${built!.name}: layout restored. ${built!.name} is no longer supported, so drop your ${next.name} file: the machines keep their IDs where ${next.name} has them free.`
+          : `That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
         refresh();
         return;
       }
@@ -765,6 +769,15 @@ async function onProjectFile(f: File): Promise<void> {
     const text = await f.text();
     if (JSON.parse(text)?.format !== 'kitbasher-project/1') { adoptLayout(parseLayout(text), f.name); return; }
     const p = await decodeProject(text);
+    // a project made on a retired base (X.13): only its machine IDs carry over to the base that replaces it
+    const retired = profileOf(p.os.base)?.retired;
+    if (retired) {
+      const next = profileOf(retired.successor)?.name ?? retired.successor;
+      const why = `${p.os.name || p.os.base} is no longer supported, so only its machine IDs are used; its sample and trim settings are not loaded`;
+      if (!p.layout) throw new Error(`${why}, and it has no machine IDs. Load your ${next} file and choose your models again`);
+      adoptLayout(p.layout, f.name, ` ${why}.${fw && base ? '' : ` Now load your ${next} file.`}`);
+      return;
+    }
     if (fw && base) {
       const problem = osProblem(p.os, base);
       if (problem) throw new Error(`${problem}. Load the ${p.os.name || p.os.base} file it was made with first.`);

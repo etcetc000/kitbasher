@@ -2,54 +2,13 @@
  "format": "md-base/2",
  "id": "x13",
  "name": "OS X.13",
- "notes": [
-  "RAM window: 0x2bc000..0x2bd000 for the RAM image. The range 0x2bd000..0x2bd100 is in use on MKII +Drive UW hardware (an image that uses it freezes at the boot logo); the emulator does not model this.",
-  "Dynamic labels: a 3,680-byte segment at 0x2be100. X.13 redirects the knob-turn stub at 0x229b38 to its add-on's value refresh (jmp $2d4b00); the engine chains through whatever that jmp names. Page-draw call sites are found by scanning the OS and the add-on for jsr/jmp $229dd2.",
-  "DSP1: X.13's add-on runs its own per-track loop and loads the DSP1 sender's address as an immediate at two sites (0x2d532c, 0x2d5402); the DSP1 transport is hooked there. Its response laws have not yet been verified by listening.",
-  "Descriptors: they are only ever read, through 13 OS and 9 add-on lea $252092 sites. Flash answers at 0x10000000 after OS_MAIN's init, so descriptors can live in flash. The misaligned long read from flash at offset +$32 is not yet covered by a hardware test.",
-  "DSP2: X.13's add-on copies its own DSP2 code to P:0x13b600..0x13c107 at boot (routine 0x2c039e), so the patcher's DSP2 regions start at 0x13c108."
- ],
+ "about": "No longer supported: Kitbasher patches X.14 and later. This profile only recognises X.13 by its tag, so that a stock X.13 file or a build Kitbasher made on it is refused with a clear message instead of being discovered as an unprofiled base. A layout or project made on X.13 is applied to the X.14 base the user loads (docs/BASES.md).",
  "identify": {
   "tag": "X13 ",
   "coldfire_sha256": "dd6415bbb09faef51650ac72ff2430a7404fe417b597162e457fcf47bceff533",
   "dsp2_sha256": "2d402a93404a27b3594c8da397f65420d1e21cb672bbeac74f697d24d779696b",
-  "dsp1_sha256": "d71445c70578d5ecf36bf0e9526b175180d67b9ef52fc00e4bded2d1afde0ce7",
-  "addon_sha256": "4a8929077e8135369fa50a8b1a3c142bddc9d51036e6eda6f99bdf5b08411baa",
-  "flash_sha256": "abd69397371e43fedb96e9181f972160769266975a42b63c38f7d39ba697175a"
+  "dsp1_sha256": "d71445c70578d5ecf36bf0e9526b175180d67b9ef52fc00e4bded2d1afde0ce7"
  },
- "qualification": {
-  "level": "hardware-proven",
-  "by": "Tested on hardware (Machinedrum MKII +Drive UW)"
- },
- "cache": {
-  "boot.routine": "0x2be00",
-  "boot.jump_operand": "0x2be1c",
-  "os_main": "0x213a0c",
-  "addon.flash": "0xe96e0",
-  "addon.ram": "0x2c0000",
-  "flash.os_end": "0xf8ac4",
-  "os.descriptor_table": "0x252092",
-  "os.free_descriptor": "0x24ef54",
-  "os.family_table": "0x252396",
-  "os.family_base_sites": "0x23065a,0x2c23b2,0x2c23bc,0x2c2440",
-  "os.family_list_sites": "0x22c210,0x231a60,0x231aba,0x231b10,0x231f22,0x2c718e",
-  "os.heap_ceiling": "0x2139f8",
-  "os.heap_old": "0x300000",
-  "os.ctr_sites": "0x2055ec,0x207d9a,0x20ca08,0x20cb8c,0x2196a6,0x219a0e,0x21cc42,0x224a0c,0x226e62,0x226ec4,0x228486,0x229c60,0x229ce0,0x229fa2,0x22a040,0x22a312,0x22a3b0,0x238be4,0x23ad36,0x23aeae,0x23b1f4,0x23c2e8",
-  "os.high_defaults": "0x2053b8",
-  "os.defaults_low": "0x205396",
-  "os.lev_bar": "0x228320,0x22832c,0x228344",
-  "os.preview": "0x231f38",
-  "dyn.redraw": "0x229b38",
-  "dyn.redraw_sites": "0x229b3a",
-  "dyn.page_draw": "0x229dd2",
-  "dyn.page_sites": "0x217214,0x218a78,0x219c18,0x219c58,0x21a012,0x21f3e8,0x21f9bc,0x21fa0e,0x22005a,0x2206a8,0x22072c,0x224736,0x225496,0x225734,0x2c2f8e,0x2c71f4,0x2c7efa,0x2c7f38,0x2c8084,0x2c80a4,0x2c997c,0x2c9eba,0x2d4baa,0x2d4bd4,0x2d4be2",
-  "dsp1.sender": "0x1000702",
-  "dsp1.sender_sites": "0x2d532c,0x2d5402",
-  "dsp1.host_write": "0x1000756",
-  "dsp1.hook": "0x25e",
-  "flash.alias": "0x10000000",
-  "dsp2.free_regions": "0x13c108,0x140000,0x147600,0x147e00",
-  "ram.window": "0x2bc000,0x2bd000,0x2be100,0x2bef60"
- }
+ "retired": { "successor": "x14" },
+ "refuse": "OS X.13 is no longer supported — please install OS X.14 first, then load your X.14 file. A Kitbasher build you made on X.13 still restores its machine IDs onto X.14 (docs/BASES.md)."
 }

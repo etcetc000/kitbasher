@@ -55,6 +55,7 @@ test('an image without a layout table: the catalog\'s models on their IDs, the r
   for (const m of Object.values(r.layout.machines)) assert.ok(r.layout.categories.includes(m.category));
 });
 
+// a build made on X.13 (no longer a base) still gives its layout back, to apply to X.14
 test('an image with its layout table: that layout, with the UW answer', () => {
   const lay: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['KIK'], machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 } }, uw: false };
   const f = image([{ id: 4, name: 'VADBD' }]);

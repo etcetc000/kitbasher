@@ -1,5 +1,5 @@
 // The OS container: three packed slots (ColdFire, DSP2, DSP1) as [length][byte sum][NRV2B stream],
-// a 4-byte tag, two packed data slots, then whatever a base keeps after them (X.13's add-on).
+// a 4-byte tag, two packed data slots, then whatever a base keeps after them (X.14's add-on).
 //
 // The engine works on a flash view either way: a full 8 MiB flash image (the emulator's .bin) or
 // the container a .syx carries, placed at 0x4000 in an erased 1 MiB. The output has the input's
@@ -16,7 +16,7 @@ export const FLASH_SIZE = 0x800000;
 export interface Slot {
   at: number;          // flash offset of the length word
   length: number;      // header length (the stream may be shorter: a dead tail)
-  sumOk: boolean;      // X.13 leaves stale checksums; nothing on the unit checks them
+  sumOk: boolean;      // DEV 26912 leaves a stale checksum; nothing on the unit checks them
   used: number;        // bytes the NRV2B stream really uses
   raw: Uint8Array;     // unpacked
 }
