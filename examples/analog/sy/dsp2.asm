@@ -5,8 +5,9 @@ init:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+7
+    do #<$37,>local_7
     move x0,y:(r0)+
+local_7:
     move #$0,x0
     move x0,x:(r6+$3f)
     move #$4,x0
@@ -67,8 +68,9 @@ local_3d:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+68
+    do #<$37,>local_44
     move x0,y:(r0)+
+local_44:
     move #>$ffffff,x0
     move x0,x:(r6+$0)
     move x0,x:(r6+$1)
@@ -115,8 +117,9 @@ local_59:
     move #$20,n0
     move (r0)+n0
     move #$0,x0
-    do #<$7,>code_origin+122
+    do #<$7,>local_7a
     move x0,y:(r0)+
+local_7a:
     move #>$ffffff,m0
 local_7c:
     move #>$7fffff,x0
@@ -248,8 +251,9 @@ local_f7:
     move #$20,n0
     move (r0)+n0
     move #$0,x0
-    do #<$7,>code_origin+254
+    do #<$7,>local_fe
     move x0,y:(r0)+
+local_fe:
     move #>$ffffff,m0
 local_100:
     move y:(r6+$3e),a
@@ -276,7 +280,7 @@ local_100:
     beq <local_11e
     sub #<$1,a
     beq <local_20c
-    jmp code_origin+766
+    jmp local_2fe
 local_11e:
     move y:(r6+$8),a
     move x:(r6+$0),x0
@@ -394,14 +398,14 @@ local_17e:
     move #$27,n3
     move (r3)+n3
     move y:(r6+$1a),a
-    jsr code_origin+1054
+    jsr local_41e
     move y:(r6+$17),x0
     move x0,n2
     move r6,r3
     move #$30,n3
     move (r3)+n3
     move y:(r6+$19),a
-    jsr code_origin+1054
+    jsr local_41e
     move y:(r6+$b),a
     and #<$2,a
     tst a
@@ -505,8 +509,8 @@ local_202:
     move x0,y:(r6+$37)
     move #>$3eb852,x0
     move x0,y:(r6+$3d)
-    jsr code_origin+1125
-    jmp code_origin+1110
+    jsr local_465
+    jmp local_456
 local_20c:
     move y:(r6+$8),a
     move x:(r6+$0),x0
@@ -647,7 +651,7 @@ local_287:
     move #$30,n3
     move (r3)+n3
     move y:(r6+$1b),a
-    jsr code_origin+1054
+    jsr local_41e
     move #>$f1e3c,x0
     move x0,y:(r6+$38)
     move #>$70e1c4,x0
@@ -673,7 +677,7 @@ local_287:
     move #$27,n3
     move (r3)+n3
     move y:(r6+$16),a
-    jsr code_origin+1054
+    jsr local_41e
     move y:(r6+$2),a
     move x:(r6+$2),x0
     cmp x0,a
@@ -732,8 +736,9 @@ local_2ea:
     move x0,y:(r6+$37)
     move #>$48f5c3,x0
     move x0,y:(r6+$3d)
-    jsr code_origin+1125
-    jmp code_origin+1110
+    jsr local_465
+    jmp local_456
+local_2fe:
     move y:(r6+$8),a
     move x:(r6+$0),x0
     cmp x0,a
@@ -1077,8 +1082,9 @@ local_456:
     move #$20,n0
     move (r0)+n0
     move #$0,x0
-    do #<$7,>code_origin+1122
+    do #<$7,>local_462
     move x0,y:(r0)+
+local_462:
     move #>$ffffff,m0
 local_464:
     rts
@@ -1089,9 +1095,10 @@ local_465:
     move r6,r0
     move #$27,n0
     move (r0)+n0
-    do #<$17,>code_origin+1135
+    do #<$17,>local_46f
     move y:(r0)+,x0
     move x0,x:(r3)+
+local_46f:
     move r6,r0
     move #$20,n0
     move (r0)+n0
@@ -1104,7 +1111,7 @@ local_465:
     move #$6,m5
     move #>md_sine,r1
     move #>$7fff,m1
-    do #<$20,>code_origin+1229
+    do #<$20,>local_4cd
     move #$0,a
     move x:(r0)+,x1      y:(r4)+,b
     add x1,b
@@ -1183,6 +1190,7 @@ local_465:
     mpyr y1,x1,b
     asl #$1,b,b
     move b,y:(r7)+
+local_4cd:
     move #>$ffffff,m0
     move #>$ffffff,m1
     move #>$ffffff,m4

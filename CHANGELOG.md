@@ -117,6 +117,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Fixed
 
+- VADSY could stop DSP2 on its first trigger, and VADPC dropped samples, after the
+  pitch change (stale hard-coded targets). Model assembly now names every branch,
+  call and loop end with a label, and the checks refuse an offset target.
 - Every build is checked for boot-time memory safety: boot patches only write
   RAM or the base's initialized SRAM, flash relocations are applied to the file,
   and early code runs from flash that is already mapped.
