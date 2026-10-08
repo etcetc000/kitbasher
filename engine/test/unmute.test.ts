@@ -396,6 +396,93 @@ test('run: the swing tick filters queue B with the mute as it is then, from the 
   assert.deepEqual(read(m, 0, 1), [ev(6, 0x7f)]);                       // queue A is the step tick's
 });
 
+/** The build's view of one track: h_mute then h_cls, as the base calls them (class 0x10: not a MIDI machine). */
+const buildTrack = (m: Cpu, t: number): void => {
+  m.a[1] = U.mute + 16 + t;
+  assert.equal(run(m, 'h_mute').exit, 'rts');
+  m.a[6] = 0x2fe000; m.w32(m.a[6] - 12, t);
+  m.d[1] = 0x10; m.d[5] = 0x60;
+  assert.deepEqual(run(m, 'h_cls'), { exit: 'jmp', to: NOTE_QUEUE });
+  m.a[7] = SP;
+};
+const muted = (m: Cpu, t: number, on: boolean): void => m.w8(U.mute + t, on ? 1 : 0);
+
+test('run: every marked track still muted empties the queue; a mask over an empty queue changes nothing', () => {
+  const m = machine();
+  m.w32(U.buf, 0);
+  m.w32(BLOCK.labels.pm, (1 << 2) | (1 << 9));
+  muted(m, 2, true); muted(m, 9, true);
+  queue(m, 0, 0, [ev(2, 0x7f), ev(9, 0x7f), ev(2, 0x5f)]);
+  queue(m, 1, 0, []);                                                   // count 0: nothing to do
+  m.load(U.queues[1].base, [0xaa, 0xbb, 0xcc]);                         // stale bytes past the count stay
+  assert.equal(run(m, 'h_play').exit, 'rts');
+  assert.equal(m.r32(U.queues[0].count), 0);
+  assert.deepEqual(read(m, 0, 0), []);
+  assert.equal(m.r32(U.queues[1].count), 0);
+  assert.deepEqual([0, 1, 2].map((k) => m.r8(U.queues[1].base + k)), [0xaa, 0xbb, 0xcc]);
+});
+
+test('run: a full queue of 16 events is compacted in place, nothing written past its buffer', () => {
+  const m = machine();
+  m.w32(U.buf, 0);
+  m.w32(BLOCK.labels.pm, (1 << 1) | (1 << 4) | (1 << 15));
+  for (const t of [1, 4, 15]) muted(m, t, true);
+  const all = Array.from({ length: 16 }, (_, k) => ev(k, 0x40 + k));
+  queue(m, 0, 0, all);
+  const next = U.queues[0].base + 48;                                   // buffer 1 follows buffer 0
+  m.load(next, [0x11, 0x22, 0x33, 0x44]);
+  assert.equal(run(m, 'h_play').exit, 'rts');
+  assert.deepEqual(read(m, 0, 0), all.filter((_, k) => ![1, 4, 15].includes(k)));
+  assert.deepEqual([0, 1, 2, 3].map((k) => m.r8(next + k)), [0x11, 0x22, 0x33, 0x44]);
+});
+
+test('run: note-off queues are filtered on their own contents, not as copies of the note-ons', () => {
+  const m = machine();
+  m.w32(U.buf, 1);
+  m.w32(BLOCK.labels.pm + 4, (1 << 3) | (1 << 7));
+  muted(m, 3, true); muted(m, 7, true);
+  queue(m, 0, 1, [ev(3, 0x7f), ev(5, 0x7f)]);
+  queue(m, 1, 1, [ev(5, 0), ev(7, 0), ev(3, 0), ev(11, 0)]);           // other order, a track the note-ons lack
+  assert.equal(run(m, 'h_play').exit, 'rts');
+  assert.deepEqual(read(m, 0, 1), [ev(5, 0x7f)]);
+  assert.deepEqual(read(m, 1, 1), [ev(5, 0), ev(11, 0)]);
+});
+
+test('run: two steps through both buffers: build X, A of X, latch, build Y, B of X, build X again', () => {
+  const m = machine();
+  const X = 0, Y = 1;
+  // step S is built into X while tracks 2 and 6 are muted
+  m.w32(U.buf, X); m.w32(BLOCK.labels.pm + 4 * X, 0xdead);              // whatever the mask held before
+  run(m, 'h_clr');
+  assert.equal(pm(m, X), 0);
+  muted(m, 2, true); muted(m, 6, true);
+  for (const t of [2, 4, 6]) buildTrack(m, t);
+  assert.equal(pm(m, X), (1 << 2) | (1 << 6));
+  queue(m, 0, X, [ev(2, 0x7f), ev(4, 0x7f)]); queue(m, 1, X, [ev(2, 0), ev(4, 0)]);
+  queue(m, 2, X, [ev(6, 0x7f)]); queue(m, 3, X, [ev(6, 0)]);            // track 6 swings
+  // step tick of S: track 2 unmuted just before it; A of X plays
+  muted(m, 2, false);
+  run(m, 'h_play');
+  assert.deepEqual([read(m, 0, X), read(m, 1, X)], [[ev(2, 0x7f), ev(4, 0x7f)], [ev(2, 0), ev(4, 0)]]);
+  // the latch, then S+1 is built into Y with track 6 still muted: Y's mask, not X's
+  m.w32(U.bufB, X); m.w32(U.buf, Y);
+  run(m, 'h_clr');
+  buildTrack(m, 6);
+  assert.deepEqual([pm(m, X), pm(m, Y)], [(1 << 2) | (1 << 6), 1 << 6]);
+  // swing tick of S: B of X, track 6 still muted, decided with X's mask
+  run(m, 'h_playB');
+  assert.deepEqual([read(m, 2, X), read(m, 3, X)], [[], []]);
+  // next step tick: A of Y with track 6 unmuted in time; then the build of S+2 clears X's mask only
+  queue(m, 0, Y, [ev(6, 0x7f)]);
+  muted(m, 6, false);
+  m.w32(U.buf, Y);
+  run(m, 'h_play');
+  assert.deepEqual(read(m, 0, Y), [ev(6, 0x7f)]);
+  m.w32(U.bufB, Y); m.w32(U.buf, X);
+  run(m, 'h_clr');
+  assert.deepEqual([pm(m, X), pm(m, Y)], [0, 1 << 6]);
+});
+
 test('run: with nothing queued while muted, the queues are left exactly as they are', () => {
   const m = machine();
   m.w32(U.buf, 1);

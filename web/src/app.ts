@@ -70,6 +70,8 @@ let current: Plan | null = null;
 const trims = new Map<string, Trimmed>();       // per base file, per trim setting (cleared when the samples change)
 let samples: SamplesStep;                        // the E12 samples and the user's swaps (web/src/samples-ui.ts)
 let pendingProject: { project: Project; name: string } | null = null;  // loaded before its OS
+/** the unmute toggle an OS load starts from: on, unless a loaded project turned it off */
+let projectUnmute = true;
 let layoutEd: LayoutEditor;                      // the menu categories and IDs (web/src/layout-ui.ts)
 let step = 1;
 let revision = 0;
@@ -456,7 +458,8 @@ async function onFile(f: File): Promise<void> {
   syncChromaOption();
   $('room').hidden = true;
   $('firmware-options').hidden = true;
-  $<HTMLInputElement>('unmute-fix').checked = true;   // a new OS starts from the default
+  // a new OS starts from the default, or from what a loaded project chose
+  $<HTMLInputElement>('unmute-fix').checked = projectUnmute;
   $('firmware-details').hidden = true;
   layoutEd.render(null);
   syncWizard();
@@ -755,6 +758,8 @@ function projectNow(): Project {
     uw: uwOf(uwAnswer),
     // what the user chose, even on an OS that cannot have it, so the project keeps it
     midiChroma: chromaTicked() ? { channel: chromaChannel } : undefined,
+    // saved only when off, the default being on
+    unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false,
   };
 }
 
@@ -817,6 +822,8 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   $<HTMLInputElement>('midi-chroma').checked = !!p.midiChroma;
   chromaChannel = p.midiChroma?.channel ?? MIDI_CHROMA_CHANNEL;
+  projectUnmute = p.unmuteFix !== false;
+  $<HTMLInputElement>('unmute-fix').checked = projectUnmute;
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
   if (p.uw !== undefined) fileAnswer(p.uw, name);

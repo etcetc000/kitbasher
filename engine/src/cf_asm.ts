@@ -4,7 +4,7 @@
 // before it is written, so an encoding mistake fails the build rather than the instrument.
 //
 // Operands: d0..d7, a0..a7, (aN), (aN)+, -(aN), d16(aN), d8(aN,dM.l[*s]), #imm, #@label (a label's address
-// as a long immediate), 0x...w / 0x...l (absolute), @label (absolute long to a label), sr.
+// as a long immediate), 0x...w / 0x...l (absolute), @label (absolute long to a label).
 
 type Word = [number | (() => number), 2 | 4];
 interface Ea { mode: number; reg: number; ext: Word[] }
@@ -17,7 +17,8 @@ const REG = (s: string): { k: 'd' | 'a'; r: number } | null => {
   return m ? { k: m[1] as 'd' | 'a', r: +m[2] } : null;
 };
 
-const CC: Record<string, number> = { bra: 0, bsr: 1, bhi: 2, bls: 3, bcc: 4, bcs: 5, bne: 6, beq: 7, bpl: 10, bmi: 11, bge: 12, blt: 13, bgt: 14, ble: 15 };
+// only the branches the engine's routines use; anything else is refused as an unknown instruction
+const CC: Record<string, number> = { bsr: 1, bcs: 5, bne: 6, beq: 7, ble: 15 };
 
 export class Asm {
   private items: Item[] = [];
@@ -86,11 +87,6 @@ export class Asm {
     }
     switch (op) {
       case 'move.b': case 'move.w': case 'move.l': {
-        if (a1 === 'sr') {
-          if (a0.startsWith('#')) return [[0x46fc, 2], [Number(a0.slice(1)) & 0xffff, 2]];
-          return [[0x46c0 | D(a0), 2]];
-        }
-        if (a0 === 'sr') return [[0x40c0 | D(a1), 2]];
         const sz = op[5] as 'b' | 'w' | 'l';
         const s = this.ea(a0, sz), d = this.ea(a1, sz);
         const words = 1 + (s.ext.reduce((n, [, k]) => n + k, 0) + d.ext.reduce((n, [, k]) => n + k, 0)) / 2;
@@ -103,13 +99,12 @@ export class Asm {
         return [[0x7000 | (D(a1) << 9) | (v & 0xff), 2]];
       }
       case 'lea': return W(0x41c0 | (A(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
-      case 'pea': return W(0x4840 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'jsr': return W(0x4e80 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'jmp': return W(0x4ec0 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'rts': return [[0x4e75, 2]];
       case 'nop': return [[0x4e71, 2]];
       case 'tst.b': case 'tst.l': return W(0x4a00 | ((op === 'tst.l' ? 2 : 0) << 6) | ea6(this.ea(a0, op[4] as 'b' | 'l')), this.ea(a0, op[4] as 'b' | 'l'));
-      case 'clr.b': case 'clr.l': return W(0x4200 | ((op === 'clr.l' ? 2 : 0) << 6) | ea6(this.ea(a0, op[4] as 'b' | 'l')), this.ea(a0, op[4] as 'b' | 'l'));
+      case 'clr.l': return W(0x4280 | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'cmp.l': return W(0xb080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'add.l': return W(0xd080 | (D(a1) << 9) | ea6(this.ea(a0, 'l')), this.ea(a0, 'l'));
       case 'or.l':

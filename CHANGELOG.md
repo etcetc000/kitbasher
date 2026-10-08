@@ -61,10 +61,12 @@ All notable changes to Kitbasher are recorded here. The format follows
   time; one that lands after it does not, as before. Muting, MIDI machines,
   accents, swing and MIDI out behave as before. On by default on OS 1.63
   (prepared) and X.14: *Fix unmute latency* on the Download step,
-  `--unmute-fix` / `--no-unmute-fix` on the command line. Not offered on the DEV
-  firmware, which rewrites the sequencer code the fix changes. Five
-  instructions of the OS call 360 bytes of code (44 of data) placed after the knob labels in their RAM range. Tested in the emulator,
-  not yet on hardware.
+  `--unmute-fix` / `--no-unmute-fix` on the command line; a project file
+  records it when it is off. Not offered on the DEV firmware, which rewrites
+  the sequencer code the fix changes. Five instructions of the OS call 360
+  bytes of code (44 of data) in the knob-label RAM range (`0x2be100..0x2bef60`):
+  after the labels, or alone at its start when no selected machine has labels;
+  never in the main RAM image. Tested in the emulator, not yet on hardware.
 - **MIDI chromatic note input** (X.14, off by default): a build option, *MIDI
   chromatic note input* on the Download step or `--midi-chroma`. Notes on MIDI
   channel base + 4 (channel 5 with base channel 1) play the selected track at

@@ -44,6 +44,8 @@ export interface ProjectFile {
    * off. Kept whatever OS the project was saved with: it applies where the OS supports it.
    */
   midi_chroma?: { channel: string };
+  /** false when the unmute-latency fix (engine/src/unmute.ts) was turned off; absent: on (the default) */
+  unmute_fix?: false;
 }
 
 /** A project in memory: what the page and the build use. */
@@ -59,6 +61,8 @@ export interface Project {
   uw?: boolean;
   /** MIDI chromatic note input and its channel; undefined: off */
   midiChroma?: { channel: string };
+  /** false: the unmute-latency fix was turned off; undefined: the default (on where the OS has it) */
+  unmuteFix?: false;
 }
 
 export function osOf(base: Base): ProjectOs {
@@ -124,6 +128,7 @@ export async function encodeProject(p: Project): Promise<ProjectFile> {
     trim: p.trim, models: [...p.models].sort(), layout: p.layout,
     ...(p.uw === undefined ? {} : { uw: p.uw }),
     ...(p.midiChroma ? { midi_chroma: { channel: p.midiChroma.channel } } : {}),
+    ...(p.unmuteFix === false ? { unmute_fix: false as const } : {}),
   };
 }
 
@@ -161,6 +166,7 @@ export async function decodeProject(json: string): Promise<Project> {
   if (!Array.isArray(o.models) || o.models.some((m) => typeof m !== 'string')) throw new Error('project file: models must list module names');
   const layout = o.layout === null || o.layout === undefined ? null : parseLayout(JSON.stringify(o.layout));
   if (o.uw !== undefined && typeof o.uw !== 'boolean') throw new Error('project file: uw must be true or false');
+  if (o.unmute_fix !== undefined && (o.unmute_fix as unknown) !== false) throw new Error('project file: unmute_fix must be false or absent');
   const mc = o.midi_chroma;
   if (mc !== undefined) {
     if (!mc || typeof mc !== 'object' || typeof mc.channel !== 'string') throw new Error('project file: midi_chroma must be { "channel": "base+4" } or absent');
@@ -168,5 +174,6 @@ export async function decodeProject(json: string): Promise<Project> {
   }
   return { os: { base: os.base, name: String(os.name ?? os.base), tag: os.tag, coldfire_sha256: os.coldfire_sha256, dsp2_sha256: os.dsp2_sha256, dsp1_sha256: os.dsp1_sha256 },
            swaps, sources, noTrim, trim: { mode: t.mode, db: t.db, cap: t.cap }, models: o.models.map(String), layout, uw: o.uw ?? layout?.uw,
-           ...(mc ? { midiChroma: { channel: mc.channel } } : {}) };
+           ...(mc ? { midiChroma: { channel: mc.channel } } : {}),
+           ...(o.unmute_fix === false ? { unmuteFix: false as const } : {}) };
 }

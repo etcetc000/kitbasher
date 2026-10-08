@@ -592,7 +592,11 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
                   `${ram.bytes - ram.limit} bytes too many` + (canFlash ? ' even with descriptors in flash' : ''));
   }
   if (ram.dyn && ram.dyn.blob.length > ram.dyn.limit) {
-    problems.push(`the dynamic-label segment needs ${ram.dyn.blob.length} bytes and its RAM range holds ${ram.dyn.limit}`);
+    const um = ram.unmute?.home === 'dyn' ? ram.unmute.block.bytes.length : 0;
+    problems.push(um
+      ? `the knob labels (${ram.dyn.blob.length - um} bytes) and the unmute-latency fix (${um} bytes) need ${ram.dyn.blob.length} bytes ` +
+        `and their RAM range holds ${ram.dyn.limit}: turn the unmute-latency fix off (--no-unmute-fix) or untick a machine with dynamic knob labels`
+      : `the dynamic-label segment needs ${ram.dyn.blob.length} bytes and its RAM range holds ${ram.dyn.limit}`);
   }
   if (ram.unmute?.segment && ram.unmute.segment.length > ram.unmute.limit) {
     problems.push(`the unmute-latency fix needs ${ram.unmute.segment.length} bytes and the label RAM range holds ${ram.unmute.limit}`);

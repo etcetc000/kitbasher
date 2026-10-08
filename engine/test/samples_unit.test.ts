@@ -176,6 +176,14 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   assert.deepEqual((await decodeProject(JSON.stringify(on))).midiChroma, { channel: 'ch:7' });
   await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: true })), /midi_chroma/);
   await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: { channel: 'base+2' } })), /base\+4\.\.base\+15/);
+  // the unmute-latency fix: saved only when off, read back off; absent reads back as the default
+  assert.equal(q.unmuteFix, undefined);
+  assert.ok(!text.includes('unmute_fix'));
+  const off = await encodeProject({ ...p, unmuteFix: false });
+  assert.equal(off.unmute_fix, false);
+  assert.equal((await decodeProject(JSON.stringify(off))).unmuteFix, false);
+  assert.equal(JSON.stringify(await encodeProject(await decodeProject(JSON.stringify(off)))), JSON.stringify(off), 'off round-trips');
+  for (const bad of [true, 0, 'off']) await assert.rejects(decodeProject(JSON.stringify({ ...off, unmute_fix: bad })), /unmute_fix must be false or absent/);
 });
 
 test('a swapped first sample shorter than its partner is padded at any length; the stock pair rule is unchanged', () => {

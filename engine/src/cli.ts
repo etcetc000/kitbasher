@@ -187,7 +187,7 @@ async function main(): Promise<void> {
   }
   // the UW answer is required before anything is read (a restored layout's answer, below, only reported)
   const uw = uwFromFlags({ uw: !!a.uw, noUw: !!a['no-uw'] });
-  const unmuteFix = unmuteFlag(a);
+  let unmuteFix = unmuteFlag(a);
   if (a['midi-chroma'] && a['no-midi-chroma']) throw new Error('--midi-chroma and --no-midi-chroma: choose one');
   if (a['midi-chroma-channel'] && !a['midi-chroma']) throw new Error('--midi-chroma-channel needs --midi-chroma');
   // MIDI chromatic note input: the flags, or a restored project's choice
@@ -222,6 +222,10 @@ async function main(): Promise<void> {
         if (p.midiChroma && !chroma && !a['no-midi-chroma']) {
           chroma = p.midiChroma;
           console.log(`the restored project has MIDI chromatic note input on (channel ${chroma.channel}): building with it (--no-midi-chroma to leave it out)`);
+        }
+        if (p.unmuteFix === false && unmuteFix === undefined) {
+          unmuteFix = false;
+          console.log('the restored project has the unmute-latency fix off: building without it (--unmute-fix to put it in)');
         }
       } else layout = parseLayout(text);
     }
