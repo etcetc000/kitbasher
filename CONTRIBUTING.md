@@ -36,6 +36,7 @@ from an environment variable:
 | `uwAssets` | `MD_UW_ASSETS` | `npm run dev`: UW sample files to offer as downloads |
 | `assembler` | `MD_ASSEMBLER` | `npm run test:assembly`, `npm run test:community` and the model exporter |
 | `dspHost` | `MD_DSP_HOST` | `npm run test:ksstr`: a DSP56300 instruction host (see `ci/ksstr_check.py`) |
+| `firmwareDir` | `MD_FIRMWARE_DIR` | `npm test`: a directory of OS files you own, for the engine tests that need firmware (skipped without it; never commit firmware) |
 
 Values must be absolute paths. Only `packDir` has a default.
 

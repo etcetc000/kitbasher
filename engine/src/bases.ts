@@ -75,9 +75,12 @@ export interface BaseProfileFile {
  * profile that qualified it. --host-reorder: the sender is found and every reference to it is
  * repointed exactly, but whether the base's own host traffic tolerates the reorder depends on how
  * the base schedules its senders, which no signature shows. In the emulator the prepared 1.63 base
- * goes silent with it while the DEV base plays.
+ * goes silent with it while the DEV base plays. --unmute-fix: the sequencer is found and checked,
+ * but whether the base's own code around it (its add-on, its other users of the queues) leaves the
+ * queues as the routines expect is shown only by running it, so it is given to the bases it was
+ * run on (X.14 and prepared 1.63).
  */
-export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder' };
+export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix' };
 
 export interface BaseSet { lineage: LineageFile; profiles: BaseProfileFile[] }
 
@@ -116,6 +119,8 @@ export interface Base {
     descFlash: { alias: number } | null;
     /** --cpu-indicator: the LCD flush's diff (engine/src/indicator.ts), once in the base's code */
     lcdFlush: import('./indicator.js').Site | null;
+    /** the unmute-latency fix's sequencer sites (engine/src/unmute.ts); null: not found, or no label RAM range */
+    unmute: import('./unmute.js').Unmute | null;
     /** --midi-chroma: X.14's real-time MIDI path, verified byte for byte (engine/src/midi_chroma.ts) */
     midiChroma: import('./midi_chroma.js').ChromaSite | null;
   };
@@ -263,6 +268,7 @@ export async function resolveBase(fw: Firmware, set: BaseSet): Promise<Resolved>
       'it is found in the code, but only a base whose profile records it running is given it';
     (base.support as unknown as Record<string, { ok: boolean; why: string }>)[k] = { ok: false, why };
     if (k === 'hostSend') base.features.hostSend = null;
+    if (k === 'unmuteFix') base.features.unmute = null;
   }
   if (profile) {
     for (const [k, v] of Object.entries(profile.cache ?? {})) {

@@ -79,6 +79,7 @@ b.addEventListener('click',function(){r.dataset.theme=r.dataset.theme==='dark'?'
   <h2 id="download-title" tabindex="-1">Download firmware</h2>
   <p id="download-summary"></p>
   <p id="ids-warning" class="fine" hidden></p>
+  <div class="e12" id="firmware-options" hidden><label title="An unmuted track plays its next trig instead of about two steps later. Turn it off to keep this OS's sequencer exactly as it is."><input type="checkbox" id="unmute-fix" checked> Fix unmute latency</label></div>
   <div class="e12" id="midi-chroma-option" hidden><label title="Notes on MIDI channel base+4 (channel 5 when the base channel is 1) play the selected track at their pitch, on models with pitch metadata. With live record on they record the trig and a pitch lock; with trig keys held, every held step gets the lock."><input type="checkbox" id="midi-chroma"> MIDI chromatic note input (channel base+4)</label></div>
   <button id="build" type="button" class="wizard-primary" disabled>Create SysEx</button>
   <div id="result" aria-live="polite"></div>

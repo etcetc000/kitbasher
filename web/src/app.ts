@@ -70,6 +70,8 @@ let current: Plan | null = null;
 const trims = new Map<string, Trimmed>();       // per base file, per trim setting (cleared when the samples change)
 let samples: SamplesStep;                        // the E12 samples and the user's swaps (web/src/samples-ui.ts)
 let pendingProject: { project: Project; name: string } | null = null;  // loaded before its OS
+/** the unmute toggle an OS load starts from: on, unless a loaded project turned it off */
+let projectUnmute = true;
 let layoutEd: LayoutEditor;                      // the menu categories and IDs (web/src/layout-ui.ts)
 let step = 1;
 let revision = 0;
@@ -292,14 +294,20 @@ function trimmed(opt = trimOptions()): Trimmed {
 
 // Existing layout IDs remain pinned; newly selected models can use an available ID.
 const allowIdMove = (): boolean => true;
+/** The default firmware fixes, with the unmute-latency fix as the Download step's toggle says (on: wherever this OS has it). */
+const firmwareFixes = (): ReturnType<typeof currentFirmwareFixes> => {
+  const f = currentFirmwareFixes();
+  return { ...f, features: { ...f.features, unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false } };
+};
 
 /** MIDI chromatic note input (off by default): offered only on an OS whose MIDI path the engine verified. */
 const chromaTicked = (): boolean => $<HTMLInputElement>('midi-chroma').checked;
 const chromaOn = (): boolean => !!base?.support.midiChroma?.ok && chromaTicked();
 /** the chromatic channel: the default, or what a loaded project chose (the page has no channel control) */
 let chromaChannel = MIDI_CHROMA_CHANNEL;
+/** Both Download-step options on top of the default fixes: the unmute-latency fix and MIDI chromatic input. */
 function firmwareOptions(): ReturnType<typeof currentFirmwareFixes> {
-  const o = currentFirmwareFixes();
+  const o = firmwareFixes();
   return chromaOn() ? { ...o, features: { ...o.features, midiChroma: { channel: chromaChannel } } } : o;
 }
 function syncChromaOption(): void {
@@ -449,6 +457,9 @@ async function onFile(f: File): Promise<void> {
   input = null; base = null; fw = null; current = null; cachedBuild = null;
   syncChromaOption();
   $('room').hidden = true;
+  $('firmware-options').hidden = true;
+  // a new OS starts from the default, or from what a loaded project chose
+  $<HTMLInputElement>('unmute-fix').checked = projectUnmute;
   $('firmware-details').hidden = true;
   layoutEd.render(null);
   syncWizard();
@@ -491,6 +502,8 @@ async function onFile(f: File): Promise<void> {
     $('firmware-info').textContent = `${b.qualification.profile ? b.name : 'Unrecognized firmware version'}.` +
       (b.qualification.level === 'hardware-proven' ? '' : " We haven't tested this version on a Machinedrum yet.");
     $('firmware-details').hidden = false;
+    // the unmute-latency fix is offered only where this OS has the sequencer it is written against
+    $('firmware-options').hidden = !b.support.unmuteFix?.ok;
     syncChromaOption();
     status(`Loaded ${f.name}.`, 'ok');
     if (pendingProject) applyProject(pendingProject.project, pendingProject.name);
@@ -745,6 +758,8 @@ function projectNow(): Project {
     uw: uwOf(uwAnswer),
     // what the user chose, even on an OS that cannot have it, so the project keeps it
     midiChroma: chromaTicked() ? { channel: chromaChannel } : undefined,
+    // saved only when off, the default being on
+    unmuteFix: $<HTMLInputElement>('unmute-fix').checked ? undefined : false,
   };
 }
 
@@ -807,6 +822,8 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   $<HTMLInputElement>('midi-chroma').checked = !!p.midiChroma;
   chromaChannel = p.midiChroma?.channel ?? MIDI_CHROMA_CHANNEL;
+  projectUnmute = p.unmuteFix !== false;
+  $<HTMLInputElement>('unmute-fix').checked = projectUnmute;
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
   if (p.uw !== undefined) fileAnswer(p.uw, name);
@@ -916,6 +933,7 @@ async function main(): Promise<void> {
   document.querySelectorAll('input[name=e12]').forEach((r) => r.addEventListener('change', syncTrim));
   syncTrim();
   $('build').addEventListener('click', () => void onBuild());
+  $('unmute-fix').addEventListener('change', () => refresh());
   $('midi-chroma').addEventListener('change', () => refresh());
   const packFiles = $('pack-files') as HTMLInputElement;
   packFiles.addEventListener('change', () => { if (packFiles.files?.length) void onPackFiles(Array.from(packFiles.files)); });

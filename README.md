@@ -51,6 +51,10 @@ default): notes on MIDI channel 5 (base channel + 4) play the selected track at
 pitch, record a pitch p-lock in live record, and p-lock every held step in grid
 record. See [MIDI chromatic note input](docs/MIDI-CHROMATIC.md).
 
+On OS X.14 and OS 1.63 the Download step's **Fix unmute latency** (on by default)
+makes an unmuted track play its next trig instead of about two steps later. See
+[Supported bases](docs/BASES.md#unmute-latency).
+
 Some models use a sample in UW memory; the page lists those and offers the
 sample files with instructions.
 

@@ -55,6 +55,13 @@
 //                        P:$e8..$f3 no longer spins on HSR RXDF waiting for the ColdFire. No DSP2 word
 //                        changes and the DSP1 half of the sender is untouched (engine/src/coldfire.ts)
 //   --no-host-reorder    turn it off: the stock sender, unchanged
+//   --unmute-fix         an unmuted track plays its next trig: a trig plays when its track is unmuted
+//                        on the tick that plays it (its step, or for a swung trig the swing tick),
+//                        instead of about two steps later. Five sequencer instructions call routines
+//                        in the label RAM range (engine/src/unmute.ts). On by default on the bases
+//                        whose profile qualifies it (X.14, prepared 1.63); asked for on any other
+//                        base, the build is refused
+//   --no-unmute-fix      turn it off: the base's sequencer, unchanged
 //   --midi-chroma        MIDI chromatic note input (X.14): a note-on on the chromatic channel plays the
 //                        selected track at that note's pitch, from the selected models' pitch metadata
 //                        (raw = 2 (MIDI - 24), C3 = MIDI 60 = raw 72, for the shared quarter-tone law);
@@ -111,7 +118,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
                           'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw',
-                          'midi-chroma', 'no-midi-chroma']);
+                          'unmute-fix', 'no-unmute-fix', 'midi-chroma', 'no-midi-chroma']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -126,6 +133,12 @@ function args(argv: string[]): { a: Record<string, string>; many: Record<string,
     i++;
   }
   return { a: out, many };
+}
+
+/** --unmute-fix / --no-unmute-fix: true, false, or undefined (the default: on where the base has it). */
+function unmuteFlag(a: Record<string, string>): boolean | undefined {
+  if (a['unmute-fix'] && a['no-unmute-fix']) throw new Error('--unmute-fix and --no-unmute-fix: choose one');
+  return a['no-unmute-fix'] ? false : a['unmute-fix'] ? true : undefined;
 }
 
 async function main(): Promise<void> {
@@ -174,6 +187,7 @@ async function main(): Promise<void> {
   }
   // the UW answer is required before anything is read (a restored layout's answer, below, only reported)
   const uw = uwFromFlags({ uw: !!a.uw, noUw: !!a['no-uw'] });
+  let unmuteFix = unmuteFlag(a);
   if (a['midi-chroma'] && a['no-midi-chroma']) throw new Error('--midi-chroma and --no-midi-chroma: choose one');
   if (a['midi-chroma-channel'] && !a['midi-chroma']) throw new Error('--midi-chroma-channel needs --midi-chroma');
   // MIDI chromatic note input: the flags, or a restored project's choice
@@ -208,6 +222,10 @@ async function main(): Promise<void> {
         if (p.midiChroma && !chroma && !a['no-midi-chroma']) {
           chroma = p.midiChroma;
           console.log(`the restored project has MIDI chromatic note input on (channel ${chroma.channel}): building with it (--no-midi-chroma to leave it out)`);
+        }
+        if (p.unmuteFix === false && unmuteFix === undefined) {
+          unmuteFix = false;
+          console.log('the restored project has the unmute-latency fix off: building without it (--unmute-fix to put it in)');
         }
       } else layout = parseLayout(text);
     }
@@ -255,6 +273,7 @@ async function main(): Promise<void> {
       dsp1IdSpace: a['dsp1-id-space'] ? Number(a['dsp1-id-space']) : undefined,
       dsp1Recover: a['no-dsp1-recover'] ? false : a['dsp1-recover'] ? true : undefined,
       cpuIndicator: a['no-cpu-indicator'] ? false : a['cpu-indicator'] ? true : undefined,
+      unmuteFix,
       midiChroma: chroma,
     },
   });
@@ -277,7 +296,8 @@ async function main(): Promise<void> {
   console.log(`dynamic labels: ${f.dyn_labels ? `${f.dyn_labels.bytes} bytes, ${f.dyn_labels.page_sites} page sites` : 'off'}; ` +
               `DSP1 drive: ${f.dsp1_drive ? `${f.dsp1_drive.machines} machines` : 'off'}; ` +
               `host-command reorder: ${f.host_reorder ? `${f.host_reorder.bytes} bytes at ${f.host_reorder.entry}, ${f.host_reorder.sites.length} sites` : 'off'}; ` +
-              `descriptors in flash: ${f.desc_flash.length ? f.desc_flash.join(', ') : 'none'}`);
+              `descriptors in flash: ${f.desc_flash.length ? f.desc_flash.join(', ') : 'none'}; ` +
+              `unmute fix: ${f.unmute_fix ? `${f.unmute_fix.bytes} bytes at ${f.unmute_fix.at}` : 'off'}`);
   if (f.midi_chroma) {
     const c = f.midi_chroma;
     console.log(`MIDI chromatic input: channel ${c.channel}, ${c.code_bytes + c.data_bytes} bytes at ${c.at}..${c.end}`);

@@ -22,6 +22,7 @@ import { handlerAt } from './recover.js';
 import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js';
 import { callCode, drivePairs, dsp1Transport, dynSegment, linkDrive, type DriveLink, type Dsp1Law, type DynMachine } from './features.js';
 import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recovery.js';
+import { unmuteBlock, type UnmuteBlock } from './unmute.js';
 import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type ChromaSite, type ChromaTable } from './midi_chroma.js';
 import { linkCode, words, type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
 import { ctrCoverage, type CtrCoverage } from './scan.js';
@@ -64,6 +65,12 @@ export interface Features {
    * (engine/src/indicator.ts). Off by default.
    */
   cpuIndicator?: boolean;
+  /**
+   * An unmuted track plays its next trig instead of about two steps later (engine/src/unmute.ts):
+   * five sequencer instructions call routines of ours in the label segment's RAM range. On by
+   * default on the bases whose profile qualifies it; false leaves the base's sequencer as it is.
+   */
+  unmuteFix?: boolean;
   /**
    * MIDI chromatic note input (engine/src/midi_chroma.ts): a note on the chromatic channel plays
    * the selected track at the note's pitch, using the selected models' pitch metadata. `true` uses
@@ -176,7 +183,7 @@ export interface Plan {
     machines: Placement[];
   };
   ram: RamImage;
-  features: { dynLabels: boolean; dsp1Drive: boolean; hostReorder: boolean; descFlash: string[]; notes: string[] };
+  features: { dynLabels: boolean; dsp1Drive: boolean; hostReorder: boolean; unmuteFix: boolean; descFlash: string[]; notes: string[] };
 }
 
 export interface RamImage {
@@ -191,6 +198,12 @@ export interface RamImage {
   hostSend: { entry: number; sites: number[]; old: number; bytes: number } | null;
   /** --cpu-indicator: the stub at the end of the dynamic-label segment, and the LCD flush site it is reached from */
   indicator: { at: number; code: Uint8Array; site: Site; parts: Parts; stub: Stub; home: 'dyn' | 'ext' } | null;
+  /**
+   * The unmute-latency routines (engine/src/unmute.ts), in the label segment's RAM range: after the
+   * labels (and the indicator) when there is a label segment, else as that range's only content
+   * (`segment`, copied by the boot routine in the label segment's place).
+   */
+  unmute: { block: UnmuteBlock; home: 'dyn' | 'own'; segment: Uint8Array | null; base: number; limit: number } | null;
   /** --midi-chroma: the routines and their note table, at the end of the RAM image */
   chroma: { at: number; code: ChromaCode; table: ChromaTable; site: ChromaSite; channel: string; cfg: number } | null;
 }
@@ -204,7 +217,7 @@ export interface RamImage {
 export const HOST_REORDER_DEFAULT = false;
 
 /** The feature switches as this base can honour them, and why any is off. */
-export function resolveFeatures(base: Base, f: Features = {}): { dyn: boolean; dsp1: boolean; host: boolean; problems: string[]; notes: string[] } {
+export function resolveFeatures(base: Base, f: Features = {}): { dyn: boolean; dsp1: boolean; host: boolean; unmute: boolean; problems: string[]; notes: string[] } {
   const problems: string[] = [];
   const notes: string[] = [];
   const want = (on: boolean | undefined, have: boolean, what: string, key?: keyof Base['support']): boolean => {
@@ -220,6 +233,7 @@ export function resolveFeatures(base: Base, f: Features = {}): { dyn: boolean; d
     dyn: want(f.dynLabels, !!base.features.dynLabels, 'dynamic knob labels', 'dynLabels'),
     dsp1: want(f.dsp1Drive, !!base.features.dsp1Drive, 'the DSP1 drive', 'dsp1Drive'),
     host: want(f.hostReorder === undefined ? (HOST_REORDER_DEFAULT ? undefined : false) : f.hostReorder, !!base.features.hostSend, 'the host-command sender reorder (--host-reorder)', 'hostSend'),
+    unmute: want(f.unmuteFix, !!base.features.unmute && !!base.features.dynLabels, 'the unmute-latency fix (--unmute-fix)', 'unmuteFix'),
     problems, notes,
   };
 }
@@ -288,7 +302,7 @@ export const IND_EXT_SPAN = 0xe14;
 
 export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Family[], sel: Selected[],
   opt: { dyn: boolean; dsp1: DriveLink | null; host: boolean; toFlash: Set<string>; dynFlash: Set<string>; idSpace: number; flashAt: number;
-         redrawValues: number; ind: Site | null; chroma?: { site: ChromaSite; channel: string; cfg: number } | null }): RamImage {
+         redrawValues: number; ind: Site | null; chroma?: { site: ChromaSite; channel: string; cfg: number } | null; unmute?: boolean }): RamImage {
   const O = base.os;
   const E = base.ext.base;
   let cb = fromBase64(core.knob_callback);
@@ -392,6 +406,17 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     ext.align(4, 0);
     indicator = { at, code: st.bytes, site: opt.ind, parts, stub: st, home: 'ext' };
   }
+  // the unmute-latency routines: in the label segment's RAM range, after whatever the segment holds
+  let unmute: RamImage['unmute'] = null;
+  if (opt.unmute) {
+    const seg = base.features.dynLabels!.segment;
+    const b = new Buf().push(dyn ? dyn.blob : new Uint8Array(0));
+    b.align(4, 0);
+    const block = unmuteBlock(base.features.unmute!, seg[0] + b.length);
+    b.push(block.bytes);
+    if (dyn) dyn = { ...dyn, blob: b.bytes() };
+    unmute = { block, home: dyn ? 'dyn' : 'own', segment: dyn ? null : b.bytes(), base: seg[0], limit: seg[1] - seg[0] };
+  }
   fimg.align(4, 0);
   let dsp1: RamImage['dsp1'] = null;
   const pairs = opt.dsp1 ? drivePairs(opt.dsp1.selector, sel) : [];
@@ -436,7 +461,7 @@ export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Fam
     chroma = { at, code, table, ...opt.chroma };
   }
   return { base: E, bytes: ext.length, limit: base.ext.end - E, image: ext.bytes(), descs, family, levStub, menuRefresh, uwMenu,
-           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, chroma };
+           flashBlock: fimg.bytes(), dyn, dsp1, hostSend, indicator, unmute, chroma };
 }
 
 /**
@@ -456,7 +481,7 @@ export function driveLaws(core: CorePack, packs: Pack[]): Map<string, Dsp1Law> {
 }
 
 function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string, Dsp1Law>, fams: Family[], sel: Selected[], f: Features, flashAt: number):
-  { ram: RamImage; feats: { dyn: boolean; dsp1: boolean; host: boolean; descFlash: string[]; problems: string[]; notes: string[] } } {
+  { ram: RamImage; feats: { dyn: boolean; dsp1: boolean; host: boolean; unmute: boolean; descFlash: string[]; problems: string[]; notes: string[] } } {
   const r = resolveFeatures(base, f);
   const problems = [...r.problems];
   const notes = [...r.notes];
@@ -521,12 +546,20 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
     problems.push(`--dsp1-recover: not supported on ${base.name}: ${base.support.dsp1Recover.why}`);
   }
   const make = (): RamImage => ramImage(base, main, core, fams, sel,
-    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, chroma });
+    { dyn, dsp1: drive, host: r.host, toFlash, dynFlash, idSpace, flashAt, redrawValues, ind, chroma, unmute: r.unmute });
   // --midi-chroma's routines sit at the end of the RAM image, which then has to stay inside the span
   // earlier images ran from on hardware (IND_EXT_SPAN), not just the base's window
   const pastProven = (x: RamImage): boolean => !!x.chroma && x.bytes > IND_EXT_SPAN;
   const tooBig = (x: RamImage): boolean => x.bytes > x.limit || pastProven(x);
   let ram = make();
+  // the unmute fix is on by default, so a selection whose labels leave no room for it builds without
+  // it (said so); asked for explicitly, the overflow is a problem below
+  const over = (x: RamImage): boolean => !!x.unmute && (x.unmute.segment ?? x.dyn!.blob).length > x.unmute.limit;
+  if (r.unmute && f.unmuteFix === undefined && over(ram)) {
+    r.unmute = false;
+    notes.push('the unmute-latency fix: no room left after the knob labels in their RAM range, so it is not built');
+    ram = make();
+  }
   if (mode === 'auto' && canFlash && tooBig(ram)) {
     const rank = new Map(sel.map((s) => [s.m.name.trim(), s.m.flash_rank ?? null]));
     const ranked = eligible.filter((n) => rank.get(n) != null).sort((a, b) => rank.get(a)! - rank.get(b)!);
@@ -559,9 +592,16 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
                   `${ram.bytes - ram.limit} bytes too many` + (canFlash ? ' even with descriptors in flash' : ''));
   }
   if (ram.dyn && ram.dyn.blob.length > ram.dyn.limit) {
-    problems.push(`the dynamic-label segment needs ${ram.dyn.blob.length} bytes and its RAM range holds ${ram.dyn.limit}`);
+    const um = ram.unmute?.home === 'dyn' ? ram.unmute.block.bytes.length : 0;
+    problems.push(um
+      ? `the knob labels (${ram.dyn.blob.length - um} bytes) and the unmute-latency fix (${um} bytes) need ${ram.dyn.blob.length} bytes ` +
+        `and their RAM range holds ${ram.dyn.limit}: turn the unmute-latency fix off (--no-unmute-fix) or untick a machine with dynamic knob labels`
+      : `the dynamic-label segment needs ${ram.dyn.blob.length} bytes and its RAM range holds ${ram.dyn.limit}`);
   }
-  return { ram, feats: { dyn, dsp1: r.dsp1, host: r.host, descFlash: [...toFlash], problems, notes } };
+  if (ram.unmute?.segment && ram.unmute.segment.length > ram.unmute.limit) {
+    problems.push(`the unmute-latency fix needs ${ram.unmute.segment.length} bytes and the label RAM range holds ${ram.unmute.limit}`);
+  }
+  return { ram, feats: { dyn, dsp1: r.dsp1, host: r.host, unmute: r.unmute, descFlash: [...toFlash], problems, notes } };
 }
 
 /**
@@ -787,7 +827,7 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
     ok: problems.length === 0, problems, fams, menus, layout: lay ? effectiveLayout(base, lay, menus, sel, noUw ? false : opt.uw ?? lay.uw) : null, sel, moves, needs, ctr, notes, trim, workspace, piClean,
     dsp2: { fits: !overflow && (!workspace || trim.end <= D.workspace.base),
       regions, capacity, demand, free, padding: overflow ? 0 : capacity - demand - free, records: problems.length ? [] : recs, machines },
-    ram, features: { dynLabels: feats.dyn, dsp1Drive: feats.dsp1, hostReorder: feats.host, descFlash: feats.descFlash, notes: feats.notes },
+    ram, features: { dynLabels: feats.dyn, dsp1Drive: feats.dsp1, hostReorder: feats.host, unmuteFix: feats.unmute, descFlash: feats.descFlash, notes: feats.notes },
   };
 }
 

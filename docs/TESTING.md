@@ -16,6 +16,10 @@
 `npm test` runs the same minus the site build. Neither needs firmware, model
 packs, an emulator or hardware: every test builds its own synthetic input.
 
+A few engine tests compare the engine with real OS files: set `firmwareDir` in
+`.local/config.json` (or `MD_FIRMWARE_DIR`) to a directory of OS files you own,
+and they read every file in it. Without it they are skipped, as in CI.
+
 ## Assembly encoding
 
 `npm run test:assembly` checks real instruction encoding and relocation. Build
