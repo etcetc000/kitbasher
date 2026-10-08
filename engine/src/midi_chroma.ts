@@ -450,12 +450,14 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   I('lea', `${S.machineIds}.l`, 'a0'); I('move.l', '(a0,d4.l*4)', 'd0');
   I('lea', '@dat', 'a2');                                       // kept across the OS calls (callee-saved)
   I('bsr.w', 'lookup'); I('tst.l', 'd0'); I('bmi.b', 'hn_trig');
-  // arm the p-lock request [track | knob<<4, raw, ARMED, -]: rec_hook fills in the step if the OS records the trig
-  I('move.l', 'd1', 'd2'); I('lsl.l', '#4', 'd2'); I('or.l', 'd4', 'd2'); I('move.b', 'd2', '(a2)');
-  I('move.b', 'd0', '1(a2)'); I('moveq', `#${ARMED - 256}`, 'd2'); I('move.b', 'd2', '2(a2)');
-  // the pitch knob by the OS's CC path: status B0|(base + track/4), CC 16/40/72/96 + knob, value raw
+  // the pitch knob goes in by the OS's CC path: status B0|(base + track/4). A base channel too high
+  // to address the track that way: trigger only, nothing armed, so no lock is written either
   I('move.l', 'd4', 'd2'); I('lsr.l', '#2', 'd2'); I('add.l', BASE, 'd2');
-  I('moveq', '#15', 'd3'); I('cmp.l', 'd2', 'd3'); I('bcs.b', 'hn_trig');      // base too high to address it
+  I('moveq', '#15', 'd3'); I('cmp.l', 'd2', 'd3'); I('bcs.b', 'hn_trig');
+  // arm the p-lock request [track | knob<<4, raw, ARMED, -]: rec_hook fills in the step if the OS records the trig
+  I('move.l', 'd1', 'd3'); I('lsl.l', '#4', 'd3'); I('or.l', 'd4', 'd3'); I('move.b', 'd3', '(a2)');
+  I('move.b', 'd0', '1(a2)'); I('moveq', `#${ARMED - 256}`, 'd3'); I('move.b', 'd3', '2(a2)');
+  // the CC [B0|(base + track/4), 16/40/72/96 + knob, raw]
   I('ori.l', '#0xb0', 'd2'); I('move.b', 'd2', '(a7)');
   I('moveq', '#3', 'd2'); I('and.l', 'd4', 'd2'); I('move.b', '12(a2,d2.l)', 'd2');
   I('add.l', 'd1', 'd2'); I('move.b', 'd2', '1(a7)'); I('move.b', 'd0', '2(a7)');
@@ -469,6 +471,11 @@ export function assemble(org: number, S: ChromaSite, t: ChromaTable, cfg: number
   I('move.l', '(a2)', 'd1');
   I('moveq', '#0', 'd0'); I('move.b', '2(a2)', 'd0'); I('moveq', `#${IDLE}`, 'd2'); I('move.b', 'd2', '2(a2)');
   I('btst', '#6', 'd0'); I('bne.b', 'hn_out');
+  // ARMED (no trig recorded): only worth the UI task's time in grid record with a trig key held
+  I('btst', '#7', 'd0'); I('beq.b', 'hn_queue');
+  I('tst.l', `${S.gridMode}.l`); I('beq.b', 'hn_out');
+  I('move.l', `${S.held}.l`, 'd2'); I('or.l', `${S.held + 4}.l`, 'd2'); I('beq.b', 'hn_out');
+  a.label('hn_queue');
   // enqueue (one slot stays free: full when write+1 == read) and wake the UI task. Full: the newest
   // request is replaced (the last note still wins) and counted; the UI task only ever reads the
   // slot at the read index, which is not the newest one while the ring is full.

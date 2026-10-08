@@ -6,12 +6,13 @@ import type { Base } from '../src/bases.js';
 import { decodeLinear } from '../src/isa.js';
 import type { CorePack, Pack, PackModel } from '../src/packs.js';
 import { noteToRaw, type Pitch } from '../src/pitch.js';
+import { Cpu } from './cf_interp.js';
 import { ramImage, IND_EXT_SPAN, MIDI_CHROMA_CHANNEL } from '../src/plan.js';
 import type { Selected } from '../src/selection.js';
 import type { CodeImage } from '../src/sig.js';
 import {
   assemble, buildTable, channelByte, checkChromaCode, chromaPatches, chromaRanges, findChroma, lawOf, lookup, NoChroma,
-  RING, X14_CHROMA as S, type ChromaModel,
+  ARMED, IDLE, RING, X14_CHROMA as S, type ChromaModel, type ChromaTable,
 } from '../src/midi_chroma.js';
 
 const packs: Pack[] = readdirSync('catalog').filter((f) => f.endsWith('.json') && f !== 'core.json')
@@ -108,7 +109,7 @@ test('the routines: ISA_A throughout, branches inside on instruction boundaries,
   const c = code();
   const chk = checkChromaCode(c.bytes, c.codeLen, ORG, S);
   assert.ok(chk.ok, chk.detail);
-  assert.equal(c.codeLen, 868);
+  assert.equal(c.codeLen, 896);
   assert.equal(c.labels.chch, ORG);
   const ins = decodeLinear(c.bytes.subarray(0, c.codeLen), ORG);
   const calls = new Set(ins.filter((i) => i.target !== undefined && (i.target < ORG || i.target >= ORG + c.codeLen)).map((i) => i.target));
@@ -121,7 +122,7 @@ test('the routines: ISA_A throughout, branches inside on instruction boundaries,
   assert.equal(c.labels.table - c.labels.ring, 4 * RING);
   assert.equal(c.bytes.length % 4, 0);
   // the routines byte for byte as reviewed (their table and law addresses follow the table's length)
-  assert.equal(await sha256(c.bytes.subarray(0, c.codeLen)), 'cd6c936d5e70800a26920e86581f08134d5d37a7ed76415fb38bd3c42030dddc');
+  assert.equal(await sha256(c.bytes.subarray(0, c.codeLen)), '9bed56c87944ca4f6550167b58b431e8ca488301b7138676f699513bbe44093b');
   // an image the checker must refuse: a branch moved off an instruction boundary
   const bad = c.bytes.slice();
   const at = decodeLinear(bad.subarray(0, c.codeLen), ORG).find((i) => i.name.startsWith('b') && i.len === 2)!.at - ORG;
@@ -204,4 +205,207 @@ test('the RAM image: off is exactly as before; on appends the routines and nothi
   assert.deepEqual(on.image.subarray(off.image.length), on.chroma.code.bytes);
   assert.equal(on.chroma.table.entries.length, syn.filter((m) => lawOf(m.pitch!) !== null).length);
   assert.ok(on.bytes <= IND_EXT_SPAN);
+});
+
+// ---- the routines executed (engine/test/cf_interp.ts), the OS routines they call stubbed --------
+
+const MSG = 0x00e00000;
+interface Rig {
+  cpu: Cpu; L: Record<string, number>; t: ChromaTable;
+  notes: number[][]; ccs: number[][]; posts: { queue: number; byte: number }[];
+  locks: number[][]; popups: number[][]; idleNext: number;
+  /** the step the live trig recorder sets (null: live record off, the recorder is not called) */
+  live: number | null; lockResult: number;
+}
+function rig(ms: ChromaModel[] = SYN, cfg = 0x14): Rig {
+  const t = buildTable(ms), c = assemble(ORG, S, t, cfg), cpu = new Cpu();
+  cpu.load(ORG, c.bytes);
+  const r: Rig = { cpu, L: c.labels, t, notes: [], ccs: [], posts: [], locks: [], popups: [], idleNext: 0, live: null, lockResult: 1 };
+  const msg = (p: number): number[] => [cpu.r8(p), cpu.r8(p + 1), cpu.r8(p + 2)];
+  cpu.stubs.set(S.noteOn, (x) => {
+    const m = msg(x.arg(0));
+    r.notes.push([...m, x.arg(1)]);
+    // the OS records the trig (live record on, a direct-track note) through the call rec_hook replaced
+    if (r.live !== null && m[1] >= 0x80) x.call(r.L.rec_hook, [~m[1] & 15]);
+  });
+  cpu.stubs.set(S.ccHandler, (x) => { r.ccs.push([...msg(x.arg(0)), x.arg(1)]); });
+  cpu.stubs.set(S.recorder, (x) => {
+    const st = r.live!;
+    x.d[0] = 1 << (st % 32);
+    x.a[0] = st >= 32 ? S.trigHi : 0x7272c0;
+  });
+  cpu.stubs.set(S.queuePost, (x) => { r.posts.push({ queue: x.arg(0), byte: x.r8(x.arg(1)) }); });
+  cpu.stubs.set(S.lockWriter, (x) => { r.locks.push([0, 1, 2, 3, 4].map((k) => x.arg(k))); x.d[0] = r.lockResult; });
+  cpu.stubs.set(S.popup, (x) => { r.popups.push([0, 1, 2, 3, 4].map((k) => x.arg(k) & 0xffff)); });
+  cpu.stubs.set(S.idle.next, () => { r.idleNext++; });
+  cpu.w32(S.baseCh, 0);                      // base channel 1
+  cpu.w32(S.selTrack, 2);
+  cpu.w32(S.livePattern, 5);
+  cpu.w32(S.uiPattern, 9);
+  return r;
+}
+const machineOn = (r: Rig, track: number, id: number): void => r.cpu.w32(S.machineIds + 4 * track, id);
+function play(r: Rig, ch: number, note: number, vel = 100): void {
+  r.cpu.load(MSG, [0x90 | ch, note, vel]);
+  r.cpu.call(r.L.hook_note, [MSG, 1]);
+}
+const dat = (r: Rig, k: number): number => r.cpu.r8(r.L.dat + k);
+const ringOf = (r: Rig): number[] => Array.from({ length: RING }, (_, k) => r.cpu.r32(r.L.ring + 4 * k));
+const req = (trackKnob: number, raw: number, step: number, pattern: number): number => ((trackKnob << 24) | (raw << 16) | (step << 8) | pattern) >>> 0;
+
+test('executed: lookup returns what lookup() says for every table entry, note and MODE raw', () => {
+  const ms: ChromaModel[] = [...SYN, ...models.filter((m) => m.pitch).map((m, i) => ({ id: 100 + i, name: m.name, pitch: m.pitch, dyn_labels: m.dyn_labels }))];
+  const r = rig(ms), { cpu, L, t } = r;
+  let n = 0;
+  for (const e of t.entries) {
+    const segs = e.bytes[1] >> 3, track = e.id % 16;
+    for (let mode = 0; mode < 128; mode += segs ? 1 : 128) {
+      cpu.w8(S.kitParams + 24 * track + e.bytes[3], mode);
+      for (let note = 0; note < 128; note++) {
+        cpu.d[0] = e.id; cpu.d[3] = note; cpu.d[4] = track;
+        cpu.call(L.lookup);
+        const want = lookup(t, e.id, note, mode);
+        assert.deepEqual(cpu.d[0] < 0 ? null : { knob: cpu.d[1], raw: cpu.d[0] }, want, `${e.name} mode ${mode} note ${note}`);
+        n++;
+      }
+    }
+  }
+  for (const id of [0, 3, 40, 84, 171, 254]) {           // not in the table, or trigger only
+    cpu.d[0] = id; cpu.d[3] = 60; cpu.d[4] = 0;
+    cpu.call(L.lookup);
+    assert.equal(cpu.d[0], -1, `ID ${id}`);
+  }
+  assert.ok(n > 10_000);
+});
+
+test('executed: hook_parse keeps the base range, queues chromatic note-ons with velocity, drops the rest', () => {
+  for (const base of [0, 5, 11]) {
+    const r = rig(), { cpu, L } = r;
+    cpu.w32(S.baseCh, base);
+    const parse = (ch: number, vel: number): string => {
+      cpu.load(MSG, [0x90 | ch, 60, vel]);
+      cpu.d[0] = ch; cpu.a[1] = MSG;
+      cpu.call(L.hook_parse);
+      assert.equal(cpu.d[0], ch, 'd0 preserved');
+      return cpu.z ? 'enqueue' : cpu.n ? 'drop' : 'continue';
+    };
+    for (let k = 0; k < 4; k++) assert.equal(parse(base + k, 100), 'continue');
+    assert.equal(parse(base + 4, 100), 'enqueue');
+    assert.equal(parse(base + 4, 0), 'drop');
+    assert.equal(parse(base + 5, 100), 'drop');
+  }
+});
+
+test('executed: a chromatic note sets the pitch knob by CC and triggers the selected track; outside record nothing is queued', () => {
+  const r = rig();
+  machineOn(r, 2, 11);                                    // QUART on the selected track 3
+  play(r, 4, 60, 77);
+  assert.deepEqual(r.ccs, [[0xb0, 72, 72, 1]]);           // base channel, CC 72 (3rd track of the channel) + knob 0, raw 72
+  assert.deepEqual(r.notes, [[0x90, (~2) & 0xff, 77, 1]]); // the direct-track form, the note's velocity
+  assert.deepEqual(r.posts, []);                          // neither live record nor held steps: nothing queued
+  assert.equal(dat(r, 2), IDLE);
+  // track 14 is CC-addressed on base+3 (2nd track there), CHRM's knob 3: CC 40 + 3
+  r.cpu.w32(S.selTrack, 13); machineOn(r, 13, 90);
+  play(r, 4, 50);
+  assert.deepEqual(r.ccs[1], [0xb3, 43, 50, 1]);
+  // other channels pass straight through, message and port unchanged
+  r.ccs.length = 0; r.notes.length = 0;
+  play(r, 0, 61); play(r, 6, 62);
+  assert.deepEqual(r.notes, [[0x90, 61, 100, 1], [0x96, 62, 100, 1]]);
+  assert.deepEqual(r.ccs, []);
+  // trigger only: no CC, the trigger, nothing armed
+  machineOn(r, 13, 171); r.notes.length = 0;
+  play(r, 4, 60);
+  assert.deepEqual(r.ccs, []);
+  assert.deepEqual(r.notes, [[0x90, (~13) & 0xff, 100, 1]]);
+  assert.equal(dat(r, 2), IDLE);
+  // no track selected: nothing at all
+  r.cpu.w32(S.selTrack, 16); r.notes.length = 0;
+  play(r, 4, 60);
+  assert.deepEqual(r.notes, []);
+});
+
+test('executed: live record queues [track | knob<<4, raw, step, pattern] and wakes the UI task with 0xFE', () => {
+  const r = rig();
+  machineOn(r, 2, 11);
+  r.live = 37;
+  play(r, 4, 61);
+  assert.deepEqual(r.posts, [{ queue: S.uiQueue, byte: 0xfe }]);
+  assert.equal(r.cpu.r32(r.L.ring), req(2, 74, 37, 5));
+  assert.deepEqual([dat(r, 4), dat(r, 5), dat(r, 2)], [1, 0, IDLE]);
+  r.live = 3;
+  play(r, 4, 24);
+  assert.equal(r.cpu.r32(r.L.ring + 4), req(2, 0, 3, 5));
+  // a trigger-only machine records its trig but requests no lock
+  machineOn(r, 2, 171);
+  play(r, 4, 60);
+  assert.equal(r.posts.length, 2);
+});
+
+test('executed: grid record queues an ARMED request only while a trig key is held', () => {
+  const r = rig(), { cpu } = r;
+  machineOn(r, 2, 164); cpu.w8(S.kitParams + 24 * 2 + 2, 40);      // ZONED, MODE stop 1
+  cpu.w32(S.gridMode, 1);
+  play(r, 4, 60);
+  assert.deepEqual(r.posts, [], 'grid record, nothing held');
+  cpu.w32(S.held + 4, 1 << 6);                                        // step 7 held
+  play(r, 4, 60);
+  assert.equal(r.posts.length, 1);
+  assert.equal(cpu.r32(r.L.ring), req(2, lookup(r.t, 164, 60, 40)!.raw, ARMED, 0));
+  cpu.w32(S.gridMode, 0);
+  play(r, 4, 60);
+  assert.equal(r.posts.length, 1, 'held keys outside grid record');
+});
+
+test('executed: a base channel too high to address the track by CC only triggers it, and arms nothing', () => {
+  const r = rig(), { cpu } = r;
+  cpu.w32(S.baseCh, 13);                                  // base channel 14: tracks 13..16 are out of CC reach
+  cpu.w32(S.selTrack, 12); machineOn(r, 12, 11);
+  r.live = 4;
+  play(r, 1, 60, 90);                                     // base+4 wraps to channel 2
+  assert.deepEqual(r.ccs, []);
+  assert.equal(r.notes.length, 1);
+  assert.deepEqual(r.posts, [], 'no lock for a pitch that was not set');
+  assert.equal(dat(r, 2), IDLE);
+  cpu.w32(S.selTrack, 11); machineOn(r, 11, 11);          // track 12 is still reachable (CC on channel 16)
+  play(r, 1, 60, 90);
+  assert.deepEqual(r.ccs, [[0xbf, 96, 72, 1]]);
+  assert.equal(r.posts.length, 1);
+});
+
+test('executed: the ring keeps one slot free; when full the newest request is replaced and counted', () => {
+  const r = rig(), { cpu } = r;
+  machineOn(r, 2, 11);
+  for (const [k, note] of [30, 40, 50, 60, 70].entries()) { r.live = k; play(r, 4, note); }
+  assert.deepEqual([dat(r, 4), dat(r, 5)], [3, 0]);       // 3 of 4 slots used, read index untouched
+  assert.equal(cpu.r32(r.L.dat + 8), 2);                  // two requests replaced
+  assert.deepEqual(ringOf(r).slice(0, 3), [req(2, 12, 0, 5), req(2, 32, 1, 5), req(2, 92, 4, 5)]);
+  assert.equal(r.posts.length, 5);                        // every request still wakes the UI task
+});
+
+test('executed: drain writes recorded locks, every held step in grid record, the popup when full, then continues', () => {
+  const r = rig(), { cpu, L } = r;
+  const put = (entries: number[]): void => { entries.forEach((v, k) => cpu.w32(L.ring + 4 * k, v)); cpu.w8(L.dat + 5, 0); cpu.w8(L.dat + 4, entries.length); };
+  // a recorded step, then an ARMED request with steps 4 and 42 held in grid record
+  put([req(3 | (2 << 4), 99, 17, 6), req(5, 50, ARMED, 0)]);
+  cpu.w32(S.gridMode, 1); cpu.w32(S.held + 4, 1 << 3); cpu.w32(S.held, 1 << 9);
+  cpu.call(L.drain);
+  assert.deepEqual(r.locks, [[6, 3, 2, 17, 99], [9, 5, 0, 3, 50], [9, 5, 0, 41, 50]]);
+  assert.equal(cpu.r32(S.knobTouched), 1);
+  assert.deepEqual([dat(r, 4), dat(r, 5)], [2, 2]);
+  assert.deepEqual(r.popups, []);
+  assert.equal(r.idleNext, 1);
+  // ARMED outside grid record: dropped; a failed write: the OS popup
+  r.locks.length = 0; cpu.w32(S.gridMode, 0);
+  put([req(5, 50, ARMED, 0)]);
+  cpu.call(L.drain);
+  assert.deepEqual(r.locks, []);
+  r.lockResult = 0;
+  put([req(1, 10, 2, 1)]);
+  cpu.call(L.drain);
+  assert.deepEqual(r.popups, [[0xffff, 0xffff, 0xffff, 0xffff, 0x66]]);
+  // an empty ring: straight on to the idle routine, d2-d7 intact
+  cpu.d[2] = 0x1234; cpu.d[7] = -5;
+  cpu.call(L.drain);
+  assert.deepEqual([cpu.d[2], cpu.d[7], r.idleNext], [0x1234, -5, 4]);
 });
