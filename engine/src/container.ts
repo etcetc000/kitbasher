@@ -16,7 +16,7 @@ export const FLASH_SIZE = 0x800000;
 export interface Slot {
   at: number;          // flash offset of the length word
   length: number;      // header length (the stream may be shorter: a dead tail)
-  sumOk: boolean;      // DEV 26912 leaves a stale checksum; nothing on the unit checks them
+  sumOk: boolean;      // the DEV builds leave stale checksums; nothing on the unit checks them
   used: number;        // bytes the NRV2B stream really uses
   raw: Uint8Array;     // unpacked
 }

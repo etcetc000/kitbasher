@@ -12,7 +12,7 @@
 // they are read with the File API, never uploaded, and planned and checked exactly like the
 // bundled ones.
 
-import { baseSet, identify, NotPatchable, type Base, type BaseProfileFile, type BaseSet, type LineageFile } from '../../engine/src/bases.js';
+import { baseSet, identify, NotPatchable, unsupported, type Base, type BaseProfileFile, type BaseSet, type LineageFile } from '../../engine/src/bases.js';
 import { prepare163 } from '../../engine/src/prepare.js';
 import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
@@ -185,8 +185,6 @@ function adoptLayout(l: Layout, from: string, extra = ''): void {
   $('project-status').textContent = `Machine IDs restored from ${from}: ${Object.keys(l.machines).length} machines keep their IDs.${extra}`;
   refresh();
 }
-
-const profileOf = (id: string | undefined): BaseProfileFile | undefined => data.bases.profiles.find((x) => x.id === id);
 
 /** A Kitbasher-built OS (.syx or .bin): its layout table, or else its descriptors matched to the catalog. */
 async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> {
@@ -469,18 +467,17 @@ async function onFile(f: File): Promise<void> {
         parsed = readFirmware(bytes);
         b = (await identify(parsed, data.bases)).base;
       } else {
+        if (unsupported(parsed.tag)) throw e;              // X.13, stock or built on: refused, nothing restored
         // an OS this page patched: not a base, but it carries its layout, which comes back
         // a Kitbasher build is not built on: its layout comes back, and the stock OS is asked for
         const got = findLayout(parsed);
         if (request !== fileRequest) return;
         if (!(await restoreFromOs(bytes, f.name))) throw e;
-        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63);
-        // for a retired one (X.13), the base that replaces it
-        const built = profileOf(got?.layout.base);
-        const next = built?.retired && profileOf(built.retired.successor);
-        const want = profileOf((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
-        status(next ? `That's a Kitbasher build for ${built!.name}: layout restored. ${built!.name} is no longer supported, so drop your ${next.name} file: the machines keep their IDs where ${next.name} has them free.`
-          : `That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
+        // the stock file the user has: for a prepared base, the OS it was prepared from (stock 1.63)
+        const profile = (id: string | undefined) => data.bases.profiles.find((x) => x.id === id);
+        const built = profile(got?.layout.base);
+        const want = profile((built as { prepared?: { from?: string } } | undefined)?.prepared?.from) ?? built;
+        status(`That's a Kitbasher build: layout restored. Now drop the stock ${want?.name ?? 'OS'} it was built on.`, 'ok');
         refresh();
         return;
       }
@@ -769,15 +766,6 @@ async function onProjectFile(f: File): Promise<void> {
     const text = await f.text();
     if (JSON.parse(text)?.format !== 'kitbasher-project/1') { adoptLayout(parseLayout(text), f.name); return; }
     const p = await decodeProject(text);
-    // a project made on a retired base (X.13): only its machine IDs carry over to the base that replaces it
-    const retired = profileOf(p.os.base)?.retired;
-    if (retired) {
-      const next = profileOf(retired.successor)?.name ?? retired.successor;
-      const why = `${p.os.name || p.os.base} is no longer supported, so only its machine IDs are used; its sample and trim settings are not loaded`;
-      if (!p.layout) throw new Error(`${why}, and it has no machine IDs. Load your ${next} file and choose your models again`);
-      adoptLayout(p.layout, f.name, ` ${why}.${fw && base ? '' : ` Now load your ${next} file.`}`);
-      return;
-    }
     if (fw && base) {
       const problem = osProblem(p.os, base);
       if (problem) throw new Error(`${problem}. Load the ${p.os.name || p.os.base} file it was made with first.`);

@@ -11,7 +11,8 @@ removing any stock machine.
 | OS X.14 | `bases/x14.json` | Patched directly, chaining onto X.14's own add-on |
 | Em's DEV firmware (md-26912-190450) | `bases/dev-26912.json` | Patched directly, chaining onto DEV's add-on; nothing after the DSP2 slot moves |
 | Em's DEV firmware (md-26A01-183521) | `bases/dev-26a01.json` | Patched directly, as for the earlier DEV build |
-| OS X.13 | `bases/x13.json` | Not patched: [no longer supported](#x13-no-longer-supported) |
+
+X.13 is no longer supported: an OS tagged `X13 ` is refused before anything else.
 
 Each profile also records how far that base has been tested. DEV 26912 images
 have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,
@@ -80,25 +81,6 @@ Some options also need the profile to record them as working on that base. The
 reordered DSP2 host sender (`--host-reorder`) is enabled on DEV 26912 and refused
 elsewhere: on prepared 1.63 it silences output, and it is not yet qualified on
 X.14 or DEV 26A01.
-
-## X.13 (no longer supported)
-
-For the X-OS releases, Kitbasher patches X.14 and later. Loading an X.13 file on
-the page or with `--in` stops with:
-
-> OS X.13 is no longer supported — please install OS X.14 first, then load your
-> X.14 file.
-
-X.13 is recognised by its OS tag (`X13 `), so this applies to a stock X.13 file
-and to a build Kitbasher made on it; it is never patched or mistaken for
-another base. Its profile, `bases/x13.json`, holds only what that takes.
-
-Machine IDs from an X.13 build carry over. Load your X.14 file, then drop the
-`.syx` or `.bin` you built on X.13 under *Restore an earlier layout* (or pass it
-to `--restore`); dropping it first works too, and the page then asks for X.14.
-Each machine keeps its ID wherever X.14 has it free, and any that move are
-listed. A project file made on X.13 gives only its machine IDs: its sample and
-trim settings were tied to the X.13 file and are not loaded.
 
 ## X.14
 

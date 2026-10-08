@@ -62,7 +62,6 @@ would be. See [Machinedrum without UW](docs/BASES.md#machinedrum-without-uw).
 |---|---|
 | OS 1.63 (stock) | Prepared automatically with a small boot hook, then patched; tested in the emulator |
 | OS X.14 | Patched directly; tested in the emulator |
-| OS X.13 | No longer supported: install X.14 first. A Kitbasher build made on X.13 still restores its machine IDs onto X.14 |
 | Em's DEV firmware (md-26912-190450) | Patched directly; tested on hardware |
 | Em's DEV firmware (md-26A01-183521) | Patched directly; tested in the emulator |
 

@@ -48,11 +48,6 @@ test('X.14: the thunk at 0x22c1a0 is entered through our routine and the add-on\
   assert.equal(menu.branchNew, ((0x60 << 24) | (old & 0xffffff)) >>> 0);   // bne -> bra, same displacement
 });
 
-test('the retired X.13 routine is not taken for X.14\'s', () => {
-  const x13 = addonOs(0x2c239c, '4fefffe4 48d70c7c 2c390029f306', 0x2c2424, '23c00028c2d4 4a86 6644 2204');
-  assert.equal(findUwMenu(x13, TABLE).menu, null);
-});
-
 test('a partial 1.63 match falls through to the other shapes; nothing found says why', () => {
   // the 1.63 entry is there but its UW tail is not, and the X.14 routine is: X.14 wins
   const [slot, addon] = X14;

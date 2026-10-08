@@ -55,9 +55,8 @@ test('an image without a layout table: the catalog\'s models on their IDs, the r
   for (const m of Object.values(r.layout.machines)) assert.ok(r.layout.categories.includes(m.category));
 });
 
-// a build made on X.13 (no longer a base) still gives its layout back, to apply to X.14
 test('an image with its layout table: that layout, with the UW answer', () => {
-  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['KIK'], machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 } }, uw: false };
+  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['KIK'], machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 } }, uw: false };
   const f = image([{ id: 4, name: 'VADBD' }]);
   const t = encodeLayout(lay);
   f.set(t, 0xb000);
@@ -90,7 +89,7 @@ test('a layout table that lists two machines on one ID: the machine the image ha
 });
 
 test('the layout table: machines not in the catalog are reported (and stay reserved); a bad UW byte is refused', () => {
-  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x13', categories: ['KIK'],
+  const lay: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['KIK'],
     machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 }, 'ND/SQ': { id: 31, category: 'KIK', order: 1 } }, uw: true };
   const f = image([{ id: 4, name: 'VADBD' }]);
   const t = encodeLayout(lay);
@@ -99,7 +98,7 @@ test('the layout table: machines not in the catalog are reported (and stay reser
   assert.deepEqual(r.unknown, [{ id: 31, name: 'ND/SQ' }]);
   assert.equal(r.layout.machines['ND/SQ'].id, 31);
   const bad = t.slice();
-  bad[8 + 3] = 7;                                                  // the UW byte after 'x13'
+  bad[8 + 3] = 7;                                                  // the UW byte after 'x14'
   assert.throws(() => decodeLayout(fixCrc(bad)), /UW answer byte 7/);
 });
 
