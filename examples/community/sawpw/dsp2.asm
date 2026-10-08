@@ -191,7 +191,7 @@ legacy_render:
     asr a
     asr a
     move a,y:(r6+$2c)
-    do #<$20,>code_origin+118
+    do #<$20,>local_76
     move y:(r6+$20),a
     move y:(r6+$28),x1
     add x1,a
@@ -209,17 +209,21 @@ legacy_render:
     sub x1,a
     move #>$100000,x0
     cmp #>$0,a
-    jge code_origin+76
+    jge local_4c
     add x0,b
-    jmp code_origin+77
+    jmp local_4d
+local_4c:
     sub x0,b
+local_4d:
     move y:(r6+$21),a
     sub x1,a
     cmp #>$0,a
-    jge code_origin+86
+    jge local_56
     add x0,b
-    jmp code_origin+87
+    jmp local_57
+local_56:
     sub x0,b
+local_57:
     move y:(r6+$28),a
     asr a
     move y:(r6+$24),x1
@@ -227,10 +231,12 @@ legacy_render:
     move a1,y:(r6+$24)
     move y:(r6+$2a),x0
     cmp #>$0,a
-    jge code_origin+100
+    jge local_64
     add x0,b
-    jmp code_origin+101
+    jmp local_65
+local_64:
     sub x0,b
+local_65:
     move b,y:(r6+$2d)
     move y:(r6+$27),a
     move a,x0
@@ -248,6 +254,7 @@ legacy_render:
     move y:(r6+$26),y0
     mpy x1,y0,a
     move a,y:(r7)+
+local_76:
     move y:(r6+$3),x0
     mpy x0,x0,a
     move a,x0

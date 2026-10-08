@@ -165,51 +165,54 @@ legacy_render:
     move y:(r6+$a),a
     clr b
     cmp #>$20,a
-    jlt code_origin+54
+    jlt local_36
     move #>$1,b
     cmp #>$40,a
-    jlt code_origin+54
+    jlt local_36
     move #>$2,b
     cmp #>$80,a
-    jlt code_origin+54
+    jlt local_36
     move #>$3,b
     cmp #>$100,a
-    jlt code_origin+54
+    jlt local_36
     move #>$4,b
     cmp #>$200,a
-    jlt code_origin+54
+    jlt local_36
     move #>$5,b
     cmp #>$400,a
-    jlt code_origin+54
+    jlt local_36
     move #>$6,b
     cmp #>$800,a
-    jlt code_origin+54
+    jlt local_36
     move #>$7,b
+local_36:
     move b1,n0
     move #>scan,r0
     move x:(r0+n0),a
     move a,x1
     tst a
-    jeq code_origin+79
+    jeq local_4f
     move y:(r6+$2e),a
     add #>$1,a
     cmp x1,a
-    jlt code_origin+78
+    jlt local_4e
     clr a
     move a,y:(r6+$2e)
     move y:(r6+$2d),a
     add #>$1,a
     and #>$7f,a
     move a,y:(r6+$2d)
-    jmp code_origin+79
+    jmp local_4f
+local_4e:
     move a,y:(r6+$2e)
+local_4f:
     move y:(r6+$6),a
     asr #$10,a,a
     move y:(r6+$2d),x1
     add x1,a
     and #>$7f,a
     cmp #>$40,a
-    jge code_origin+100
+    jge local_64
     move a1,x1
     tfr x1,a
     asl a
@@ -218,7 +221,8 @@ legacy_render:
     move a,x1
     move #>bank1,a
     add x1,a
-    jmp code_origin+111
+    jmp local_6f
+local_64:
     sub #>$40,a
     move a1,x1
     tfr x1,a
@@ -228,6 +232,7 @@ legacy_render:
     move a,x1
     move #>bank2,a
     add x1,a
+local_6f:
     move a,y:(r6+$28)
     move a,y:(r6+$29)
     clr a
@@ -300,23 +305,26 @@ legacy_render:
     sub x1,a
     sub #>$32,a
     tst a
-    jge code_origin+197
+    jge local_c5
     clr a
+local_c5:
     move a,x0
     move #>$2aaaab,y0
     mpy y0,x0,a
     move a1,x0
     tfr x0,a
     cmp #>$5,a
-    jlt code_origin+209
+    jlt local_d1
     move #>$5,a
+local_d1:
     move a,y:(r6+$2c)
     move y:(r6+$9),a
     asr #$2,a,a
     add #>$1,a
     cmp #>$18,a
-    jlt code_origin+220
+    jlt local_dc
     move #>$18,a
+local_dc:
     move a,y:(r6+$26)
     move y:(r6+$8),a
     asr #$13,a,a
@@ -324,16 +332,16 @@ legacy_render:
     move a,y:(r6+$27)
     clr a
     move a,y:(r6+$2b)
-    jsr code_origin+269
-    jsr code_origin+269
-    jsr code_origin+269
-    jsr code_origin+269
+    jsr local_10d
+    jsr local_10d
+    jsr local_10d
+    jsr local_10d
     move y:>md_output,r7
     move y:(r6+$23),y0
     move y:(r6+>$21),n0
     move y:(r6+>$20),r1
     move y:(r6+>$25),n1
-    do #<$20,>code_origin+265
+    do #<$20,>local_109
     move (r1)+n1
     move r1,a
     lsr #$11,a
@@ -352,11 +360,13 @@ legacy_render:
     move n0,x0
     mpy x1,x0,a
     move a,y:(r7)+
+local_109:
     move r1,y:(r6+>$20)
-    jmp code_origin+365
+    jmp local_16d
+local_10d:
     move y:(r6+$2b),a
     cmp #>$2,a
-    jge code_origin+364
+    jge local_16c
     move y:(r6+$22),a
     move a1,n0
     move y:(r6+>$28),r0
@@ -365,13 +375,14 @@ legacy_render:
     sub x1,a
     abs a
     cmp #>$6,a
-    jge code_origin+293
+    jge local_125
     move a1,n0
     move #>focus,r0
     move x:(r0+n0),x0
     mpy y0,x0,a
     asl #$3,a,a
     move a,y0
+local_125:
     move y:(r6+$22),a
     and #>$1,a
     move a,x1
@@ -386,9 +397,10 @@ legacy_render:
     move y:(r6+$22),a
     move y:(r6+$26),x1
     cmp x1,a
-    jlt code_origin+313
+    jlt local_139
     clr a
     move a,y0
+local_139:
     move y:(r6+$22),a
     move a1,n0
     move y:(r6+>$24),r0
@@ -400,7 +412,7 @@ legacy_render:
     tfr y0,a
     sub x1,a
     tst a
-    jeq code_origin+355
+    jeq local_163
     move a,x0
     move y0,x:(r0+n0)
     move y:(r6+$2b),a
@@ -414,20 +426,25 @@ legacy_render:
     move y:(r6+>$23),r1
     move y:(r6+>$23),r0
     move x:(r2)+n2,y1
-    do #<$80,>code_origin+351
+    do #<$80,>local_15f
     move x:(r1),a
     mac x0,y1,a         x:(r2)+n2,y1
     move a,x:(r1)+
+local_15f:
     move #>$ffffff,m2
     move x:(r0),a
     move a,x:(r1)
+local_163:
     move y:(r6+$22),a
     add #>$1,a
     cmp #>$18,a
-    jlt code_origin+363
+    jlt local_16b
     clr a
+local_16b:
     move a,y:(r6+$22)
+local_16c:
     rts
+local_16d:
     move y:(r6+$3),x0
     mpy x0,x0,a
     move a,x0

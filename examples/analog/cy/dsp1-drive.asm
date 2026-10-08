@@ -21,7 +21,7 @@ drive:
     move #>$555555,y0
     mpy y0,x0,a
     move a,x0
-    jmp code_origin+48
+    jmp local_30
     move #>$143777,r0
     move y:(r6+$8),b
     asr #$6,b,b
@@ -35,7 +35,8 @@ drive:
     move #>$555555,y0
     mpy y0,x0,a
     move a,x0
-    do #<$20,>code_origin+65
+local_30:
+    do #<$20,>local_41
     move y:(r4)+,y0
     mpy y0,x0,a
     asl #$9,a,a
@@ -50,4 +51,5 @@ drive:
     move a,y1
     mpy y1,x1,a
     move a,x:(r1)+
+local_41:
     jmp $00026f

@@ -5,8 +5,9 @@ init:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+7
+    do #<$37,>local_7
     move x0,y:(r0)+
+local_7:
     move #$0,x0
     move x0,x:(r6+$3f)
     move #$6,x0
@@ -67,8 +68,9 @@ local_3d:
     move #$9,n0
     move (r0)+n0
     move #$0,x0
-    do #<$37,>code_origin+68
+    do #<$37,>local_44
     move x0,y:(r0)+
+local_44:
     move #$0,x0
     move x0,x:(r6+$0)
     move x0,x:(r6+$1)
@@ -102,9 +104,10 @@ local_3d:
     move r6,r2
     move #$10,n2
     move (r2)+n2
-    do #<$18,>code_origin+107
+    do #<$18,>local_6b
     move y:(r1)+,x0
     move x0,x:(r2)+
+local_6b:
     move #>$ffffff,x0
     move x0,y:(r6+$9)
     move r6,a
@@ -187,8 +190,9 @@ local_aa:
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$8,>code_origin+187
+    do #<$8,>local_bb
     move x0,y:(r0)+
+local_bb:
     move #>$ffffff,m0
     move y:(r6+$9),a
     move a,b
@@ -201,9 +205,10 @@ local_aa:
     move a1,r1
     move #$16,n2
     move (r2)+n2
-    do #<$d,>code_origin+205
+    do #<$d,>local_cd
     move y:(r1)+,x0
     move x0,y:(r2)+
+local_cd:
     move y:(r6+$1d),x0
     move x0,x:(r6+$6)
 local_cf:
@@ -309,7 +314,7 @@ local_132:
     add #<$6,a
     move a1,r2
     move #>e0_osc_meta,r4
-    do #<$6,>code_origin+344
+    do #<$6,>local_158
     move y:(r1)+,x0
     move y:(r6+$d),y0
     mpy y0,x0,a         y:(r4)+,n6
@@ -332,6 +337,7 @@ local_132:
     asl #$3,a,a
     move a,x0
     move x0,x:(r6+n6)
+local_158:
     move y:(r6+$21),a
     tst a
     beq <local_16f
@@ -504,7 +510,7 @@ local_1fe:
     move #$a,m5
     move y:(r6+$2e),a
     move a1,r1
-    do #<$20,>code_origin+584
+    do #<$20,>local_248
     clr a               x:(r0)+,x0      y:(r4)+,b
     add x0,b            r1,r3
     move b1,x1
@@ -567,6 +573,7 @@ local_1fe:
     mac x1,y0,a
     asl #$4,a,a
     move a,y:(r7)+
+local_248:
     move #>$ffffff,m0
     move #>$ffffff,m4
     move #>$ffffff,m5
@@ -581,8 +588,9 @@ local_1fe:
     move #$30,n0
     move (r0)+n0
     move #$0,x0
-    do #<$b,>code_origin+605
+    do #<$b,>local_25d
     move x0,y:(r0)+
+local_25d:
     move #>$ffffff,m0
 local_25f:
     rts
