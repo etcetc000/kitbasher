@@ -224,6 +224,12 @@ load_state:
         move #>$1fff,n3
         move #>tanh,n4
         rts
+; Ladder loops. Per Euler step the table address is formed in B (MAC with a shift
+; from the table base) so that R4 is written three clocks before it addresses; with
+; the cutoff envelope those clocks carry the dt and c2 ramps. Each pole's MAC pair is
+; ordered so that no move reads an accumulator the instruction before it wrote, and
+; the next sample is read while the output is formed. All of it is bit-exact with the
+; straight-line form (ci/ladder_check.py).
 filt_p4_const:
         jsr load_state
         move n2,x0
@@ -233,87 +239,85 @@ filt_p4_const:
         asr b
         add b,a
         move a1,n1                    ; c2 = error fb p3 coefficient / 16
-        move n6,x0                    ; the next sample's gain^4/4
+        move n6,x0                    ; gain^4/4
+        move y:(r0)+,y0               ; the first sample
         do #32,filt_p4_const_end
-        move y:(r0)+,y0
-        mpy x0,y0,a
-        move r5,y0                    ; p3 (v5: fills the slot)
-        move a1,x1                    ; in16 = sample * gain^4 / 4
-        move n1,x0
-        mpy -x0,y0,a                  ; -c2 p3
+        mpy x0,y0,a     r5,y0         ; sample * gain^4/4; p3
+        move n1,x0                    ; c2
+        mpy -x0,y0,a    a1,x1         ; -c2 p3; in16 = sample * gain^4 / 4
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move x:(r4)+,x0  a,y0         ; T[i]: one clock after the R4 and fraction writes, +3 on hardware
         move x:(r4),y1                ; T[i+1]
         mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move n1,x0
         move a,y0
         mpy -x0,y0,a    y0,r5         ; -c2 p3; p3 -> R5
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move x:(r4)+,x0  a,y0         ; T[i]: one clock after the R4 and fraction writes, +3 on hardware
         move x:(r4),y1                ; T[i+1]
         mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move #>5033165,x0
-        move a,r5
-        asr a
-        move a,y1                     ; p3, 4th pole, /2
+        asr a           a,r5          ; p3, 4th pole, /2; p3 -> R5
+        move y:(r0)+,y0               ; the next sample (the last pass reads one past the bank)
+        move a,y1
         mpy x0,y1,a
         asl #3,a,a                    ; 2.4 * out, 12 V over 5 V full scale
         move n6,x0                    ; the next sample's gain^4/4
@@ -323,97 +327,96 @@ filt_p4_const_end:
 filt_p4_env:
         jsr load_state
         move y:(r6+$19),n2            ; dc2 (the per-sample c2 step)
-        move n7,x0                    ; the next sample's ddt
-        do #32,filt_p4_env_end
-        move n0,a                     ; X0 = ddt, loaded by the previous sample (v5)
-        add x0,a        n2,x0
         move n1,b
-        move a1,n0                    ; dt += ddt
-        add x0,b
-        move n6,x0                    ; gain^4/4 (v5: fills the slot)
-        move b1,n1                    ; c2 += dc2
-        move y:(r0)+,y0               ; the sample: 3 instructions after the N0 write
-        mpy x0,y0,a
-        move r5,y0                    ; p3 (v5: fills the slot)
-        move a1,x1                    ; in16 = sample * gain^4 / 4
-        move n1,x0
-        mpy -x0,y0,a                  ; -c2 p3
+        move n2,x0
+        add x0,b                      ; the first sample's c2
+        move n6,x0                    ; gain^4/4
+        move b1,n1
+        move y:(r0)+,y0               ; the first sample
+        do #32,filt_p4_env_end
+        mpy x0,y0,a     r5,y0         ; sample * gain^4/4; p3
+        move n1,x0                    ; c2
+        mpy -x0,y0,a    a1,x1         ; -c2 p3; in16 = sample * gain^4 / 4
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a        n7,y1         ; Y1 = ddt
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move n0,b                     ; dt += ddt: fills the three clocks before R4 addresses
+        add y1,b
+        move x:(r4)+,x0  a,y0         ; T[i]
         move x:(r4),y1                ; T[i+1]
-        mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mpy y0,y1,a     b1,n0
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move n1,x0
         move a,y0
         mpy -x0,y0,a    y0,r5         ; -c2 p3; p3 -> R5
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a        n2,y1         ; Y1 = dc2
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move n1,b                     ; the next sample's c2 += dc2: fills the three clocks before R4 addresses
+        add y1,b
+        move x:(r4)+,x0  a,y0         ; T[i]
         move x:(r4),y1                ; T[i+1]
-        mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mpy y0,y1,a     b1,n1
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move #>5033165,x0
-        move a,r5
-        asr a
-        move a,y1                     ; p3, 4th pole, /2
+        asr a           a,r5          ; p3, 4th pole, /2; p3 -> R5
+        move y:(r0)+,y0               ; the next sample (the last pass reads one past the bank)
+        move a,y1
         mpy x0,y1,a
         asl #3,a,a                    ; 2.4 * out, 12 V over 5 V full scale
-        move n7,x0                    ; the next sample's ddt
+        move n6,x0                    ; the next sample's gain^4/4
         move a,y:(r7)+
 filt_p4_env_end:
         jmp filter_done
@@ -426,88 +429,86 @@ filt_p2_const:
         asr b
         add b,a
         move a1,n1                    ; c2 = error fb p3 coefficient / 16
-        move n6,x0                    ; the next sample's gain^4/4
+        move n6,x0                    ; gain^4/4
+        move y:(r0)+,y0               ; the first sample
         do #32,filt_p2_const_end
-        move y:(r0)+,y0
-        mpy x0,y0,a
-        move r5,y0                    ; p3 (v5: fills the slot)
-        move a1,x1                    ; in16 = sample * gain^4 / 4
-        move n1,x0
-        mpy -x0,y0,a                  ; -c2 p3
+        mpy x0,y0,a     r5,y0         ; sample * gain^4/4; p3
+        move n1,x0                    ; c2
+        mpy -x0,y0,a    a1,x1         ; -c2 p3; in16 = sample * gain^4 / 4
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move x:(r4)+,x0  a,y0         ; T[i]: one clock after the R4 and fraction writes, +3 on hardware
         move x:(r4),y1                ; T[i+1]
         mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move n1,x0
         move a,y0
         mpy -x0,y0,a    y0,r5         ; -c2 p3; p3 -> R5
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move x:(r4)+,x0  a,y0         ; T[i]: one clock after the R4 and fraction writes, +3 on hardware
         move x:(r4),y1                ; T[i+1]
         mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move #>5033165,x0
-        move a,r5
-        move r2,a
-        asr a
-        move a,y1                     ; p1, 2nd pole, /2
+        move r2,b
+        asr b           a,r5          ; p1, 2nd pole, /2; p3 -> R5
+        move y:(r0)+,y0               ; the next sample (the last pass reads one past the bank)
+        move b,y1
         mpy x0,y1,a
         asl #3,a,a                    ; 2.4 * out, 12 V over 5 V full scale
         move n6,x0                    ; the next sample's gain^4/4
@@ -517,98 +518,97 @@ filt_p2_const_end:
 filt_p2_env:
         jsr load_state
         move y:(r6+$19),n2            ; dc2 (the per-sample c2 step)
-        move n7,x0                    ; the next sample's ddt
-        do #32,filt_p2_env_end
-        move n0,a                     ; X0 = ddt, loaded by the previous sample (v5)
-        add x0,a        n2,x0
         move n1,b
-        move a1,n0                    ; dt += ddt
-        add x0,b
-        move n6,x0                    ; gain^4/4 (v5: fills the slot)
-        move b1,n1                    ; c2 += dc2
-        move y:(r0)+,y0               ; the sample: 3 instructions after the N0 write
-        mpy x0,y0,a
-        move r5,y0                    ; p3 (v5: fills the slot)
-        move a1,x1                    ; in16 = sample * gain^4 / 4
-        move n1,x0
-        mpy -x0,y0,a                  ; -c2 p3
+        move n2,x0
+        add x0,b                      ; the first sample's c2
+        move n6,x0                    ; gain^4/4
+        move b1,n1
+        move y:(r0)+,y0               ; the first sample
+        do #32,filt_p2_env_end
+        mpy x0,y0,a     r5,y0         ; sample * gain^4/4; p3
+        move n1,x0                    ; c2
+        mpy -x0,y0,a    a1,x1         ; -c2 p3; in16 = sample * gain^4 / 4
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a        n7,y1         ; Y1 = ddt
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move n0,b                     ; dt += ddt: fills the three clocks before R4 addresses
+        add y1,b
+        move x:(r4)+,x0  a,y0         ; T[i]
         move x:(r4),y1                ; T[i+1]
-        mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mpy y0,y1,a     b1,n0
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move n1,x0
         move a,y0
         mpy -x0,y0,a    y0,r5         ; -c2 p3; p3 -> R5
         add x1,a                      ; arg/16 = in16 - c2 p3
-        move n3,x0                    ; mask (v5: fills the slot after the add)
-        asl a           a2,n5         ; arg/8; sign
+        move n3,x0                    ; mask
+        asl a           a2,n5         ; arg/8; sign (A2 read two instructions after the add)
         abs a
+        move n4,b                     ; tanh table base
         move a,y1                     ; |arg/8|, limited: x >= 8 -> last entry
-        mpy y1,#13,a                  ; index (A1)
-        tfr y1,b
-        and x0,b        a1,r4
-        asl #10,b,b                   ; interpolation fraction, Q23
-        move (r4)+n4
-        move x:(r4)+,x0  b,y0         ; T[i]
+        mac y1,#13,b                  ; table address of T[i] (B1)
+        tfr y1,a        n2,y1         ; Y1 = dc2
+        and x0,a        b1,r4
+        asl #10,a,a                   ; interpolation fraction, Q23
+        move n1,b                     ; the next sample's c2 += dc2: fills the three clocks before R4 addresses
+        add y1,b
+        move x:(r4)+,x0  a,y0         ; T[i]
         move x:(r4),y1                ; T[i+1]
-        mpy y0,y1,a
-        mac -y0,x0,a    x0,b
-        add b,a         n5,b
-        move n0,x0                    ; dt for the stages (v5: fills the slot)
+        mpy y0,y1,a     b1,n1
+        mac -y0,x0,a
+        add x0,a        n5,b
+        move n0,x0                    ; dt for the stages
         tst b           a1,a
-        neg a ifmi                    ; sat(in - error fb p3)
+        neg a ifmi                    ; T = sat(in - error fb p3)
         move r1,b
         move a,y0                     ; T
         mac x0,y0,b     r1,y1
         macr -x0,y1,b   r2,a          ; p0 += dt (T - p0), rounded
-        move b,y0
-        mac x0,y0,a     r2,y1
-        macr -x0,y1,a   b,r1          ; p1 += dt (p0 - p1)
-        move a,y0
+        move r2,y1
+        mac -x0,y1,a    b,y0          ; the same sum in the other order: bit-exact
+        macr x0,y0,a    b,r1          ; p1 += dt (p0 - p1)
         move r3,b
+        move a,y0
         mac x0,y0,b     r3,y1
         macr -x0,y1,b   a,r2          ; p2 += dt (p1 - p2)
-        move b,y0
         move r5,a
+        move b,y0
         mac x0,y0,a     r5,y1
         macr -x0,y1,a   b,r3          ; p3 += dt (p2 - p3), in A
         move #>5033165,x0
-        move a,r5
-        move r2,a
-        asr a
-        move a,y1                     ; p1, 2nd pole, /2
+        move r2,b
+        asr b           a,r5          ; p1, 2nd pole, /2; p3 -> R5
+        move y:(r0)+,y0               ; the next sample (the last pass reads one past the bank)
+        move b,y1
         mpy x0,y1,a
         asl #3,a,a                    ; 2.4 * out, 12 V over 5 V full scale
-        move n7,x0                    ; the next sample's ddt
+        move n6,x0                    ; the next sample's gain^4/4
         move a,y:(r7)+
 filt_p2_env_end:
         jmp filter_done
