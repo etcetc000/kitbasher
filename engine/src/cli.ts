@@ -63,7 +63,10 @@
 //                        note law are triggered with their knobs untouched (engine/src/midi_chroma.ts).
 //                        Off by default
 //   --midi-chroma-channel <c>  with --midi-chroma: base+4 (default: channel 5 with base channel 1) ..
-//                        base+15, or ch:1 .. ch:16 (an absolute channel inside the base range is ignored)
+//                        base+15, or ch:1 .. ch:16 (an absolute channel inside the base range is ignored).
+//                        A project restored with --restore that had the option on turns it on with
+//                        its own channel; --midi-chroma [--midi-chroma-channel] overrides that
+//   --no-midi-chroma     off, even when the restored project had it on
 //   --cache-align        put every machine whose executed code can outgrow the 8-sector instruction
 //                        cache on one of its measured 128-word cache offsets (engine/src/align.ts).
 //                        On by default; --no-align gives plain first-fit placement, which the parity
@@ -95,6 +98,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotPatchable, resolveBase, supportLine } from './bases.js';
 import { build, uwFromFlags } from './build.js';
+import { MIDI_CHROMA_CHANNEL } from './plan.js';
 import { readFirmware } from './container.js';
 import { loadBases, loadPacks, LOCAL_PACKS } from './node.js';
 import { findLayout, fingerprint, listedFreeIds, parseLayout } from './layout.js';
@@ -110,7 +114,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const SWITCHES = new Set(['no-dyn-labels', 'no-dsp1', 'no-align', 'family-menus', 'cache-align', 'host-reorder', 'no-host-reorder',
                           'clean-recovery', 'dsp1-recover', 'no-dsp1-recover', 'cpu-indicator', 'no-cpu-indicator',
                           'allow-id-move', 'prepare-163', 'ctr-control-all', 'no-stub-trim', 'no-uw', 'uw', 'legacy-ids',
-                          'midi-chroma']);
+                          'midi-chroma', 'no-midi-chroma']);
 const REPEATABLE = new Set(['packs']);
 
 function args(argv: string[]): { a: Record<string, string>; many: Record<string, string[]> } {
@@ -172,7 +176,10 @@ async function main(): Promise<void> {
   }
   // the UW answer is required before anything is read (a restored layout's answer, below, only reported)
   const uw = uwFromFlags({ uw: !!a.uw, noUw: !!a['no-uw'] });
+  if (a['midi-chroma'] && a['no-midi-chroma']) throw new Error('--midi-chroma and --no-midi-chroma: choose one');
   if (a['midi-chroma-channel'] && !a['midi-chroma']) throw new Error('--midi-chroma-channel needs --midi-chroma');
+  // MIDI chromatic note input: the flags, or a restored project's choice
+  let chroma: { channel: string } | undefined = a['midi-chroma'] ? { channel: a['midi-chroma-channel'] ?? MIDI_CHROMA_CHANNEL } : undefined;
   const bases = loadBases(a.bases ?? resolve(ROOT, 'bases'));
   if (a.catalog && many.packs?.length) throw new Error('--catalog selects a complete set; do not combine it with --packs');
   const { packs, core, dirs } = loadPacks(a.catalog ? [resolve(a.catalog)] :
@@ -197,7 +204,14 @@ async function main(): Promise<void> {
         (r.unknown.length ? `; not in this catalog: ${r.unknown.map((u) => `${u.name} on ${u.id}`).join(', ')}` : ''));
     } else {
       const text = bytes.toString('utf8');
-      layout = JSON.parse(text).format === 'kitbasher-project/1' ? (await decodeProject(text)).layout ?? undefined : parseLayout(text);
+      if (JSON.parse(text).format === 'kitbasher-project/1') {
+        const p = await decodeProject(text);
+        layout = p.layout ?? undefined;
+        if (p.midiChroma && !chroma && !a['no-midi-chroma']) {
+          chroma = p.midiChroma;
+          console.log(`the restored project has MIDI chromatic note input on (channel ${chroma.channel}): building with it (--no-midi-chroma to leave it out)`);
+        }
+      } else layout = parseLayout(text);
     }
   }
   let allowIdMove = !!a['allow-id-move'];
@@ -249,7 +263,7 @@ async function main(): Promise<void> {
       dsp1IdSpace: a['dsp1-id-space'] ? Number(a['dsp1-id-space']) : undefined,
       dsp1Recover: a['no-dsp1-recover'] ? false : a['dsp1-recover'] ? true : undefined,
       cpuIndicator: a['no-cpu-indicator'] ? false : a['cpu-indicator'] ? true : undefined,
-      midiChroma: a['midi-chroma'] ? (a['midi-chroma-channel'] ? { channel: a['midi-chroma-channel'] } : true) : undefined,
+      midiChroma: chroma,
     },
   });
   writeFileSync(a.out, output);

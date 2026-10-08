@@ -171,11 +171,11 @@ test('a project round-trips through its file, refuses another OS and damaged sam
   // MIDI chromatic note input: absent means off, and a file without it reads back without it
   assert.equal(q.midiChroma, undefined);
   assert.ok(!text.includes('midi_chroma'));
-  const on = await encodeProject({ ...p, midiChroma: true });
-  assert.equal(on.midi_chroma, true);
-  assert.equal((await decodeProject(JSON.stringify(on))).midiChroma, true);
-  assert.ok(!JSON.stringify(await encodeProject({ ...p, midiChroma: false })).includes('midi_chroma'));
-  await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: 'yes' })), /midi_chroma/);
+  const on = await encodeProject({ ...p, midiChroma: { channel: 'ch:7' } });
+  assert.deepEqual(on.midi_chroma, { channel: 'ch:7' });
+  assert.deepEqual((await decodeProject(JSON.stringify(on))).midiChroma, { channel: 'ch:7' });
+  await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: true })), /midi_chroma/);
+  await assert.rejects(decodeProject(JSON.stringify({ ...on, midi_chroma: { channel: 'base+2' } })), /base\+4\.\.base\+15/);
 });
 
 test('a swapped first sample shorter than its partner is padded at any length; the stock pair rule is unchanged', () => {

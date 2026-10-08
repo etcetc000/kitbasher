@@ -6,7 +6,7 @@ box on the Download step, or `--midi-chroma` on the command line.
 
 Supported on **OS X.14**. OS 1.63 and the DEV builds read MIDI in their main
 loop, a different path that is not implemented, so the option is not offered
-there (`--discover` names the reason). X.13 is not supported.
+there (`--discover` names the reason).
 
 ## Playing
 
@@ -27,7 +27,7 @@ there (`--discover` names the reason). X.13 is not supported.
 - **Velocity 0 and note-off** on the chromatic channel do nothing.
 - The pitch goes in through the CC addressing of the base channels, so with a base
   channel above 13 the tracks that CC cannot reach (13..16 with base channel 14)
-  are only triggered.
+  are only triggered: their pitch does not change, and no pitch lock is recorded.
 
 ## Recording
 
@@ -40,6 +40,8 @@ there (`--discover` names the reason). X.13 is not supported.
   kept when you let go. The note is heard at its pitch.
 - No free lock slot left in the pattern: the trig stays and the OS shows its own
   "locks full" message, as it does for knob locks.
+- Outside live record, and in grid record with no trig key held, a note only
+  plays: nothing is queued for the UI task.
 
 ## Which machines play notes
 
@@ -77,14 +79,25 @@ every site byte for byte before patching:
 - the UI task's idle call (operand at `0x225530`) first writes the queued p-locks
   with the OS's own lock writer (`0x21670a`), which runs only in that task.
 
-The routines (868 bytes) and their note table go at the end of the RAM image, in
-the range earlier images ran from on hardware (up to `0x2bce14`); when they would
-not fit, descriptors move to flash first, as for any RAM image that is too big.
-With the full bundled catalog on X.14 they take `0x2bca0c..0x2bcde0` (980 bytes). Nothing is sent to
-either DSP that a CC plus a note would not send. The `midi-chroma-sites` and
-`midi-chroma` gates refuse an image whose hook sites are written by anything
-else, or whose routines are not ISA_A or call anything but the OS routines they
-name.
+Nothing is sent to either DSP that a CC plus a note would not send. The
+`midi-chroma-sites` gate refuses an image whose final boot patch list writes the
+hook sites from anything else, or writes into the routines; the `midi-chroma` gate
+reads the routines back and refuses them unless they are ISA_A and call only the
+OS routines they name.
+
+## Memory
+
+The routines (896 bytes) and their note table go at the end of the RAM image, which
+must then end inside the range earlier images ran from on hardware (up to
+`0x2bce14`). When it would not, menu descriptors move to flash first, as for any
+RAM image that is too big (descriptors in flash: auto, the default).
+
+With the full bundled catalog on X.14 (24 models) this is tight: five descriptors
+move to flash, the routines and table take `0x2bca0c..0x2bcdfc` (1,008 bytes), and
+24 bytes of the proven range are left. A build with descriptors kept in RAM
+(`--desc-flash none`) is refused, naming how many bytes are missing and what to do:
+let descriptors move to flash, untick a machine, or turn the option off. The page
+shows the same message under the memory meters.
 
 A build without the option is byte-identical to one from before the option
 existed.

@@ -18,7 +18,7 @@ import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, 
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
 import { checkPack, modelWords, needLines, needsUwSamples, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
-import { merged, plan, trimFor, type Plan, type Trimmed } from '../../engine/src/plan.js';
+import { merged, plan, trimFor, MIDI_CHROMA_CHANNEL, type Plan, type Trimmed } from '../../engine/src/plan.js';
 import { drawLcd } from './lcd.js';
 import { categories, describeModel } from './catalog.js';
 import { addScreenHelp } from './screen-help.js';
@@ -307,10 +307,13 @@ function trimmed(opt = trimOptions()): Trimmed {
 const allowIdMove = (): boolean => true;
 
 /** MIDI chromatic note input (off by default): offered only on an OS whose MIDI path the engine verified. */
-const chromaOn = (): boolean => !!base?.support.midiChroma?.ok && $<HTMLInputElement>('midi-chroma').checked;
+const chromaTicked = (): boolean => $<HTMLInputElement>('midi-chroma').checked;
+const chromaOn = (): boolean => !!base?.support.midiChroma?.ok && chromaTicked();
+/** the chromatic channel: the default, or what a loaded project chose (the page has no channel control) */
+let chromaChannel = MIDI_CHROMA_CHANNEL;
 function firmwareOptions(): ReturnType<typeof currentFirmwareFixes> {
   const o = currentFirmwareFixes();
-  return chromaOn() ? { ...o, features: { ...o.features, midiChroma: true } } : o;
+  return chromaOn() ? { ...o, features: { ...o.features, midiChroma: { channel: chromaChannel } } } : o;
 }
 function syncChromaOption(): void {
   $('midi-chroma-option').hidden = !base?.support.midiChroma?.ok;
@@ -753,7 +756,8 @@ function projectNow(): Project {
     models: boxes().filter((i) => i.checked).map((i) => i.dataset.module!),
     layout: layoutEd.mapForPlan() ?? null,
     uw: uwOf(uwAnswer),
-    midiChroma: chromaOn(),
+    // what the user chose, even on an OS that cannot have it, so the project keeps it
+    midiChroma: chromaTicked() ? { channel: chromaChannel } : undefined,
   };
 }
 
@@ -815,6 +819,7 @@ function applyProject(p: Project, name: string): boolean {
   $<HTMLInputElement>('db').value = String(p.trim.db);
   $<HTMLInputElement>('cap').value = String(p.trim.cap);
   $<HTMLInputElement>('midi-chroma').checked = !!p.midiChroma;
+  chromaChannel = p.midiChroma?.channel ?? MIDI_CHROMA_CHANNEL;
   const want = new Set(p.models);
   const have = new Set(boxes().map((i) => i.dataset.module!));
   if (p.uw !== undefined) fileAnswer(p.uw, name);

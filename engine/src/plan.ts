@@ -545,9 +545,14 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
                   `${(ram.indicator.at + ram.indicator.code.length).toString(16)}, past the proven ${(ram.base + IND_EXT_SPAN).toString(16)}`);
   }
   if (pastProven(ram) && ram.bytes <= ram.limit) {
-    problems.push(`MIDI chromatic note input: the RAM image with its ${ram.chroma!.code.bytes.length}-byte routines ends at ` +
-                  `${(ram.base + ram.bytes).toString(16)}, past the proven ${(ram.base + IND_EXT_SPAN).toString(16)}` +
-                  (canFlash ? ' even with descriptors in flash' : '') + ': untick a machine or turn the option off');
+    const over = ram.bytes - IND_EXT_SPAN;
+    const fix = mode === 'auto' && canFlash
+      ? 'untick a machine (one with dynamic knob labels frees the most) or turn MIDI chromatic note input off'
+      : canFlash ? `let descriptors move to flash (descriptors in flash: auto${mode === 'none' ? ', not none' : ''}), untick a machine, or turn MIDI chromatic note input off`
+      : 'untick a machine or turn MIDI chromatic note input off';
+    problems.push(`MIDI chromatic note input needs ${over} more byte${over === 1 ? '' : 's'} of RAM: its ${ram.chroma!.code.bytes.length}-byte routines ` +
+                  `go at the end of the RAM image, which then ends at ${(ram.base + ram.bytes).toString(16)}, past the hardware-proven ` +
+                  `${(ram.base + IND_EXT_SPAN).toString(16)}${mode === 'auto' && canFlash && toFlash.size ? `, even with ${toFlash.size} descriptors moved to flash` : ''}: ${fix}`);
   }
   if (ram.bytes > ram.limit) {
     problems.push(`the RAM image needs ${ram.bytes} bytes and the base's proven window holds ${ram.limit}: ` +

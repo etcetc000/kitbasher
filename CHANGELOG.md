@@ -54,7 +54,8 @@ All notable changes to Kitbasher are recorded here. The format follows
   p-lock on its step; holding trig keys in grid record and playing a note
   p-locks pitch on every held step. Models without a note law, and the stock
   machines, are triggered with their knobs untouched. Not offered on OS 1.63 or
-  DEV. A project file records the choice (`midi_chroma`). See
+  DEV. A project file records the choice and its channel (`midi_chroma`), and
+  `--restore` of a project applies it. See
   [MIDI chromatic note input](docs/MIDI-CHROMATIC.md).
 - Pitch metadata: `panel.pitch` in the model manifest and `pitch` on pack models
   (knob, law, steps, base note, range, per-mode overrides), with `rawToNote` /
