@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { checkModelContract, requireInjection, type ModelContract } from '../src/model_contract.js';
 import { ramImage, allocateIds } from '../src/plan.js';
-import { legacyAllocate } from '../src/legacy_ids.js';
 import type { Base } from '../src/bases.js';
 import { checkPack, type CorePack, type Pack, type PackModel } from '../src/packs.js';
 import { checkDynamicPlans, dynamicPlans, type ModelPanel } from '../src/model_panel.js';
@@ -137,22 +136,6 @@ test('ID exhaustion explains that sample trimming cannot create an ID', () => {
   assert.equal(r.sel.length,0);
   assert.equal(r.problems.length,1);
   assert.match(r.problems[0],/remove a selected model; sample trimming does not free IDs/);
-});
-
-test('earlier builds: automatic contributions yielded to later pinned IDs (legacy_ids.ts keeps that allocator)', () => {
-  const base={name:'fixture',os:{descriptorTable:0,cfBase:0,freeDescriptor:0,deadIds:[7,8]}} as unknown as Base;
-  const added={key:'MM/1',name:'MMSIN',id:0,contract:{injection:{mode:'add'},components:{dsp2:{source:'dsp2.asm'}}}} as unknown as PackModel;
-  const pinned={key:'ND/0',name:'TEST ',id:6} as PackModel;
-  const listed=new Map(Array.from({length:6},(_,i)=>[i,'stock'] as const));
-  const fams=[{name:'MM',models:[added]},{name:'ND',models:[pinned]}];
-  const r=legacyAllocate(base,new Uint8Array(192*4),fams,listed);
-  assert.deepEqual(r.problems,[]);
-  assert.deepEqual(r.sel.map(s=>[s.m.key,s.family,s.id]),[['MM/1','MM',9],['ND/0','ND',6]]);
-  assert.deepEqual(r.moves,[]);
-  // now: a pack's ID is not a pin; every model bottom-up in order, the dead range skipped
-  const now=allocateIds(base,new Uint8Array(192*4),fams,false,undefined,listed);
-  assert.deepEqual(now.problems,[]);
-  assert.deepEqual(now.sel.map(s=>[s.m.key,s.family,s.id]),[['MM/1','MM',6],['ND/0','ND',9]]);
 });
 
 test('static-only selection leaves the knob callback executable when dynamic labels are enabled', () => {

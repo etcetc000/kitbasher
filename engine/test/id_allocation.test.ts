@@ -1,15 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
 import type { Base } from '../src/bases.js';
 import { canonical, decodeLayout, encodeLayout, LAYOUT_FORMAT, parseLayout, type Layout } from '../src/layout.js';
-import { legacyAllocate, legacyLayout } from '../src/legacy_ids.js';
-import { loadPacks } from '../src/node.js';
-import type { Pack, PackModel } from '../src/packs.js';
+import type { PackModel } from '../src/packs.js';
 import { needsUwSamples } from '../src/packs.js';
-import { allocateIds, effectiveLayout, select } from '../src/plan.js';
+import { allocateIds, effectiveLayout } from '../src/plan.js';
 import { decodeProject, encodeProject, type Project } from '../src/project.js';
-import { menuCategory, menuOrder } from '../src/sound_catalog.js';
 
 // Machine IDs are assigned bottom-up (engine/src/selection.ts allocateIds); a restored session
 // (layout) keeps its IDs; a Machinedrum without UW uses nothing at 128 and up.
@@ -101,47 +97,6 @@ test('models that play a UW sample are refused without UW, allowed with it', () 
   const r = run(fams(W, A), { noUw: true });
   assert.equal(r.problems.length, 1);
   assert.match(r.problems[0], /WAVTB plays a sample from UW sample memory/);
-});
-
-// ---- the earlier IDs, as a layout: reproduced exactly on 1.63 with the whole catalog
-
-// OS 1.63's own machines: GND, TRX, EFM, E12, P-I, INP, MID, CTR, ROM, RAM
-const STOCK_163 = own([...range(0, 3), ...range(16, 28), ...range(32, 39), ...range(48, 72).filter((i) => i < 64 || i <= 72),
-  ...range(80, 85), ...range(96, 113), ...range(120, 123), ...range(128, 163), ...range(165, 168), ...range(176, 191)]);
-// what the page built for "everything" on 1.63 before (the build report of origin/main 1a85f96)
-const EARLIER_163: Record<string, number> = {
-  VADBD: 4, VADCY: 5, VADHH: 7, VADPC: 8, VADRC: 9, VADSD: 15, VADSY: 29, OSCAC: 31, FMS4O: 40, VOXFR: 41, OSCSP: 42,
-  NZEPL: 43, PHYKS: 44, FMS2O: 11, FMS3O: 12, FMSSW: 10, OSCSW: 13, OSCPW: 175, WAVTB: 124, VOXVO: 127, OSC8B: 126,
-  WAVCH: 6, OSCCH: 14, WAVMR: 30,
-};
-const BASE_163 = { ...BASE, id: 'stock-163-prepared', name: 'OS 1.63', os: { ...BASE.os, deadIds: [0x60, 0x7b] } } as unknown as Base;
-
-test('the earlier-IDs layout: the earlier allocator on the selection itself', () => {
-  const { packs } = loadPacks(resolve(process.cwd(), 'catalog'));
-  const { fams: all } = select(packs as Pack[], {});
-  const models = all.flatMap((f) => f.models);
-  // everything selected: what earlier builds gave
-  const legacy = legacyAllocate(BASE_163, MAIN, all, STOCK_163);
-  assert.deepEqual(legacy.problems, []);
-  assert.deepEqual(Object.fromEntries(legacy.sel.map((s) => [s.m.name.trim(), s.id])), EARLIER_163);
-  const lay = legacyLayout(BASE_163, MAIN, all, STOCK_163);
-  assert.equal(lay.base, 'stock-163-prepared');
-  assert.deepEqual(Object.fromEntries(models.map((m) => [m.name.trim(), lay.machines[m.key].id])), EARLIER_163);
-  assert.deepEqual(lay.categories, [...lay.categories].sort((a, b) => menuOrder(a) - menuOrder(b)));
-  for (const m of models) assert.equal(lay.machines[m.key].category, menuCategory(m));
-  // a smaller selection: what an earlier build of that selection gave, not the full-catalog IDs
-  // (VADHH was on 7 and VADSD on 15 with everything selected; on its own, the drums took 4, 5, 6 ...)
-  const drums = select(packs as Pack[], { families: ['AN', 'NP'], exclude: ['VAD/SY'] }).fams;
-  const sub = legacyLayout(BASE_163, MAIN, drums, STOCK_163);
-  const earlierDrums = Object.fromEntries(legacyAllocate(BASE_163, MAIN, drums, STOCK_163).sel.map((s) => [s.m.key, s.id]));
-  assert.deepEqual(Object.fromEntries(Object.entries(sub.machines).map(([k, p]) => [k, p.id])), earlierDrums);
-  // the earlier build of the drums (origin/main, 2026-10-07): VADBD 4, VADCY 5, VADHH 6, VADPC 7, VADRC 8, VADSD 9, NZEPL 10
-  assert.deepEqual(Object.fromEntries(Object.entries(sub.machines).map(([k, p]) => [models.find((m) => m.key === k)!.name.trim(), p.id])),
-    { VADBD: 4, VADCY: 5, VADHH: 6, VADPC: 7, VADRC: 8, VADSD: 9, NZEPL: 10 });
-  // building with it as the session gives those IDs back
-  const r = allocateIds(BASE_163, MAIN, drums, true, sub, STOCK_163);
-  assert.deepEqual(r.problems, []);
-  assert.deepEqual(Object.fromEntries(r.sel.map((s) => [s.m.key, s.id])), earlierDrums);
 });
 
 // ---- a restored session's machines that are not selected now

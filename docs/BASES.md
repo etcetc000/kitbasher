@@ -174,11 +174,7 @@ file is read the same way; the page then asks for the stock OS it was built on):
   every build carries, or, failing that, the machines it added, matched to the
   catalog by their names now or before the October 2026 rename (the page names
   any it does not know, and keeps their IDs free);
-- or your **project file** or **layout file**;
-- or choose **the IDs Kitbasher gave before October 2026**: the earlier
-  allocator run on the models you select, recomputed as you change the
-  selection. It gives what an earlier build of the same selection gave as long
-  as the model catalog has not changed since; the .syx is the exact record.
+- or your **project file** or **layout file**.
 
 Every machine the restored session names keeps its ID; models it does not name
 take free IDs. Machines of the session that you do not select now keep their
@@ -186,7 +182,7 @@ IDs reserved, so a later build that selects them again finds them free; only
 when no other ID is left is one given to a new model, and the build report says
 so. A session made for another OS is applied to the one you load: machines keep
 their IDs where that OS has them free, and the others move (each move is
-listed). On the command line: `--restore <file>` or `--legacy-ids`. Exactly one of
+listed). On the command line: `--restore <file>`. Exactly one of
 `--uw` or `--no-uw` is required for every build; a restored session's UW answer
 is reported but never used in its place.
 

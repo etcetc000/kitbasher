@@ -34,8 +34,7 @@ import { decodeProject, encodeProject, osOf, osProblem, PROJECT_EXTENSION, type 
 import { SamplesStep } from './samples-ui.js';
 import { fileHint, gate, noUwOf, uwForBuild, uwOf, type UwAnswer } from './uw-mode.js';
 import { recoverSession } from '../../engine/src/restore.js';
-import { legacyLayout, LEGACY_LAYOUT_NAME } from '../../engine/src/legacy_ids.js';
-import { listedFreeIds, parseLayout, type Layout } from '../../engine/src/layout.js';
+import { parseLayout, type Layout } from '../../engine/src/layout.js';
 import { num } from '../../engine/src/bytes.js';
 import { select } from '../../engine/src/selection.js';
 
@@ -197,18 +196,6 @@ async function restoreFromOs(bytes: Uint8Array, name: string): Promise<boolean> 
   return true;
 }
 
-/** The earlier allocator's IDs for the models selected now (recomputed whenever the selection changes). */
-const legacyFor = (): Layout => legacyLayout(base!, fw!.slots[0].raw, select(data.packs, { exclude: excludes() }).fams, listedFreeIds(fw!, base!));
-
-function useLegacyIds(): void {
-  if (!fw || !base) { status('Load your OS file first: the earlier IDs depend on it.', 'error'); return; }
-  layoutEd.adopt(legacyFor(), LEGACY_LAYOUT_NAME);
-  layoutEd.legacy = true;
-  $('project-status').textContent = 'Using the IDs an earlier Kitbasher (before October 2026) gave the models you select, recomputed as you change the selection. ' +
-    'This assumes the model catalog has not changed since that build; the .syx you flashed then is the exact record, so drop it here if you have it.';
-  refresh();
-}
-
 /** Models that play a UW sample: "needs UW", and not selectable on a Machinedrum without UW. */
 function applyNoUw(): void {
   const on = noUw();
@@ -350,7 +337,6 @@ function meter(id: string, used: number, cap: number, unit: string, over: boolea
 function refresh(minAutoDb: number | null = null): void {
   revision++;
   applyNoUw();                                      // before planning: no plan with a model this unit cannot play
-  if (layoutEd.legacy && fw && base) layoutEd.map = legacyFor();   // the earlier IDs, for the selection as it is now
   packedCapacityProblem = false;
   cachedBuild = null;
   $('room').hidden = !fw;
@@ -827,7 +813,6 @@ async function main(): Promise<void> {
     refresh();
   });
   layoutEd.onAdopt = (l, from) => fileAnswer(l.uw, from);
-  $('legacy-ids').addEventListener('click', useLegacyIds);
   for (const r of Array.from(document.querySelectorAll<HTMLInputElement>('input[name=uw]'))) {
     r.addEventListener('change', () => {
       if (!r.checked) return;
