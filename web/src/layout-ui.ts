@@ -124,13 +124,11 @@ export class LayoutEditor {
     host.before(this.root);
   }
 
-  /** where the map came from when it was restored (a file, a patched OS, the earlier IDs); null: nothing restored */
+  /** where the map came from when it was restored (a file, a patched OS, a project); null: nothing restored */
   restoredFrom: string | null = null;
-  /** the map is the earlier allocator's for the current selection: the page recomputes it when the selection changes */
-  legacy = false;
 
   /** No map: the default layout, and nothing restored. */
-  clear(): void { this.map = null; this.restoredFrom = null; this.legacy = false; }
+  clear(): void { this.map = null; this.restoredFrom = null; }
 
   /**
    * A map made for another OS is applied to this one: every machine keeps its ID where this OS
@@ -158,7 +156,6 @@ export class LayoutEditor {
   adopt(l: Layout, from: string): void {
     this.map = l;
     this.restoredFrom = from;
-    this.legacy = false;
     this.rebase();
     this.onAdopt?.(l, from);
     void fingerprint(l).then((fp) => this.say(`Layout ${fp} restored from ${from}.`, 'ok'));
@@ -194,7 +191,6 @@ export class LayoutEditor {
     const l: Layout = structuredClone(this.eff);
     const msg = f(l);
     if (typeof msg === 'string' && msg.startsWith('!')) { this.say(msg.slice(1), 'error'); return; }
-    this.legacy = false;                                   // edited by hand: no longer recomputed
     this.renumber(l);
     this.map = l;
     this.say(msg || '', 'info');

@@ -115,7 +115,7 @@ test('ID map without UW: 128 and up unusable with the reason, moves and UW-only 
   assert.match(wav.title, /plays a UW sample/);
 });
 
-test('step 1: one OS drop zone; restoring sits in a collapsed "Restore an earlier layout" with one drop zone and the preset', () => {
+test('step 1: one OS drop zone; restoring sits in a collapsed "Restore an earlier layout" with one drop zone', () => {
   const step1 = html.slice(html.indexOf('<section id="step-1"'), html.indexOf('<section id="step-2"'));
   assert.equal((step1.match(/type="file"/g) ?? []).length, 2);              // the OS, and the restore drop
   const restore = step1.match(/<details id="restore"[^>]*>([\s\S]*?)<\/details>/);
@@ -123,7 +123,7 @@ test('step 1: one OS drop zone; restoring sits in a collapsed "Restore an earlie
   assert.doesNotMatch(restore[0], /<details[^>]* open/);                     // collapsed by default
   assert.match(restore[1], /<summary>Restore an earlier layout<\/summary>/);
   assert.match(restore[1], /id="project-file" type="file" accept="\.syx,\.bin,\.json/);
-  assert.match(restore[1], /id="legacy-ids"/);
+  assert.doesNotMatch(step1, /legacy-ids|before October 2026/);              // no preset: the previous .syx is the record
   assert.doesNotMatch(step1, /Keep your kits/);                              // no big box
   // the UW question: one row, no always-on effect line, the how-to-check line always shown
   const q = step1.match(/<fieldset id="uw-question"[\s\S]*?<\/fieldset>/)[0];
@@ -146,7 +146,6 @@ test('the Download warning shows whenever nothing was restored; a map for anothe
   const ui = readFileSync(new URL('../web/src/layout-ui.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(ui, /so it was set aside/);
   assert.match(ui, /private rebase\(\)/);
-  assert.match(ui, /clear\(\): void \{ this\.map = null; this\.restoredFrom = null; this\.legacy = false; \}/);
-  // the earlier IDs follow the selection
-  assert.match(app, /if \(layoutEd\.legacy && fw && base\) layoutEd\.map = legacyFor\(\);/);
+  assert.match(ui, /clear\(\): void \{ this\.map = null; this\.restoredFrom = null; \}/);
+  assert.doesNotMatch(app, /legacyFor|legacy-ids|legacy_ids/);
 });

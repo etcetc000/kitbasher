@@ -22,22 +22,13 @@ All notable changes to Kitbasher are recorded here. The format follows
   UW answer and menu layout, gets the same IDs. Kits saved with an earlier build
   refer to the old IDs: on the first step, under *Restore an earlier layout*,
   drop the `.syx` you flashed (or your
-  project or layout file), or choose "the IDs Kitbasher gave before October
-  2026" (the earlier allocator, on your selection), and every machine keeps its
+  project or layout file), and every machine keeps its
   ID. The Download step notes it in one line whenever nothing was restored. On the command
-  line: `--restore <file>` and `--legacy-ids`.
+  line: `--restore <file>`.
 
-### Fixed
+### Removed
 
-- **The earlier IDs no longer shift when a model is added.** "The IDs Kitbasher
-  gave before October 2026" (`--legacy-ids`) ran the earlier allocator over the
-  catalog of today, so a new model joined it and moved every automatic ID after
-  it (a model placed before NZEPL took its 43, and NZEPL and PHYKS moved up one),
-  and restored kits loaded the wrong machines. The allocator now runs over a
-  frozen table of the 24 models the catalog had before the switch, with their
-  order and pack IDs (`LEGACY_MODELS` in `engine/src/legacy_ids.ts`). A model
-  added since is not in it and takes a free ID around those IDs, as with any
-  restored session.
+- The "IDs Kitbasher gave before October 2026" layout (`--legacy-ids`) is removed; restore from your previous Kitbasher `.syx` instead.
 
 ### Changed
 
