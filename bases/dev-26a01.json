@@ -18,6 +18,14 @@
   "hostSend": {
    "ok": false,
    "why": "Host-send reordering is not qualified on DEV 26A01; the default ordered recovery is used instead."
+  },
+  "unmuteFix": {
+   "ok": false,
+   "why": "DEV enters its own add-on code from the sequencer's tick handler and buffer toggle, so the sequencer the fix is written against is not there."
+  },
+  "midiChroma": {
+   "ok": false,
+   "why": "DEV feeds MIDI through its own per-block queue in its add-on (entered from the DSP interrupt), neither X.14's real-time path nor OS 1.63's MIDI task: not implemented."
   }
  },
  "cache": {

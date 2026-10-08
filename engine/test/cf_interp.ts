@@ -1,5 +1,6 @@
 // A small ColdFire interpreter for tests: only the instruction forms engine/src/midi_chroma.ts
-// assembles, decoded from the bytes themselves. Memory is sparse (unset bytes read 0). Calls to
+// assembles, and the few more the OS's MIDI-task and UI loops use (the firmware tests run them),
+// decoded from the bytes themselves. Memory is sparse (unset bytes read 0). Calls to
 // addresses with a stub run the stub (a JS function) instead, as if it were the OS routine there;
 // the stub sees the stack with its return address on top and returns like `rts`.
 
@@ -12,6 +13,10 @@ export class Cpu {
   a = new Uint32Array(8);
   pc = 0;
   n = false; z = false; v = false; c = false;
+  /** the status register's upper byte as `move.w sr` sees it (S bit, interrupt mask); the CCR bits are n/z/v/c */
+  sr = 0x2000;
+  /** every write of the interrupt mask, in order (tests check the routines restore it) */
+  srWrites: number[] = [];
   mem = new Map<number, number>();
   stubs = new Map<number, Stub>();
   steps = 0;
@@ -121,6 +126,16 @@ export class Cpu {
     const top = op >> 12;
     if (op === 0x4e75) { this.pc = this.pop(); return; }                       // rts
     if (op === 0x4e71) return;                                                 // nop
+    if ((op & 0xfff8) === 0x40c0) {                                            // move.w sr,Dn
+      const ccr = (this.n ? 8 : 0) | (this.z ? 4 : 0) | (this.v ? 2 : 0) | (this.c ? 1 : 0);
+      this.d[reg] = (this.d[reg] & ~0xffff) | ((this.sr & 0xff00) | ccr); return;
+    }
+    if (op === 0x46fc || (op & 0xfff8) === 0x46c0) {                           // move.w #imm,sr / move.w Dn,sr
+      const v = op === 0x46fc ? this.fetch16() : this.d[reg] & 0xffff;
+      this.sr = v & 0xff00; this.srWrites.push(this.sr);
+      this.n = !!(v & 8); this.z = !!(v & 4); this.v = !!(v & 2); this.c = !!(v & 1);
+      return;
+    }
     if (top === 7 && !(op & 0x100)) { this.d[rx] = (op << 24) >> 24; this.logic(this.d[rx], 4); return; }   // moveq
     if (top === 1 || top === 2 || top === 3) {                                 // move.b / move.l / move.w
       const size = top === 1 ? 1 : top === 2 ? 4 : 2;
@@ -175,6 +190,11 @@ export class Cpu {
       const n = rx || 8, x = this.d[reg] >>> 0, left = !!(op & 0x100);
       const r = left ? (x << n) >>> 0 : x >>> n;
       this.d[reg] = r; this.logic(r, 4); this.c = left ? ((x >>> (32 - n)) & 1) === 1 : ((x >>> (n - 1)) & 1) === 1;
+      return;
+    }
+    if ((op & 0xf1f8) === 0xe080) {                                            // asr.l #n,Dn
+      const n = rx || 8, x = this.d[reg] | 0;
+      this.d[reg] = x >> n; this.logic(this.d[reg], 4); this.c = ((x >> (n - 1)) & 1) === 1;
       return;
     }
     if ((op & 0xfff8) === 0x4680) { this.d[reg] = ~this.d[reg]; this.logic(this.d[reg], 4); return; }   // not.l

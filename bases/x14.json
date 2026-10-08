@@ -11,17 +11,21 @@
   "addon_sha256": "870be681bb65789bf6f833f2403a6230c0d182a55550e9812be323f4535e182f"
  },
  "qualification": {
-  "level": "emulator-gated",
-  "by": "Tested in the emulator only"
+  "level": "hardware-proven",
+  "by": "Tested on hardware (Machinedrum with UW)"
  },
  "options": {
   "unmuteFix": {
    "ok": true,
-   "evidence": "Emulator: unmute by MIDI CC and MUTE-mode keys at 30 and 120 BPM, swing 50/58/80%, muting unchanged; not yet on hardware."
+   "evidence": "Hardware (Machinedrum with UW): plain, p-locked and swung (58% and 80%) unmutes play correctly on X.14-based builds; a Kitbasher X.14 build with NFX4P, MIDI chromatic input and the unmute fix ran without problems. Emulator: unmute by MIDI CC and MUTE-mode keys at 30 and 120 BPM, swing 50/58/80%, muting unchanged."
   },
   "hostSend": {
    "ok": false,
    "why": "Host-send reordering is not qualified on X.14; the default ordered recovery is used instead."
+  },
+  "midiChroma": {
+   "ok": true,
+   "evidence": "Hardware (Machinedrum with UW): chromatic notes played, with live-record and held-step pitch p-locks, on X.14-based builds running these chroma routines byte for byte; a Kitbasher X.14 build with NFX4P, MIDI chromatic input and the unmute fix ran without problems. Emulator: note -> pitch-knob readbacks for every model and MODE segment, live record under every quantize setting, held-step locks, locks full and a stress run; base-channel notes, CCs and Enhanced-MIDI masks unchanged."
   }
  },
  "cache": {

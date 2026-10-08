@@ -33,6 +33,10 @@
   "hostSend": {
    "ok": false,
    "why": "in the emulator the prepared 1.63 base goes silent with the reorder (DSP2 renders the silence stub on every track) and plays with the stock sender. The failing reference is the per-track send loop in the DSP interrupt's SRAM code (jsr at 0x100055c). DEV has the same loop and plays, but DEV feeds MIDI through its own per-block queue and 1.63 does not. The cause is not yet known, so the option stays off on this base."
+  },
+  "midiChroma": {
+   "ok": true,
+   "evidence": "Emulator: note -> pitch-knob readbacks for all 21 playing models (512 notes, every MODE segment), the sound the same as by a PTCH CC, the selected track, trigger-only machines; live record under every quantize setting, held-step locks in grid record, locks full and a stress run with knob turns and clock; running status, SysEx, clock and base-channel notes interleaved with chromatic notes, unchanged. Not yet on hardware."
   }
  },
  "cache": {
@@ -73,6 +77,9 @@
   "lcd.frames": "0x252e50,0x252e4c",
   "host_send.dsp2": "0x1000756",
   "host_send.dsp1": "0x100074c",
-  "host_send.sites": "0x20a8ee,0x20a922,0x20a9fa,0x20aa56,0x20abb4,0x20abde,0x20ac1e,0x20ac52,0x100055c"
+  "host_send.sites": "0x20a8ee,0x20a922,0x20a9fa,0x20aa56,0x20abb4,0x20abde,0x20ac1e,0x20ac52,0x100055c",
+  "midi_chroma.sites": "0x209e10,0x20d040,0x225524",
+  "midi_chroma.calls": "0x20cc48,0x20c8de,0x2379ac,0x21670a,0x21a10c,0x2129e8,0x212944",
+  "midi_chroma.data": "0x100155c,0x2818da,0x7001aa,0x70001a,0x28d202,0x780000,0x2ab2ec,0x2ab2e8,0x281a3e,0x281aee,0x281b12"
  }
 }

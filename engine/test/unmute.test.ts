@@ -585,12 +585,14 @@ test('firmware: discovery finds what each profile caches for the fix, and the fi
   }
 });
 
-// The output of main at 81cd937 for these inputs (default options, the bundled catalog, --uw). Built
-// with --no-unmute-fix the image must be the same, byte for byte. Any intended change to the build
+// The output of main for these inputs (default options, the bundled catalog, --uw). Built with
+// --no-unmute-fix the image must be the same, byte for byte. Any intended change to the build
 // changes these: record the new hash from a build without the fix, and say why in the change.
+// 255c0ec: VADSY and VADPC re-assembled with label targets (2b1bd79) changed the catalog's code;
+// the engine of 255c0ec with the catalog from before 2b1bd79 still gives the earlier db5a9921... / a2976aa1...
 const GOLDEN_OFF: Record<string, string> = {
-  x14: 'db5a9921f0f7208f79d499fae1ebc38a92acbd35ce84436bc46bb04ad85ee1c9',
-  'stock-163-prepared': 'a2976aa1f8f41d2f1d1d87a7247ca0c5718f877ada0b72db891a5d15d1cb8329',
+  x14: '95d8fa8ac20c959f9b9b2fd58b2889c37ffd277ca325cd4bcf170c6bbbd9a9ed',
+  'stock-163-prepared': '1874e754acdc25c6b9dfa3b85eed46decdb39aa2c88368315e1115e9e082cc16',
 };
 
 test('firmware: --no-unmute-fix builds the image the build made before the fix', { skip: fwSkip }, async () => {

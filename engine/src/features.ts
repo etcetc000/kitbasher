@@ -124,7 +124,7 @@ export interface Dsp1Record { addr: number; space: number; words: string }
 /**
  * One drive law: its body as DSP1 P words at a reference placement, with relocations against its
  * own origin ('@org') and against the laws it jumps into ('@<law>', e.g. cubicd into cubic's loop),
- * and any records of its own (nord's coefficient table). `rank` is its place in the dispatcher's
+ * and any records of its own (the shared coefficient table). `rank` is its place in the dispatcher's
  * compare chain, `emit` its place in P memory; both only order the laws that are linked. The core
  * pack carries the laws of our own design; a law derived from another instrument travels in the
  * pack of the machines that use it.

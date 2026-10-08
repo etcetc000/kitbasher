@@ -23,7 +23,7 @@ import { findSite, stub, type Parts, type Site, type Stub } from './indicator.js
 import { callCode, drivePairs, dsp1Transport, dynSegment, linkDrive, type DriveLink, type Dsp1Law, type DynMachine } from './features.js';
 import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recovery.js';
 import { unmuteBlock, type UnmuteBlock } from './unmute.js';
-import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type ChromaSite, type ChromaTable } from './midi_chroma.js';
+import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type Chroma, type ChromaTable } from './midi_chroma.js';
 import { linkCode, words, type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
 import { ctrCoverage, type CtrCoverage } from './scan.js';
 import { baseFamilies, checkLayout, listedFreeIds, LAYOUT_FORMAT, menuLimits, type Layout } from './layout.js';
@@ -205,7 +205,7 @@ export interface RamImage {
    */
   unmute: { block: UnmuteBlock; home: 'dyn' | 'own'; segment: Uint8Array | null; base: number; limit: number } | null;
   /** --midi-chroma: the routines and their note table, at the end of the RAM image */
-  chroma: { at: number; code: ChromaCode; table: ChromaTable; site: ChromaSite; channel: string; cfg: number } | null;
+  chroma: { at: number; code: ChromaCode; table: ChromaTable; site: Chroma; channel: string; cfg: number } | null;
 }
 
 /**
@@ -302,7 +302,7 @@ export const IND_EXT_SPAN = 0xe14;
 
 export function ramImage(base: Base, main: Uint8Array, core: CorePack, fams: Family[], sel: Selected[],
   opt: { dyn: boolean; dsp1: DriveLink | null; host: boolean; toFlash: Set<string>; dynFlash: Set<string>; idSpace: number; flashAt: number;
-         redrawValues: number; ind: Site | null; chroma?: { site: ChromaSite; channel: string; cfg: number } | null; unmute?: boolean }): RamImage {
+         redrawValues: number; ind: Site | null; chroma?: { site: Chroma; channel: string; cfg: number } | null; unmute?: boolean }): RamImage {
   const O = base.os;
   const E = base.ext.base;
   let cb = fromBase64(core.knob_callback);
@@ -532,7 +532,7 @@ function placeRam(base: Base, main: Uint8Array, core: CorePack, laws: Map<string
     else ind = base.features.lcdFlush;
   }
   // --midi-chroma: the base's real-time MIDI path, verified by discovery (engine/src/midi_chroma.ts)
-  let chroma: { site: ChromaSite; channel: string; cfg: number } | null = null;
+  let chroma: { site: Chroma; channel: string; cfg: number } | null = null;
   if (f.midiChroma) {
     const channel = typeof f.midiChroma === 'object' ? f.midiChroma.channel : MIDI_CHROMA_CHANNEL;
     if (!base.features.midiChroma) problems.push(`MIDI chromatic note input: not supported on ${base.name}: ${base.support.midiChroma?.why ?? 'its MIDI path was not found'}`);

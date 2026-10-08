@@ -62,13 +62,14 @@
 //                        whose profile qualifies it (X.14, prepared 1.63); asked for on any other
 //                        base, the build is refused
 //   --no-unmute-fix      turn it off: the base's sequencer, unchanged
-//   --midi-chroma        MIDI chromatic note input (X.14): a note-on on the chromatic channel plays the
+//   --midi-chroma        MIDI chromatic note input (X.14, prepared 1.63): a note-on on the chromatic channel plays the
 //                        selected track at that note's pitch, from the selected models' pitch metadata
 //                        (raw = 2 (MIDI - 24), C3 = MIDI 60 = raw 72, for the shared quarter-tone law);
 //                        with live record on it records the trig and a pitch p-lock, and with trig keys
 //                        held in grid record it p-locks pitch on every held step. Machines without a
 //                        note law are triggered with their knobs untouched (engine/src/midi_chroma.ts).
-//                        Off by default
+//                        Off by default; asked for on a base whose profile does not qualify it (DEV),
+//                        the build is refused
 //   --midi-chroma-channel <c>  with --midi-chroma: base+4 (default: channel 5 with base channel 1) ..
 //                        base+15, or ch:1 .. ch:16 (an absolute channel inside the base range is ignored).
 //                        A project restored with --restore that had the option on turns it on with

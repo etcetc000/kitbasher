@@ -26,7 +26,21 @@
     "high_defaults": "4a02 6c10 203c <site> 4a01 6602 5b80 b086",
     "defaults_low": "d1fc00700008 2146 01a2 <site> 6516",
     "lev_bar": "2640 <low> <jmp2> 0680ffff <high> b480 6410",
-    "preview": "@site 20010280000000f07460b4806748143c0070b4806740143c0050b480673820010280000000fe0c80000000a067282439"
+    "preview": "@site 20010280000000f07460b4806748143c0070b4806740143c0050b480673820010280000000fe0c80000000a067282439",
+    "chroma_task": "2f03 2f02 @loop 2639 <base_ch> 4879 <midi_queue> 4eb9 <queue_get> 2040 1010 49c0 2400 0282000000f0 588f 0c82000000bf 6e10 @filter 720f c280 b681 6ece 2003 5680 b081 6dc6 2008 0280fffffe00 2202 e881 43f9 <table> 0c80 ........ 6606 48780002 6004 48780001 2f08 20711c00 4e90 508f 6096",
+    "chroma_uart_isr": "1039 00300144 08000000 67 .. 1039 0030014c 0280000000ff 0c80000000f7 6e08 7202 23c1 ........ 2f00 4eb9 <parser> 588f",
+    "chroma_parser_post": "4ab9 ........ 6608 0c80000000bf 6f30 0681 ........ 2f01 4879 <midi_queue> 45f9 <queue_post> 4e92 508f 2039 ........ 0680 ........ 2f00 4879 <ui_queue> 4e92",
+    "chroma_note_on": "4fefffd8 48d73cfc 206f002c 2e2f0030 1018 3a40 1218 49c1 2841 2448 1c10 4a81 6c06 2401 4682",
+    "chroma_rec_call": "4ab9 ........ 670e 4a87 670a 2f04 @site 4eb9 <recorder> 588f",
+    "chroma_sel_track": "4280 1002 b0b9 <sel_track> 660c 4eb9 ........ 4a80",
+    "chroma_recorder": "2439 <live_pattern> 701f b083 6d2e 2202 e789 2002 ed88 9081 9082 2240 43f10c00 2009 e588 9082 d080 2240 41f18c00 d1fc ........ 7001 e7a8 8190 602a 2202 ed89 2002 e188 9081 d082 2200 e589 9280 d288 41f9 <trig_hi> 2403 0682ffffffe0 7001 e5a8 81b01c00 241f 261f 4e75",
+    "chroma_cc": "4fefffe8 48d71c1c 226f001c 41e90001 1210 16280001 1011 740f c082 2800 1439 <base_ch_lo> 9882 2001 0680fffffff0 0280000000ff 742f b480 6500 .... 4282 1401 4280 1004 2200 ef89 eb88 9280 2042 43f018f0 41f9 ........ 34309c00 48c2 34709c02 2002 e588 2040 d1fc <machine_base> 222801a2",
+    "chroma_cc_kit": "7870 b8ab01a2 6700 .... 49f9 <kit_params> 2202 e789 2002 eb88 9081 43f20800 19839800 41f9 ........ 11839800",
+    "chroma_grid_held": "4ab9 <grid_mode> 6700 .... 2239 <held> 82b9 <held_lo> 6700 .... 4280 1014 7457 b480 6500 .... 2a00 0685ffffffb0 e78b d685 41f9 ........ 4a30 3800 6c00 .... 7801 23c4 <knob_touched>",
+    "chroma_grid_lock": "1802 49c4 2f04 2f39 ........ 2f03 2f39 <sel_track> 2f39 <ui_pattern> 4eb9 <lock_writer> 4fef0014 45f9 ........ 47f9 ........ 4a80 670e 1582 3800 2f04 2f05 4e93 508f 6036 4878 <popup_full:2> 4878ffff 4878ffff 4878ffff 4878ffff 4eb9 <popup> 50c0",
+    "chroma_lock_writer": "4feffff0 48d7003c 242f0014 2a2f0018 262f0020 282f0024 2f2f001c 2f05 2f02 4eba .... 4fef000c 4a80 6c04 4280 606a",
+    "chroma_queue_post": "2f02 226f0008 40c2 46fc2700",
+    "chroma_ui_loop": "4879 <ui_queue> 4eb9 <queue_count> 588f 4a80 6606 4eb9 ........ 4879 <ui_queue2> 4eb9 <queue_get> 2440 1439 ........ 49c2 23c2 ........ 2639 <base_ch> 1839 ........ 49c4 23c4 <ui_pattern>"
   },
   "anchors": {
     "about": "Where stock 1.63 has each thing. Reported beside the discovered address ('at the 1.63 address' or 'moved'); never patched from.",
@@ -34,7 +48,8 @@
     "heap_ceiling": "0x2139f8", "page_draw": "0x229dd2", "redraw": "0x229b38", "sram_sender_call": "0x100056a",
     "high_defaults": "0x2053b8", "defaults_low": "0x205396", "lev_bar_low": "0x228320", "lev_bar_high": "0x22832c",
     "preview": "0x231f38", "flash_alias": "0x10000000", "dsp1_hook": "0x25e",
-    "host_send_dsp1": "0x100074c", "host_send_dsp2": "0x1000756"
+    "host_send_dsp1": "0x100074c", "host_send_dsp2": "0x1000756",
+    "midi_task_filter": "0x209e10", "note_on": "0x20cc48"
   },
   "os": {
     "descriptor": { "size": 86, "ids": 192, "about": "192 longword pointers, then a zero longword; a free ID points at GND's empty descriptor (the most common entry, ID byte 0). Found by that shape among the lea operands of the base's code." },

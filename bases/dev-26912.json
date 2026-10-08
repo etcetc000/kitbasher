@@ -27,6 +27,14 @@
   "hostSend": {
    "ok": true,
    "evidence": "Plays with the reorder applied at all 10 sender references, in the emulator and on hardware. DEV runs MIDI through its own per-block queue (add-on 0x2f217a, entered from the DSP interrupt at 0x262788)."
+  },
+  "unmuteFix": {
+   "ok": false,
+   "why": "DEV enters its own add-on code from the sequencer's tick handler and buffer toggle, so the sequencer the fix is written against is not there."
+  },
+  "midiChroma": {
+   "ok": false,
+   "why": "DEV feeds MIDI through its own per-block queue in its add-on (entered from the DSP interrupt), neither X.14's real-time path nor OS 1.63's MIDI task: not implemented."
   }
  },
  "cache": {

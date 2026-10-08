@@ -15,9 +15,10 @@ removing any stock machine.
 X.13 is no longer supported: an OS tagged `X13 ` is refused before anything else.
 
 Each profile also records how far that base has been tested. DEV 26912 images
-have been tested on hardware (Machinedrum MKII +Drive UW). Prepared 1.63,
-X.14 and DEV 26A01 have passed the engine's gates and emulator checks of
-controls, labels, kits, memory and audio. The page and the build report show the
+have been tested on hardware (Machinedrum MKII +Drive UW), and so have X.14
+images (Machinedrum with UW), including the unmute-latency fix and MIDI
+chromatic note input. Prepared 1.63 and DEV 26A01 have passed the engine's
+gates and emulator checks of controls, labels, kits, memory and audio. The page and the build report show the
 level for the base you load.
 
 ## How a base is recognised
@@ -77,10 +78,23 @@ switched off and reported, never guessed. To see what a base supports:
 node engine/dist/src/cli.js --discover my-os.syx
 ```
 
-Some options also need the profile to record them as working on that base. The
-reordered DSP2 host sender (`--host-reorder`) is enabled on DEV 26912 and refused
-elsewhere: on prepared 1.63 it silences output, and it is not yet qualified on
-X.14 or DEV 26A01.
+Some options also need the profile to record them as working on that base
+(`options` in the profile: qualified with the evidence, or refused with the
+reason):
+
+| Option | Prepared 1.63 | X.14 | DEV 26912 | DEV 26A01 |
+|---|---|---|---|---|
+| Unmute-latency fix (`--unmute-fix`) | yes | yes | no: DEV enters its add-on from the sequencer | no: as DEV 26912 |
+| MIDI chromatic note input (`--midi-chroma`) | yes | yes | no: MIDI goes through DEV's per-block queue | no: as DEV 26912 |
+| Reordered DSP2 host sender (`--host-reorder`) | no: silences output in the emulator | no: not qualified | yes | no: not qualified |
+
+A parity check (`engine/test/parity.test.ts`) runs with the tests: every profile
+must qualify each of these options or refuse it with a reason, and the list of
+refusals above is fixed there, so a new gap is a deliberate change. Every other
+feature discovery reports must be on a list of features found on every base;
+with your OS files (`firmwareDir`) the check also resolves each profiled base and
+fails when a feature is missing on one base but not exempted. A refused option
+shows the profile's reason first, then discovery's when it did not find it either.
 
 ## Unmute latency
 
@@ -99,7 +113,7 @@ Five instructions of the OS's sequencer call 360 bytes of code (and 44 of data)
 placed after the knob labels in their RAM range, or alone in that range when no
 selected machine has labels. Discovery finds the sequencer by signature, and the
 base's profile must record the fix as run on it: OS 1.63 (prepared) and X.14
-have it. The DEV builds enter their own code from the sequencer's tick handler
+have it, X.14 on hardware (plain, p-locked and swung unmutes). The DEV builds enter their own code from the sequencer's tick handler
 and buffer toggle, so discovery does not find it there. Turn it off with *Fix
 unmute latency* on the Download step or `--no-unmute-fix`; the image is then
 the one a build without the fix makes.
@@ -114,8 +128,9 @@ X.14 has its own profile and runtime entry. Two details matter to the patcher:
   patches every copy, and refuses the build if any copy differs from the stock
   instructions it expects.
 - [MIDI chromatic note input](MIDI-CHROMATIC.md) (`--midi-chroma`) hooks X.14's
-  real-time MIDI path in its add-on, so it is offered on X.14 only; OS 1.63 and
-  DEV read MIDI in their main loop, which it does not patch.
+  real-time MIDI path in its add-on. On OS 1.63 it hooks the MIDI task instead,
+  with the same behaviour; DEV reads MIDI through its own queue, which it does
+  not patch.
 
 ## DEV 26A01
 

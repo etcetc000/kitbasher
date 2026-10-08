@@ -66,18 +66,27 @@ All notable changes to Kitbasher are recorded here. The format follows
   the sequencer code the fix changes. Five instructions of the OS call 360
   bytes of code (44 of data) in the knob-label RAM range (`0x2be100..0x2bef60`):
   after the labels, or alone at its start when no selected machine has labels;
-  never in the main RAM image. Tested in the emulator, not yet on hardware.
-- **MIDI chromatic note input** (X.14, off by default): a build option, *MIDI
+  never in the main RAM image. Tested on hardware on X.14 (plain, p-locked and
+  swung unmutes), in the emulator on OS 1.63.
+- **MIDI chromatic note input** (X.14 and OS 1.63, off by default): a build option, *MIDI
   chromatic note input* on the Download step or `--midi-chroma`. Notes on MIDI
   channel base + 4 (channel 5 with base channel 1) play the selected track at
   pitch, mapped through each model's pitch metadata (PTCH raw = 2 × (MIDI − 24),
   C3 = raw 72). With live record on, a played note records the trig and a pitch
   p-lock on its step; holding trig keys in grid record and playing a note
   p-locks pitch on every held step. Models without a note law, and the stock
-  machines, are triggered with their knobs untouched. Not offered on OS 1.63 or
-  DEV. A project file records the choice and its channel (`midi_chroma`), and
-  `--restore` of a project applies it. See
+  machines, are triggered with their knobs untouched. On X.14 it hooks the
+  add-on's real-time MIDI path; on OS 1.63 (prepared) the MIDI task, found by
+  signature, with the same behaviour (X.14 tested on hardware, 1.63 in the
+  emulator). Not offered
+  on DEV, which reads MIDI through its own queue. Each base's profile has to
+  qualify it. A project file records the choice and its channel (`midi_chroma`),
+  and `--restore` of a project applies it. See
   [MIDI chromatic note input](docs/MIDI-CHROMATIC.md).
+- A parity check across bases: every option a base profile has to qualify
+  (`--unmute-fix`, `--midi-chroma`, `--host-reorder`) is qualified on every
+  profiled base with its evidence, or refused there with the reason. See
+  [Supported bases](docs/BASES.md#features-per-base).
 - Pitch metadata: `panel.pitch` in the model manifest and `pitch` on pack models
   (knob, law, steps, base note, range, per-mode overrides), with `rawToNote` /
   `noteToRaw` in `engine/src/pitch.ts`.

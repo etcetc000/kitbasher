@@ -29,7 +29,7 @@ import { recoverProblems, ANCHORS } from './recover.js';
 import {qualifyModelRuntime} from './model_runtime.js';
 import { findUwMenu } from './uw_menu.js';
 import { findUnmute, unmuteValues } from './unmute.js';
-import { findChroma, NoChroma, type ChromaSite } from './midi_chroma.js';
+import { callees, chromaSites, discoverChroma, isTask, NoChroma, type Chroma } from './midi_chroma.js';
 
 export interface Finding { what: string; ok: boolean; detail: string }
 export interface Support { ok: boolean; why: string }
@@ -48,7 +48,7 @@ export interface Discovery {
     uwMenu: Support;
     /** the unmute-latency fix: the sequencer sites it replaces (engine/src/unmute.ts) */
     unmuteFix: Support;
-    /** --midi-chroma: the real-time MIDI path's hook sites, byte for byte (engine/src/midi_chroma.ts) */
+    /** --midi-chroma: X.14's real-time MIDI path or OS 1.63's MIDI task (engine/src/midi_chroma.ts) */
     midiChroma: Support };
   /** the patchable base; null with `refused` saying why */
   base: Base | null;
@@ -56,6 +56,12 @@ export interface Discovery {
   /** every discovered value, flat, for comparing with a profile's cache */
   values: Record<string, string>;
 }
+
+/** Every feature discovery reports on (Discovery['support']), each once; the compiler checks none is missing. */
+export const SUPPORT_KEYS = ['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover',
+  'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'uwMenu', 'unmuteFix', 'midiChroma'] as const satisfies readonly (keyof Discovery['support'])[];
+const allSupportKeys: Exclude<keyof Discovery['support'], (typeof SUPPORT_KEYS)[number]> extends never ? true : never = true;
+void allSupportKeys;
 
 class NotFound extends Error {}
 
@@ -72,7 +78,7 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
   const at1 = (k: string, v: number): string => (A[k] === undefined ? '' : num(A[k]) === v ? ' (the 1.63 address)' : ` (1.63 has it at ${A[k]}: moved)`);
   const fail = (kind: Discovery['kind'], why: string): Discovery => ({
     kind, lineage: kind !== 'unknown', findings, values, base: null, refused: why,
-    support: Object.fromEntries(['dynLabels', 'dsp1Drive', 'hostSend', 'descFlash', 'ramWindow', 'idFixes', 'piClean', 'dsp1Recover', 'cpuIndicator', 'ctrControlAll', 'modelRuntime', 'unmuteFix', 'midiChroma'].map((k) => [k, { ok: false, why }])) as Discovery['support'],
+    support: Object.fromEntries(SUPPORT_KEYS.map((k) => [k, { ok: false, why }])) as Discovery['support'],
   });
   /** exactly one match, else NotFound naming the signature and the count */
   const one = (name: string, imgs: CodeImage[], sig = S[name]): Hit => {
@@ -468,15 +474,27 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
     } catch (e) { if (!(e instanceof NoIndicator)) throw e; lcdWhy = e.message; note('LCD flush (--cpu-indicator)', false, lcdWhy); }
 
     // ---- 9d. MIDI chromatic note input (--midi-chroma, engine/src/midi_chroma.ts): X.14's real-time
-    //      MIDI path, every hook site and the OS code the lock path relies on, byte for byte
-    let midiChroma: ChromaSite | null = null;
+    //      MIDI path, every hook site and the OS code the lock path relies on, byte for byte; else
+    //      OS 1.63's MIDI task, every site and routine by signature
+    let midiChroma: Chroma | null = null;
     let chromaWhy = '';
     try {
-      midiChroma = findChroma(images);
-      note('MIDI chromatic input (--midi-chroma)', true, `the parser's base-range test at ${h(midiChroma.parser.site)}, the real-time note-on call at ` +
-           `${h(midiChroma.consumer.site)}, the live-record call at ${h(midiChroma.recSite.site)} and the UI idle call's operand at ${h(midiChroma.idle.site)}, ` +
-           `with ${Object.keys(midiChroma.anchors).length} anchors in the OS, byte for byte`);
-      val('midi_chroma.sites', [midiChroma.parser.site, midiChroma.consumer.site, midiChroma.recSite.site, midiChroma.idle.site]);
+      midiChroma = discoverChroma(images, S);
+      if (isTask(midiChroma)) {
+        const C = midiChroma;
+        note('MIDI chromatic input (--midi-chroma)', true, `OS 1.63's MIDI task: its channel test at ${h(C.filter.site)}${at1('midi_task_filter', C.filter.site)} ` +
+             `(queue ${h(C.midiQueue)}, filled by the UART parser ${h(C.parser)}), the note-on handler ${h(C.noteOn)}${at1('note_on', C.noteOn)} and CC handler ` +
+             `${h(C.ccHandler)} from its dispatch table ${h(C.table)}, the live-record call at ${h(C.recSite.site)} and the UI loop's queue-count call's ` +
+             `operand at ${h(C.idle.site)}; the recorder, lock writer, popup and grid state from the OS's own paths, by signature`);
+        val('midi_chroma.sites', chromaSites(C));
+        val('midi_chroma.calls', callees(C));
+        val('midi_chroma.data', [C.baseCh, C.selTrack, C.machineIds, C.kitParams, C.livePattern, C.trigHi, C.uiQueue, C.uiPattern, C.gridMode, C.held, C.knobTouched]);
+      } else {
+        note('MIDI chromatic input (--midi-chroma)', true, `the parser's base-range test at ${h(midiChroma.parser.site)}, the real-time note-on call at ` +
+             `${h(midiChroma.consumer.site)}, the live-record call at ${h(midiChroma.recSite.site)} and the UI idle call's operand at ${h(midiChroma.idle.site)}, ` +
+             `with ${Object.keys(midiChroma.anchors).length} anchors in the OS, byte for byte`);
+        val('midi_chroma.sites', chromaSites(midiChroma));
+      }
     } catch (e) { if (!(e instanceof NoChroma)) throw e; chromaWhy = e.message; note('MIDI chromatic input (--midi-chroma)', false, chromaWhy); }
 
     // ---- 10. descriptors in flash: the OS reads its own container through the flash alias
@@ -626,7 +644,9 @@ export async function discover(fw: Firmware, lin: LineageFile, label: { id: stri
       ctrControlAll: caBoth && caLoop.length === 1
         ? { ok: true, why: `discovered: control-all masks at ${h(caBoth.kind.site)}, ${h(caBoth.encoder.site)} and the per-track skip at ${h(caLoop[0].site)}` }
         : { ok: false, why: `control-all gates: ${gateLine(caGates)}; per-track skip: ${caLoop.length} candidates (one needed)` },
-      midiChroma: midiChroma ? { ok: true, why: `discovered: X.14's real-time MIDI path (parser ${h(midiChroma.parser.site)}, note-on call ${h(midiChroma.consumer.site)}), byte for byte` }
+      midiChroma: midiChroma && isTask(midiChroma)
+        ? { ok: true, why: `discovered: OS 1.63's MIDI task (channel test ${h(midiChroma.filter.site)}, note-on ${h(midiChroma.noteOn)}, CC ${h(midiChroma.ccHandler)}), by signature` }
+        : midiChroma ? { ok: true, why: `discovered: X.14's real-time MIDI path (parser ${h(midiChroma.parser.site)}, note-on call ${h(midiChroma.consumer.site)}), byte for byte` }
         : { ok: false, why: chromaWhy },
     };
     base.support = support;
