@@ -36,8 +36,8 @@ function image(descs: { id: number; name: string; inFlash?: boolean }[]): Uint8A
 }
 
 test('machines from the descriptor table: RAM and flash descriptors, each checked against its own ID', () => {
-  const f = image([{ id: 4, name: 'VADBD' }, { id: 175, name: 'OSCPW', inFlash: true }, { id: 9, name: 'NDSQ ' }]);
-  assert.deepEqual([...machinesFromDescriptors(f, DT)!], [[4, 'VADBD'], [175, 'OSCPW'], [9, 'NDSQ ']]);
+  const f = image([{ id: 4, name: 'VADBD' }, { id: 175, name: 'OSCPW', inFlash: true }, { id: 9, name: 'XYZQ ' }]);
+  assert.deepEqual([...machinesFromDescriptors(f, DT)!], [[4, 'VADBD'], [175, 'OSCPW'], [9, 'XYZQ ']]);
   // a descriptor whose ID byte disagrees with the table slot is not taken
   const g = image([{ id: 4, name: 'VADBD' }]);
   g[0x9000 + 4] = 5;
@@ -46,11 +46,11 @@ test('machines from the descriptor table: RAM and flash descriptors, each checke
 });
 
 test('an image without a layout table: the catalog\'s models on their IDs, the rest reported', () => {
-  const f = image([{ id: 4, name: 'VADBD' }, { id: 175, name: 'OSCPW' }, { id: 9, name: 'NDSQ ' }]);
+  const f = image([{ id: 4, name: 'VADBD' }, { id: 175, name: 'OSCPW' }, { id: 9, name: 'XYZQ ' }]);
   const r = recoverSession({ flash: f, osEnd: 0xb000 } as unknown as Firmware, MODELS, DT)!;
   assert.equal(r.how, 'descriptors');
-  assert.deepEqual(Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id])), { 'VAD/BD': 4, 'OSC/PW': 175, [`${UNKNOWN_KEY}NDSQ@9`]: 9 });
-  assert.deepEqual(r.unknown, [{ id: 9, name: 'NDSQ' }]);
+  assert.deepEqual(Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id])), { 'VAD/BD': 4, 'OSC/PW': 175, [`${UNKNOWN_KEY}XYZQ@9`]: 9 });
+  assert.deepEqual(r.unknown, [{ id: 9, name: 'XYZQ' }]);
   assert.equal(r.layout.base, '');                                           // set when the user loads the OS to patch
   for (const m of Object.values(r.layout.machines)) assert.ok(r.layout.categories.includes(m.category));
 });
@@ -67,11 +67,11 @@ test('an image with its layout table: that layout, with the UW answer', () => {
 
 test('former names (before the 2026-10 rename) are recognised; unknown machines keep their IDs reserved', () => {
   const models = [model('VAD/BD', 'VADBD'), model('OSC/PW', 'OSCPW'), model('FMS/4O', 'FMS4O')];
-  const f = image([{ id: 4, name: 'AN BD' }, { id: 175, name: 'MMPLS' }, { id: 40, name: 'FM4OP' }, { id: 9, name: 'NDSQ ' }]);
+  const f = image([{ id: 4, name: 'AN BD' }, { id: 175, name: 'MMPLS' }, { id: 40, name: 'FM4OP' }, { id: 9, name: 'XYZQ ' }]);
   const r = recoverSession({ flash: f, osEnd: 0xb000 } as unknown as Firmware, models, DT)!;
   const byKey = Object.fromEntries(Object.entries(r.layout.machines).map(([k, v]) => [k, v.id]));
-  assert.deepEqual(byKey, { 'VAD/BD': 4, 'OSC/PW': 175, 'FMS/4O': 40, [`${UNKNOWN_KEY}NDSQ@9`]: 9 });
-  assert.deepEqual(r.unknown, [{ id: 9, name: 'NDSQ' }]);
+  assert.deepEqual(byKey, { 'VAD/BD': 4, 'OSC/PW': 175, 'FMS/4O': 40, [`${UNKNOWN_KEY}XYZQ@9`]: 9 });
+  assert.deepEqual(r.unknown, [{ id: 9, name: 'XYZQ' }]);
   // the session still encodes into the OS's layout table (orders and keys in range)
   assert.doesNotThrow(() => encodeLayout(r.layout));
 });
