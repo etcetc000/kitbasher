@@ -48,6 +48,9 @@ All notable changes to Kitbasher are recorded here. The format follows
 - PHYKS (1.0.0) reads its string through a fractional, interpolated delay, so every
   note is in tune to a tenth of a cent instead of up to 40 cents out at
   the top; it costs about 8 cycles a sample.
+- NZEPL takes 2,203 fewer DSP2 words (22,672 → 20,469) and sounds exactly the
+  same: tables that repeated a column or a period are stored once, a few short
+  tables are computed instead, and one table that nothing read is no longer packed.
 
 ### Added
 
@@ -164,6 +167,11 @@ All notable changes to Kitbasher are recorded here. The format follows
 
 ### Fixed
 
+- NZEPL's WalkingFilomena (WALK) read past the end of its period table when BND
+  was near the top: its walkers drift above BND, and one could pass the table's
+  last entry within half a second at BND 127. The index now stops at the last
+  entry. Output changes only where that happened, and WALK costs about 0.6
+  cycles a sample more.
 - VADSY could stop DSP2 on its first trigger, and VADPC dropped samples, after the
   pitch change (stale hard-coded targets). Model assembly now names every branch,
   call and loop end with a label, and the checks refuse an offset target.
