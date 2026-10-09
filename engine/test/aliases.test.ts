@@ -55,7 +55,7 @@ test('key selections and exclusions accept former keys', () => {
   const ex = select(RENAMED, { exclude: ['AN/BD', 'mm_saw'] });
   assert.deepEqual(ex.fams.flatMap((f) => f.models.map((m) => m.key)), ['FMS/2O']);
   assert.equal(resolveKey(picked.aliases, 'MM/4'), 'OSC/SW');
-  assert.equal(resolveKey(picked.aliases, 'DF/0'), 'DF/0');
+  assert.equal(resolveKey(picked.aliases, 'XX/0'), 'XX/0');
 });
 
 test('conflicting aliases are rejected', () => {
