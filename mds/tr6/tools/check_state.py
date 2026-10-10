@@ -6,6 +6,7 @@ No firmware or MIDI is used. Generated artifacts stay in the ignored build tree.
 import argparse
 import importlib
 import json
+import hashlib
 import math
 from pathlib import Path
 import struct
@@ -48,7 +49,10 @@ def main():
     p.add_argument('--metal-interpolated-gate',action='store_true')
     p.add_argument('--metal-render-stride',type=int,choices=(1,2),default=1)
     p.add_argument('--metal-register-mix',action='store_true')
+    p.add_argument('--metal-resident-output',action='store_true')
     args=p.parse_args()
+    if args.metal_resident_output and not args.metal_register_mix:
+        p.error('Resident output requires register mixing')
     if args.metal_register_mix and not (args.metal_fused_mix and args.metal_bounded_loops):
         p.error('Register mixing requires fused mixing and bounded loops')
     if args.metal_rounded_dc and not args.metal_lean_math:
@@ -97,7 +101,9 @@ def main():
     if args.metal_bypass_noise_dc: suffix+='-no-noise-dc'
     if args.metal_interpolated_gate: suffix+='-gate'
     if args.metal_register_mix: suffix+='-register-mix'
+    if args.metal_resident_output: suffix+='-resident-output'
     if args.metal_render_stride!=1: suffix+=f'-stride{args.metal_render_stride}'
+    if args.metal_resident_output: suffix='-resident-output-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -113,7 +119,7 @@ def main():
         elif name in ('ch','oh','cy'):
             table_args=[args.metal_render_stride] if args.metal_render_stride!=1 else []
             controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble),*table_args]).stdout)
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate,args.metal_render_stride,register_mix=args.metal_register_mix)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate,args.metal_render_stride,register_mix=args.metal_register_mix,resident_output=args.metal_resident_output)
             imports['mds_track']=(2,6)
             if args.metal_block_oscillators: imports['mds_scratch_x']=(3,7)
             if args.metal_block_noise: imports['mds_scratch_y']=(4,8)
@@ -221,6 +227,7 @@ def main():
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
                 register_mix=args.metal_register_mix,
+                resident_output=args.metal_resident_output,
                 metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise,saturation='linear' if args.metal_linear_saturation else 'cubic' if args.metal_cubic_saturation else 'tanh',fused_mix=args.metal_fused_mix,bounded_loops=args.metal_bounded_loops),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
