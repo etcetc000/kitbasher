@@ -90,13 +90,13 @@ test('a layout table that lists two machines on one ID: the machine the image ha
 
 test('the layout table: machines not in the catalog are reported (and stay reserved); a bad UW byte is refused', () => {
   const lay: Layout = { format: LAYOUT_FORMAT, base: 'x14', categories: ['KIK'],
-    machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 }, 'ND/SQ': { id: 31, category: 'KIK', order: 1 } }, uw: true };
+    machines: { 'VAD/BD': { id: 4, category: 'KIK', order: 0 }, 'ZZ/QQ': { id: 58, category: 'KIK', order: 1 } }, uw: true };
   const f = image([{ id: 4, name: 'VADBD' }]);
   const t = encodeLayout(lay);
   f.set(t, 0xb000);
   const r = recoverSession({ flash: f, osEnd: 0xb000 + t.length } as unknown as Firmware, MODELS, DT)!;
-  assert.deepEqual(r.unknown, [{ id: 31, name: 'ND/SQ' }]);
-  assert.equal(r.layout.machines['ND/SQ'].id, 31);
+  assert.deepEqual(r.unknown, [{ id: 58, name: 'ZZ/QQ' }]);
+  assert.equal(r.layout.machines['ZZ/QQ'].id, 58);
   const bad = t.slice();
   bad[8 + 3] = 7;                                                  // the UW byte after 'x14'
   assert.throws(() => decodeLayout(fixCrc(bad)), /UW answer byte 7/);
