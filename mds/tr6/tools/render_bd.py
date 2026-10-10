@@ -49,6 +49,9 @@ def main():
     ap.add_argument('--lean-mix',action='store_true',help='Approximation: share one body/click low-pass; requires recursive body and LCG')
     ap.add_argument('--bounded-activity',action='store_true',help='Exact: omit lifetime checks while the block envelope stays positive; requires lean mix')
     ap.add_argument('--scheduled-mix',action='store_true',help='Exact: schedule mixer/DC work and cache constants; requires lean mix and quadratic or sequential saturation')
+    ap.add_argument('--rounded-dc',action='store_true',help='Approximation: rounded DC feedback and a 64e-6 silence threshold; requires scheduled mix')
+    ap.add_argument('--linear-base',action='store_true',help='Approximation: bypass first saturation stage; requires scheduled mix')
+    ap.add_argument('--linear-base-gain',type=float,default=1.0,help='Explicit fixed gain for the linear base experiment, in (0,1]')
     ap.add_argument('--out',type=Path)
     args=ap.parse_args()
     if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
@@ -58,6 +61,8 @@ def main():
     if args.quadratic_saturation and (not args.omit_impulse or args.sequential_tanh): ap.error('Quadratic saturation requires omitted impulse and excludes sequential tanh')
     if args.recursive_body and (not args.omit_impulse or args.control_rate!=32): ap.error('Recursive body requires omitted impulse and control rate 32')
     if args.lean_mix and not (args.recursive_body and args.lcg_noise): ap.error('Lean mix requires recursive body and LCG')
+    if not math.isfinite(args.linear_base_gain) or not 0<args.linear_base_gain<=1 or (args.linear_base_gain!=1 and not args.linear_base): ap.error('Linear base gain must be in (0,1] and requires linear base')
+    if (args.rounded_dc or args.linear_base) and not args.scheduled_mix: ap.error('Rounded DC and linear base require scheduled mix')
     if args.scheduled_mix and not (args.lean_mix and (args.quadratic_saturation or args.sequential_tanh)): ap.error('Scheduled mix requires lean mix and quadratic or sequential saturation')
     if args.bounded_activity and not args.lean_mix: ap.error('Bounded activity requires lean mix')
     if args.knobs is not None:
@@ -77,9 +82,12 @@ def main():
     if args.lean_mix: suffix+='-lean-mix'
     if args.bounded_activity: suffix+='-bounded-activity'
     if args.scheduled_mix: suffix+='-scheduled-mix'
+    if args.rounded_dc: suffix+='-rounded-dc'
+    if args.linear_base: suffix+='-linear-base'
+    if args.linear_base_gain!=1: suffix+='-gain'+str(args.linear_base_gain)
     if args.knobs is not None: suffix+='-k'+'-'.join(str(v) for v in args.knobs)
     out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix,args.bounded_activity,args.scheduled_mix); (out/'bd.asm').write_text(source)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix,args.bounded_activity,args.scheduled_mix,args.rounded_dc,args.linear_base,args.linear_base_gain); (out/'bd.asm').write_text(source)
     states=state_layout(args.control_rate)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
@@ -125,6 +133,7 @@ def main():
         if args.quadratic_saturation: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1,1]
         if args.recursive_body: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1,int(args.quadratic_saturation),1]
         if args.lean_mix: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1]
+        if args.rounded_dc or args.linear_base: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1,int(args.linear_base),int(args.rounded_dc),args.linear_base_gain]
         reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw',*model_args])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321']
@@ -178,6 +187,8 @@ def main():
         if args.quadratic_saturation: model['saturation']='clipped-quadratic'
         if args.recursive_body: model['oscillator']='magic-circle-block-pitch'
         if args.lean_mix: model.update(noise_filter='bypassed',mix_filter='shared-body-lowpass')
+        if args.rounded_dc: model.update(output_filter='rounded-dc',silence_threshold=64.e-6)
+        if args.linear_base: model.update(base_saturation='linear',base_saturation_gain=args.linear_base_gain)
         checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
         metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
                      resident_state=args.resident_state,bounded_activity=args.bounded_activity,scheduled_mix=args.scheduled_mix,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,

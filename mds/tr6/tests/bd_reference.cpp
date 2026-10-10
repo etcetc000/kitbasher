@@ -12,12 +12,18 @@
 namespace SynthDrums606 {
 static bool bdQuadratic=false;
 static bool bdRecursive=false;
+static bool bdLinearBase=false;
+static float bdLinearBaseGain=1;
 static float bdBaseClipPeak=0;
 inline float quadraticSoft(float x) {
     x=clampf(x,-2.f,2.f);
     return x*(1.f-.25f*std::fabs(x));
 }
 inline float bdSoft(float x) {
+    if(bdLinearBase) {
+        bdBaseClipPeak=std::max(bdBaseClipPeak,std::fabs(x));
+        return x*bdLinearBaseGain;
+    }
     if(!bdQuadratic) return std::tanh(x);
     bdBaseClipPeak=std::max(bdBaseClipPeak,std::fabs(x));
     return quadraticSoft(x);
@@ -105,7 +111,7 @@ struct ControlSteps {
 };
 
 int main(int argc, char** argv) {
-    if (argc != 10 && argc != 12 && argc != 13 && argc != 14 && argc != 15 && argc != 16 && argc != 17 && argc != 18 && argc != 19) return 2;
+    if (argc != 10 && (argc < 12 || argc > 22)) return 2;
     float trans=std::atoi(argv[1])/127.0f, decay=std::atoi(argv[2])/127.0f;
     float tune=-12+24*std::atoi(argv[3])/127.0f, heat=std::atoi(argv[4])/127.0f;
     bool xl=std::atoi(argv[5])!=0;
@@ -119,13 +125,20 @@ int main(int argc, char** argv) {
     const bool omitImpulse=argc>=16 && std::atoi(argv[15])!=0;
     const bool quadraticSaturation=argc>=17 && std::atoi(argv[16])!=0;
     const bool recursiveBody=argc>=18 && std::atoi(argv[17])!=0;
-    const bool leanMix=argc==19 && std::atoi(argv[18])!=0;
+    const bool leanMix=argc>=19 && std::atoi(argv[18])!=0;
+    const bool linearBase=argc>=20 && std::atoi(argv[19])!=0;
+    const bool roundedDC=argc>=21 && std::atoi(argv[20])!=0;
+    const float linearBaseGain=argc>=22 ? std::strtof(argv[21],nullptr) : 1;
     if(simpleImpulse && omitImpulse) return 2;
     if(quadraticSaturation && !omitImpulse) return 2;
     if(recursiveBody && (!omitImpulse || controlRate!=32)) return 2;
     if(leanMix && (!recursiveBody || !lcgNoise)) return 2;
+    if((linearBase || roundedDC) && !leanMix) return 2;
+    if(!std::isfinite(linearBaseGain) || linearBaseGain<=0 || linearBaseGain>1 || (!linearBase && linearBaseGain!=1)) return 2;
     SynthDrums606::bdQuadratic=quadraticSaturation;
     SynthDrums606::bdRecursive=recursiveBody;
+    SynthDrums606::bdLinearBase=linearBase;
+    SynthDrums606::bdLinearBaseGain=linearBaseGain;
     ControlSteps controls;
     const uint32_t seed=requestedSeed ? requestedSeed : 0x606606u;
     uint32_t noiseState=seed&0xffffffu;
@@ -169,7 +182,7 @@ int main(int argc, char** argv) {
             if(controlRate!=1) controls.advance(voice);
             // Preserve BassDrumVoice's activity/tail policy with the changed noise.
             if(voice.bassDrum_.isActive()) voice.silenceFrames_=0;
-            else if(std::fabs(value)<1.e-5f) {
+            else if(std::fabs(value)<(roundedDC ? 64.e-6f : 1.e-5f)) {
                 if(++voice.silenceFrames_>=32) voice.active_=false;
             } else voice.silenceFrames_=0;
             if(controlRate!=1) controls.finish();
@@ -188,7 +201,7 @@ int main(int argc, char** argv) {
               << (recursiveBody ? " initial_phase=" : " phase=") << voice.bassDrum_.body_.phase_
               << " amplitude=" << voice.bassDrum_.body_.amp_
               << " noise_draws=" << noiseDraws << '\n';
-    if(quadraticSaturation) std::cout << "base_clip_input_peak=" << SynthDrums606::bdBaseClipPeak << '\n';
+    if(quadraticSaturation || linearBase) std::cout << "base_clip_input_peak=" << SynthDrums606::bdBaseClipPeak << '\n';
     if(recursiveBody) std::cout << "oscillator_x=" << voice.bassDrum_.body_.oscX
                                << " oscillator_y=" << voice.bassDrum_.body_.oscY
                                << " oscillator_coefficient=" << voice.bassDrum_.body_.oscCoefficient << '\n';

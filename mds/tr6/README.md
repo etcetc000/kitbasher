@@ -47,6 +47,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Arithmetic saturation, recursive kick body and shared-filter tradeoffs](audit/BD-ARITHMETIC.md)
 - [Exact kick activity/tail specialization and boundary checks](audit/BD-ACTIVITY.md)
 - [Exact kick mixer/DC scheduling and two-loop activity dispatch](audit/BD-MIX-SCHEDULE.md)
+- [Rounded kick DC feedback, linear-base experiments and perceptual tradeoffs](audit/BD-OUTPUT.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
