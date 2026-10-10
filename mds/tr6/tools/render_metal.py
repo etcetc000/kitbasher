@@ -28,28 +28,38 @@ def main():
     p.add_argument('--lean-math',action='store_true',help='Register-based kernels and rounded Q23 envelopes; requires three partials and no wobble')
     p.add_argument('--resonators',action='store_true',help='Recursive sine oscillators; requires lean math')
     p.add_argument('--lcg-noise',action='store_true',help='24-bit LCG noise model; requires lean math')
+    p.add_argument('--block-oscillators',action='store_true',help='Keep recursive oscillator states in registers through each block')
+    p.add_argument('--resident-state',action='store_true',help='Keep hot state in spare registers within each render call')
+    p.add_argument('--end-boundaries',action='store_true',help='Render one complete integer-decay case for every final-block length 1..32')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
+    if a.block_oscillators and not a.resonators: p.error('--block-oscillators requires --resonators')
+    if a.resident_state and not a.block_oscillators: p.error('--resident-state requires --block-oscillators')
+    if a.end_boundaries and (a.case or a.blocks): p.error('--end-boundaries requires complete renders and cannot be combined with --case/--blocks')
     variant=a.partial_count!=47 or a.no_wobble
     suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
     if a.lean_math: suffix+='-lean'
     if a.resonators: suffix+='-resonators'
     if a.lcg_noise: suffix+='-lcg'
+    if a.block_oscillators: suffix+='-blockosc'
+    if a.resident_state: suffix+='-resident'
+    if a.end_boundaries: suffix+='-endings'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
     if a.lcg_noise: model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],1]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
-    package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,
-                                   {'mds_sine':(1,1),'mds_track':(2,6)})
+    imports={'mds_sine':(1,1),'mds_track':(2,6)}
+    if a.block_oscillators: imports['mds_scratch_x']=(3,7)
+    package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,imports)
     (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
     image=mds_format().parse_package(package); base=0x110023; extbase=0x160000; ext=extbase+a.track*1536
     code=[int.from_bytes(image['program'][i:i+3],'big') for i in range(0,len(image['program']),3)]
     for i in image['relocations']: code[i]+=base
-    for i in image['imports']: code[i.patch_word]+={1:0x148000,6:extbase}[i.symbol]
+    for i in image['imports']: code[i.patch_word]+={1:0x148000,6:extbase,7:0x200}[i.symbol]
     (out/'code.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
     # The existing instruction host has no register-set command. This test-only
     # trampoline supplies INIT's R1 track number without changing the machine.
@@ -78,6 +88,14 @@ def main():
         cases.append(('block_boundary',[boundary,64],0,0))
     elif a.case=='block_boundary':
         raise ValueError('No integer decay has a block-aligned lifetime')
+    if a.end_boundaries:
+        selected={}
+        for knob,row in enumerate(controls['decay']):
+            length=(row['duration']-1)%32+1
+            if length not in selected or row['duration']<controls['decay'][selected[length]]['duration']:
+                selected[length]=knob
+        if set(selected)!=set(range(1,33)): raise ValueError('Integer decay controls do not cover all final-block lengths')
+        cases=[(f'end_{length:02d}',[selected[length],64],0,0) for length in range(1,33)]
     report=[]
     for name,knobs,repeat,delay in cases:
         if a.case and name!=a.case: continue
@@ -101,6 +119,14 @@ def main():
         lines+=['dump X 800 40','dump Y 800 40','dump Y ff 1','dump Y 120 1',
                 'dump X 7ff 1','dump X 840 1','dump Y 7ff 1','dump Y 840 1',f'dump X {extbase:x} 6000',
                 f'dump X {extbase-1:x} 1',f'dump X {extbase+16*1536:x} 1']
+        if a.block_oscillators:
+            # Poison scratch before every render to expose reads from prior calls.
+            poisoned=[]
+            for line in lines:
+                if line==f'call {base+image["execute_word"]:x}':
+                    poisoned += ['set X 1ff 123456','set X 220 654321',*[f'set X {0x200+i:x} 5a5a5a' for i in range(32)]]
+                poisoned.append(line)
+            lines=poisoned+['dump X 1ff 1','dump X 220 1']
         script=out/(name+'.script'); script.write_text('\n'.join(lines)+'\n')
         result=run([Path(a.host).resolve(),script.name,name+'.raw'],cwd=out,timeout=600)
         (out/(name+'.host.log')).write_text(result.stdout+'\n'+result.stderr)
@@ -117,17 +143,18 @@ def main():
         checks=dict(parameters=dumps[1]==expected_y,unused_local=dumps[0][len(STATE):]==[0x5a5a5a]*(64-len(STATE)),
                     guards=dumps[2:8]==[[0x123456],[0x654321]]*3,external_base=native['ext']==ext,
                     external_guards=all(v==0x5a5a5a for v in other_ext),
-                    external_outer_guards=dumps[9:]==[[0x123456],[0x654321]],
+                    external_outer_guards=dumps[9:11]==[[0x123456],[0x654321]],
                     active=native['active']==ref['active'],frame=native['frame']==ref['frame'],duration=native['duration']==ref['duration'],
                     buffer_written=0x5a5a5a not in native_i,pretrigger=not delay or not any(native_i[:delay]),
                     idle=bool(ref['active']) or not any(native_i[-32:]),tanh_range=native['tanh_clamps']==0)
         for n in ('phase','wobble','noise'): checks[n+'_rng']=(native[n+'hi']<<24|native[n+'lo'])==ref[n+'_rng']
         if a.lcg_noise: checks['noise_rng']=native['noiselo']==ref['noise_rng']
+        if a.block_oscillators: checks['scratch_guards']=dumps[11:]==[[0x123456],[0x654321]]
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32'),
-                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,
+                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),

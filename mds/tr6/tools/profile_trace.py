@@ -48,6 +48,7 @@ def main():
     p.add_argument('--disassembler', required=True)
     p.add_argument('--interlocks', type=Path, required=True, help='External lab interlock.py')
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--render-block',type=int,action='append',default=[],help='Also trace this zero-based render block (repeatable)')
     a = p.parse_args()
     # A stale modulo mode invalidates both state and timing comparisons.
     import os
@@ -97,6 +98,9 @@ def main():
     # Sample lifecycle boundaries and the observed raw-cycle extremes. This is
     # deliberately not described as an exhaustive cold-cache worst-case search.
     selected = set(renders[:3] + renders[-1:])
+    if any(index<0 or index>=len(renders) for index in a.render_block):
+        raise ValueError('Requested render block is outside the replay')
+    selected.update(renders[index] for index in a.render_block)
     selected.update((max(renders, key=lambda i: cycles[i]), min(renders, key=lambda i: cycles[i])))
     first_renders=set(); pending=False
     for i,pc in enumerate(calls):
@@ -187,6 +191,7 @@ def main():
                   ordinary_vs_tracer_audio_bitexact=True, ordinary_vs_tracer_cycles_equal=True,
                   ordinary_vs_tracer_final_dumps_equal=True,
                   cold_cache_measured=False, rows=rows,
+                  requested_render_blocks=a.render_block,
                   limitations=['Sampled calls, not exhaustive control/placement worst case.',
                                'Each selected call starts with an empty modeled instruction cache.',
                                'Wait-state values 1/2/3 are sensitivity inputs, not X.20 calibration.',

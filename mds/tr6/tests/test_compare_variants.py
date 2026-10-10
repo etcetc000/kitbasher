@@ -50,5 +50,18 @@ class ComparisonTests(unittest.TestCase):
             self.assertIsNone(row['delta_snr_db'])
             self.assertGreater(row['pretrim_peak_delta'],0)
 
+    def test_exact_audio_does_not_hide_changed_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            b,c=Path(tmp)/'base',Path(tmp)/'candidate'
+            for directory in (b,c):
+                self.fixture(directory,'default')
+                with (directory/'default.script').open('a') as stream: stream.write('dump X 800 2\n')
+                (directory/'default.host.log').write_text('dump 000001 000002\n')
+            self.assertTrue(compare(b,c,require_bitexact=True)[0]['persistent_state_equal'])
+            (c/'default.host.log').write_text('dump 000001 000003\n')
+            with self.assertRaisesRegex(ValueError,'persistent state'): compare(b,c,require_bitexact=True)
+            (c/'default.host.log').write_text('dump 000001\n')
+            with self.assertRaisesRegex(ValueError,'Truncated'): compare(b,c,require_bitexact=True)
+
 
 if __name__=='__main__': unittest.main()

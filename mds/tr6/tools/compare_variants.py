@@ -9,6 +9,7 @@ import html
 import json
 import math
 from pathlib import Path
+import re
 import struct
 
 
@@ -30,7 +31,22 @@ def trigger_schedule(directory,name):
     return events,frames
 
 
-def compare(baseline,candidate,extras=(),allow_model_change=False):
+def final_dumps(directory,name):
+    requests=[]
+    for line in (directory/f'{name}.script').read_text().splitlines():
+        if line.startswith('dump '):
+            _,space,address,count=line.split()
+            requests.append((space.upper(),int(address,16),int(count,16)))
+    values=[tuple(int(word,16) for word in row.split()) for row in
+            re.findall(r'^dump (.+)$',(directory/f'{name}.host.log').read_text(),re.M)]
+    if not requests or len(requests)!=len(values) or len(set(requests))!=len(requests):
+        raise ValueError('Missing, duplicated or incomplete final state dumps')
+    if any(key[2]!=len(value) for key,value in zip(requests,values)):
+        raise ValueError('Truncated final state dump')
+    return dict(zip(requests,values))
+
+
+def compare(baseline,candidate,extras=(),allow_model_change=False,require_bitexact=False):
     before={}
     for directory in (baseline,*extras):
         for r in json.loads((directory/'comparison.json').read_text()):
@@ -59,6 +75,12 @@ def compare(baseline,candidate,extras=(),allow_model_change=False):
             if not path.is_file(): raise ValueError(f'Missing audition WAV: {path}')
         bd=bp.read_bytes(); cd=cp.read_bytes()
         if len(bd)!=len(cd) or len(bd)!=c['samples']*4: raise ValueError('Incomplete render')
+        state_equal=None
+        if require_bitexact:
+            if bd!=cd: raise ValueError(f'{name}: native audio differs')
+            old=final_dumps(directory,name); new=final_dumps(candidate,name)
+            state_equal=all(key in new and value==new[key] for key,value in old.items())
+            if not state_equal: raise ValueError(f'{name}: persistent state or guards differ')
         x=struct.unpack('<'+'i'*c['samples'],bd); y=struct.unpack('<'+'i'*c['samples'],cd)
         errors=[(v-u)/(8388608*gain) for u,v in zip(x,y)]
         mse=sum(e*e for e in errors)/len(errors)
@@ -67,6 +89,7 @@ def compare(baseline,candidate,extras=(),allow_model_change=False):
         rows.append(dict(case=name,baseline_directory=str(directory),samples=c['samples'],knobs=c['knobs'],output_gain=gain,
                          trigger_samples=schedule,
                          desktop_reference_equal=reference_equal,
+                         native_audio_bitexact=bd==cd,persistent_state_equal=state_equal,
                          baseline_reference_model=model(b),candidate_reference_model=model(c),
                          pretrim_peak_delta=max(abs(e) for e in errors),pretrim_rms_delta=math.sqrt(mse),
                          delta_snr_db=10*math.log10(energy/max(mse,1e-30)) if energy else None,
@@ -83,11 +106,13 @@ def main():
     p.add_argument('baseline',type=Path); p.add_argument('candidate',type=Path)
     p.add_argument('--baseline-extra',type=Path,action='append',default=[],help='Additional disjoint baseline cases, e.g. block-boundary renders')
     p.add_argument('--allow-model-change',action='store_true',help='Compare intentionally different synthesis models; explicitly report differing desktop streams')
+    p.add_argument('--require-bitexact',action='store_true',help='Require identical native audio and all baseline final state/guard dumps')
     a=p.parse_args(); baseline=a.baseline.resolve(); candidate=a.candidate.resolve()
-    rows=compare(baseline,candidate,[path.resolve() for path in a.baseline_extra],a.allow_model_change)
+    rows=compare(baseline,candidate,[path.resolve() for path in a.baseline_extra],a.allow_model_change,a.require_bitexact)
     if not rows: raise ValueError('No candidate cases')
     result=dict(baseline=str(baseline),candidate=str(candidate),rows=rows,
                 model_change_allowed=a.allow_model_change,
+                bitexact_required=a.require_bitexact,
                 listening_reviewed=False,cold_cache_measured=False)
     (candidate/'baseline-comparison.json').write_text(json.dumps(result,indent=2)+'\n')
     import os
@@ -102,7 +127,7 @@ def main():
             '<p>'+('Different synthesis models: numerical pass refers to the candidate model, not original-source equivalence.' if not r['desktop_reference_equal'] else 'Same desktop reference stream.')+'</p>',
             f'<small>Knobs: {r["knobs"]}; peak difference before output trim: {r["pretrim_peak_delta"]:.8f}</small>',
             f'<p>RMS level change: {r["rms_level_delta_db"]:+.2f} dB. Use the lab perceptual report to rank fidelity tradeoffs.</p>',
-            f'<p>Full-path native baseline</p><audio controls preload="none" src="{link(Path(r["baseline_directory"])/(name+".wav"))}"></audio>',
+            f'<p>Native baseline</p><audio controls preload="none" src="{link(Path(r["baseline_directory"])/(name+".wav"))}"></audio>',
             f'<p>Candidate</p><audio controls preload="none" src="{link(candidate/(name+".wav"))}"></audio></section>']
     (candidate/'compare.html').write_text('\n'.join(page)+'\n',encoding='utf-8')
     print(json.dumps(dict(cases=len(rows),worst_pretrim_peak_delta=max(r['pretrim_peak_delta'] for r in rows),

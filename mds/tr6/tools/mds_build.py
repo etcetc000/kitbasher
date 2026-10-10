@@ -86,11 +86,15 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--track-memory', action='store_true',
                         help='Resolve mds_track as MDS track external memory (symbol 6)')
+    parser.add_argument('--scratch-x', action='store_true',
+                        help='Resolve mds_scratch_x as MDS shared X scratch (symbol 7)')
     args = parser.parse_args()
     document = json.loads(args.manifest.read_text())
     imports = {'mds_sine': (1, 1)}
     if args.track_memory:
         imports['mds_track'] = (2, 6)
+    if args.scratch_x:
+        imports['mds_scratch_x'] = (3, 7)
     package, report = assemble_package(args.source.read_text(), document, args.assembler, imports=imports)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / (args.source.stem + '.mds')).write_bytes(package)
