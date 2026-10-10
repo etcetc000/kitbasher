@@ -60,7 +60,7 @@ export interface X20RecipeFile {
     runtime: { abi: string; evidence: string };
     boot_loader: { about?: string; receiver: Hex; wiper: Hex; save: Hex; save_end: Hex; rdy: Hex };
   };
-  ids: { usable: number[]; not_usable: Record<string, string> };
+  ids: { usable: number[]; not_usable: Record<string, string>; forbidden?: [number, number][] };
   families: Record<string, number>;
   /** X.20 menu family by pack family ('*': the rest), and by model key prefix (wins over the pack's) */
   pack_menu?: Record<string, string>;
@@ -157,11 +157,19 @@ export function checkRecipe(r: X20Recipe): void {
   for (const id of r.usable) if (!Number.isInteger(id) || id < 0 || id >= r.dsp2.relocated.entries) bad(`ID ${id} is outside the dispatch tables`);
   for (const id of r.dsp2.pi.ids) if (r.usable.includes(id)) bad(`P-I ID ${id} is listed as usable`);
   // X.20's user-machine IDs: a built-in machine on one of them freezes the OS when it is assigned
-  for (const id of r.usable) if (id > 191) bad(`ID ${id} is in X.20's user-machine range (192 and up)`);
+  for (const id of r.usable) if (!idAllowedOnX20(id)) bad(`ID ${id} is one X.20 reserves (96..123 MIDI/control machines: silent; 192 and up user machines: freezes the OS)`);
+  for (const [lo, hi] of r.file.ids.forbidden ?? []) for (const id of r.usable) if (id >= lo && id <= hi) bad(`ID ${id} is in the recipe's forbidden range ${lo}..${hi}`);
   const B = r.dsp2.boot;
   if (B.saveEnd <= B.wiper) bad('the save area of the boot loader must follow its wiper');
   for (const [a, b] of r.dsp2.free) if (a < B.saveEnd && B.wiper < b) bad(`free region 0x${a.toString(16)}..0x${b.toString(16)} overlaps the boot loader (wiper and save area)`);
 }
+
+/**
+ * Machine IDs X.20 B can never give an added machine: 96..123 are MIDI/control (no-audio) machines to
+ * about 40 inline range tests in the OS (a model there plays nothing), and 192 and up belong to the user
+ * machines (a built-in machine on 192 or 193 freezes the OS when assigned).
+ */
+export const idAllowedOnX20 = (id: number): boolean => id >= 0 && id <= 191 && !(id >= 96 && id <= 123);
 
 /** The recipe whose OS file has this SHA-256, if any. */
 export function recipeFor(recipes: X20RecipeFile[], sha256: string): X20RecipeFile | null {

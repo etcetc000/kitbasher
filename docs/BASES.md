@@ -166,7 +166,8 @@ What a build changes (engine/src/x20.ts):
   the bank are refused), because the machines' code lives in that space.
 - **User machines (USR) keep working.** X.20 reserves machine IDs 194..209 for
   its 16 user-machine slots, and a built-in machine on 192 or 193 freezes the OS
-  when assigned, so added machines take IDs up to 191 only. The record table
+  when assigned, and it treats 96..123 as MIDI/control machines (a model there
+  plays nothing), so added machines never take 96..123 or anything above 191. The record table
   grows from 159 to 200 entries; X.20's user-machine install, remove and check
   routines reach that table and the menu through offsets from a base pointer, and
   the recipe patches them too (without that, every USR install fails with

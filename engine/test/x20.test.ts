@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseRecipe, recipeFor, type X20RecipeFile } from '../src/x20_recipe.js';
+import { idAllowedOnX20, parseRecipe, recipeFor, type X20RecipeFile } from '../src/x20_recipe.js';
 import { cacheOpsIn, dsp2BootLoader, isCode, siteBytes, stageCode, windowA, writeList, x20Map, evalExpr } from '../src/x20_cf.js';
 import { buildX20, trimX20, x20IsaGate } from '../src/x20.js';
 import { anchorMismatches, relocationAudit } from '../src/x20_audit.js';
@@ -22,7 +22,13 @@ test('x20 recipe: parses, and keeps every model off X.20\'s user-machine IDs (19
   assert.ok(R.usable.every((id) => id < 192));
   const f = file();
   f.ids.usable = [...f.ids.usable, 193];
-  assert.throws(() => parseRecipe(f), /user-machine range/);
+  assert.throws(() => parseRecipe(f), /reserves/);
+  const g = file();
+  g.ids.usable = [...g.ids.usable, 114];
+  assert.throws(() => parseRecipe(g), /reserves/);
+  assert.ok(R.usable.every(idAllowedOnX20));
+  for (const id of [96, 114, 115, 123, 192, 193, 209]) assert.equal(idAllowedOnX20(id), false);
+  for (const id of [95, 124, 191]) assert.equal(idAllowedOnX20(id), true);
 });
 
 test('x20 recipe: the USR install/remove/check routines and the E12B erase guard are patched', () => {
@@ -151,7 +157,7 @@ test('firmware: X.20 B builds the bundled catalog, deterministically, with every
   const b = await buildX20(syx, file(), packs, core, opt);
   assert.equal(await sha256(a.output), await sha256(b.output));
   assert.ok(a.report.gates.every((g) => g.ok));
-  assert.ok(a.report.machines.every((m) => m.id < 192));
+  assert.ok(a.report.machines.every((m) => idAllowedOnX20(m.id) && !(m.id >= 96 && m.id <= 123) && m.id <= 191), a.report.machines.map((m) => m.id).join(','));
   assert.equal(new Set(a.report.machines.map((m) => m.id)).size, a.report.machines.length);
   const noUw = await buildX20(syx, file(), packs, core, { ...opt, uw: false });
   assert.ok(noUw.report.machines.every((m) => m.id < 128));

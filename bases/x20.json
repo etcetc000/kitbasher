@@ -230,10 +230,20 @@
    175
   ],
   "not_usable": {
-   "114..119": "no knob data on X.20",
-   "1 4 5 7 8 9 86 87": "X.20's own machines",
+   "96..123": "X.20 treats these as MIDI/control (no-audio) machines in about 40 inline range tests (e.g. 0x2a5c10: id-$60 <= $1b): a model there is silent",
+   "1 4 5 7 8 9 86 87": "X.20's own machines (86/87 INP-CA/CB: overwriting their DSP2 dispatch entries breaks boot)",
    "192..209": "X.20's user-machine IDs (194..209 are its 16 USR slots): a built-in machine on 192 or 193 freezes the OS when assigned"
-  }
+  },
+  "forbidden": [
+   [
+    96,
+    123
+   ],
+   [
+    192,
+    255
+   ]
+  ]
  },
  "families": {
   "GND": 0,

@@ -27,7 +27,7 @@ import { select, type Selected } from './selection.js';
 import { decodeSyx, encodeSyx, OS_START } from './syx.js';
 import { uclPack } from './ucl.js';
 import { cacheOpsIn, dsp2BootLoader, isCode, siteBytes, stageCode, windowA, writeList, x20Map } from './x20_cf.js';
-import { parseRecipe, type X20Recipe, type X20RecipeFile } from './x20_recipe.js';
+import { idAllowedOnX20, parseRecipe, type X20Recipe, type X20RecipeFile } from './x20_recipe.js';
 import { fromBase64 } from './bytes.js';
 
 export interface X20Options {
@@ -133,6 +133,7 @@ function allocate(R: X20Recipe, models: { m: PackModel; family: string }[], uw: 
     if (id === undefined) { problems.push(`no free machine ID left on ${R.name} for ${m.name.trim()}: untick a machine`); continue; }
     sel.push({ m, family, id, preferred: m.id, mapped: false });
   }
+  for (const s of sel) if (!idAllowedOnX20(s.id)) throw new Error(`${s.m.name.trim()}: ID ${s.id} is one X.20 reserves`);
   return { sel, problems };
 }
 
