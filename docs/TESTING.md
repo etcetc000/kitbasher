@@ -20,6 +20,12 @@ A few engine tests compare the engine with real OS files: set `firmwareDir` in
 `.local/config.json` (or `MD_FIRMWARE_DIR`) to a directory of OS files you own,
 and they read every file in it. Without it they are skipped, as in CI.
 
+The X.20 B tests also build from that directory when it holds the X.20 B `.syx`.
+Two more check the X.20 recipe against the OS itself: set `KB_X20_OS` to a
+decoded X.20 B ColdFire image (the 780,604-byte image its loader rebuilds at
+`0x200000`; never commit it) and they compare every anchor and run the
+relocation audit ([X.20 B](BASES.md#mdx-x20-b-public-beta)).
+
 ## Assembly encoding
 
 `npm run test:assembly` checks real instruction encoding and relocation. Build

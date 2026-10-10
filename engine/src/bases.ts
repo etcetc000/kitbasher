@@ -14,6 +14,7 @@ import { nrv2bDecode } from './nrv2b.js';
 import type { CodeImage } from './sig.js';
 import type { PiSlices } from './pi_clean.js';
 import type {RuntimeEvidence,RuntimeQualification} from './model_runtime.js';
+import { RECIPE_FORMAT, type X20RecipeFile } from './x20_recipe.js';
 
 type Hex = string;
 
@@ -87,7 +88,8 @@ export interface BaseProfileFile {
 export const PROFILE_GATED: Record<string, string> = { hostSend: '--host-reorder', unmuteFix: '--unmute-fix', midiChroma: '--midi-chroma',
   pitchLabels: '--pitch-labels' };
 
-export interface BaseSet { lineage: LineageFile; profiles: BaseProfileFile[] }
+/** `recipes`: fixed patches for OS files outside the 1.63 lineage, by file hash (engine/src/x20_recipe.ts) */
+export interface BaseSet { lineage: LineageFile; profiles: BaseProfileFile[]; recipes: X20RecipeFile[] }
 
 /** A piece of the base's code in RAM, as its boot puts it: the add-on, a scatter entry. */
 export interface RamSegment { what: string; flash: number; used: number; ram: number; bytes: Uint8Array }
@@ -305,13 +307,14 @@ export async function identify(fw: Firmware, set: BaseSet): Promise<{ base: Base
   return { base: r.base, id: r.id, resolved: r };
 }
 
-export function baseSet(files: (BaseProfileFile | LineageFile)[]): BaseSet {
+export function baseSet(files: (BaseProfileFile | LineageFile | X20RecipeFile)[]): BaseSet {
   const lineage = files.find((f) => f.format === 'md-lineage/1') as LineageFile | undefined;
   if (!lineage) throw new Error('no lineage file (md-lineage/1) among the base files');
   const profiles = files.filter((f) => f.format === 'md-base/2') as BaseProfileFile[];
-  const old = files.filter((f) => f.format !== 'md-lineage/1' && f.format !== 'md-base/2');
+  const recipes = files.filter((f) => f.format === RECIPE_FORMAT) as X20RecipeFile[];
+  const old = files.filter((f) => f.format !== 'md-lineage/1' && f.format !== 'md-base/2' && f.format !== RECIPE_FORMAT);
   if (old.length) throw new Error(`base files in an old format: ${old.map((f) => f.id).join(', ')}`);
-  return { lineage, profiles };
+  return { lineage, profiles, recipes };
 }
 
 export const supportLine = (k: string, s: Support): string => `${k}: ${s.ok ? 'yes' : 'no'} (${s.why})`;

@@ -18,6 +18,12 @@
 //   --trim-cap <s>       and cut to at most this long (default 0.55; 0 = no cap)
 //   --report <file>      write the build report as JSON
 //   --gate-report <file> write the compact report the emulator gates read
+//
+// MDX X.20 B (bases/x20.json, engine/src/x20.ts) is recognised by its .syx hash and built with a fixed
+// recipe: --uw/--no-uw, --families, --exclude, --trim-db/--trim-min/--trim-cap, --cache-align and --report
+// apply; the layout, restore, chroma and pitch-label options do not yet. The output is a .syx.
+//   --dsp2-load upload   emulator only: the machines' code goes to DSP2 after it starts (default preboot:
+//                        through DSP2's bootstrap, the way real hardware needs it)
 //   --no-dyn-labels      static knob labels even where the base supports dynamic ones
 //   --no-dsp1            no DSP1 drive even where the base supports it
 //   --ctr-control-all    narrow the one gate that keeps FUNC + knob (control all) from reaching a
@@ -121,6 +127,9 @@ import { select } from './selection.js';
 import { recoverSession } from './restore.js';
 import { decodeProject } from './project.js';
 import { containerOf, encodeSyx } from './syx.js';
+import { recipeFor } from './x20_recipe.js';
+import { buildX20 } from './x20.js';
+import { sha256 } from './bytes.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -210,6 +219,28 @@ async function main(): Promise<void> {
     [resolve(ROOT, 'catalog'), LOCAL_PACKS, ...(many.packs ?? []).map((d) => resolve(d))]);
   console.log(`packs: ${packs.length} from ${dirs.join(', ')}`);
   const input = readFileSync(a.in);
+  // MDX X.20 and later: a fixed per-release recipe, found by the file's hash (engine/src/x20.ts)
+  const recipe = recipeFor(bases.recipes, await sha256(input));
+  if (recipe) {
+    console.log(`base: ${recipe.name} [${recipe.qualification.level}: ${recipe.qualification.by}]${recipe.qualification.unproven ? ` (${recipe.qualification.unproven})` : ''}`);
+    if (a.map || a.restore || a['midi-chroma'] || a['pitch-labels']) console.log('  not available on this OS yet (ignored): --map, --restore, --midi-chroma, --pitch-labels');
+    const load = a['dsp2-load'] as 'preboot' | 'upload' | undefined;
+    if (load && load !== 'preboot' && load !== 'upload') throw new Error('--dsp2-load: preboot or upload');
+    const r = await buildX20(Uint8Array.from(input), recipe, packs, core, {
+      uw, families: a.families === 'none' ? [] : a.families ? a.families.split(',') : undefined,
+      exclude: a.exclude ? a.exclude.split(',') : undefined,
+      trim: { db: Number(a['trim-db'] ?? -30), minSeconds: Number(a['trim-min'] ?? 0.5), cap: (a['trim-cap'] === undefined ? 0.55 : Number(a['trim-cap'])) || null },
+      align: a['cache-align'] ? true : undefined, dsp2Load: load,
+    });
+    writeFileSync(a.out, r.output);
+    for (const m of r.report.machines) console.log(`  ${m.name.padEnd(6)} ID ${String(m.id).padStart(3)}  ${m.family}  ${m.words} words at ${m.org}`);
+    for (const g of r.report.gates) console.log(`  gate ${g.ok ? 'passed' : 'FAILED'}: ${g.name} (${g.detail})`);
+    for (const n of r.report.notes) console.log(`  ${n}`);
+    console.log(`E12: ${r.report.e12.trimmed} samples trimmed, bank ends at ${r.report.e12.bank_end}; DSP2 ${r.report.dsp2.demand}/${r.report.dsp2.capacity} words`);
+    if (a.report) writeFileSync(a.report, JSON.stringify(r.report, null, 1));
+    console.log(`wrote ${a.out} (syx)`);
+    return;
+  }
   const { base, disagreements } = await resolveBase(readFirmware(input), bases);
   console.log(`base: ${base.name} [${base.qualification.level}]`);
   for (const d of disagreements) console.log(`  CACHE DISAGREES (discovery wins): ${d}`);

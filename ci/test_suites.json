@@ -29,7 +29,8 @@
     "unmute",
     "midi_chroma",
     "pitch_labels",
-    "parity"
+    "parity",
+    "x20"
   ],
   "legacy": [],
   "alignment": []
