@@ -47,6 +47,39 @@ static uint32_t beforeNext(uint32_t value) {
     return undoLeft(undoRight(undoLeft(value,5),17),13);
 }
 
+// Independent floating-point model of control-rate envelopes. The original
+// voice still renders oscillators, noise, filters, gate, saturation and output.
+struct EnvelopeSteps {
+    int rate=1, frame=0;
+    float fast=1,slow=1,attack=1,envelope=0,bell=1,click=1;
+    float fastPole=1,slowPole=1,attackPole=1,bellPole=1,clickPole=1,weight=1;
+    float envelopeStep=0,bellStep=0,clickStep=0;
+    void reset(const MetalHiHatVoice& v,int stride) {
+        *this=EnvelopeSteps(); rate=stride;
+        fastPole=std::pow(v.fastDecayCoefficient_,rate);
+        slowPole=std::pow(v.slowDecayCoefficient_,rate);
+        attackPole=std::pow(1.f-v.attackCoefficient_,rate);
+        bellPole=std::pow(v.bellAccentCoefficient_,rate);
+        clickPole=std::pow(v.clickCoefficient_,rate);
+        weight=v.fastEnvelopeWeight_;
+    }
+    void prepare(MetalHiHatVoice& v) {
+        if(frame%rate==0) {
+            fast*=fastPole; slow*=slowPole; attack*=attackPole;
+            envelopeStep=((1.f-attack)*(weight*fast+(1.f-weight)*slow)-envelope)/rate;
+            bellStep=(bell*bellPole-bell)/rate;
+            clickStep=(click*clickPole-click)/rate;
+        }
+        envelope+=envelopeStep;
+        v.attackEnvelope_=1; v.attackCoefficient_=0;
+        v.fastEnvelope_=envelope; v.slowEnvelope_=0; v.fastEnvelopeWeight_=1;
+        v.fastDecayCoefficient_=1; v.slowDecayCoefficient_=1;
+        v.bellAccentEnvelope_=bell; v.bellAccentCoefficient_=1;
+        v.clickEnvelope_=click; v.clickCoefficient_=1;
+        bell+=bellStep; click+=clickStep; ++frame;
+    }
+};
+
 static void tables(const std::string& kind,int count=47,bool noWobble=false) {
     const auto& s=spec(kind,count,noWobble); MetalHiHatVoice v; v.init(44100,seed(kind));
     std::cout << std::setprecision(17) << "{\"decay\":[";
@@ -84,7 +117,7 @@ int main(int argc,char** argv) {
         int count=std::atoi(argv[3]); if(count!=3 && count!=6 && count!=47) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     const auto& selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
@@ -97,12 +130,18 @@ int main(int argc,char** argv) {
         rngSeed=static_cast<uint32_t>(value);
     }
     MetalHiHatVoice v; v.init(44100,rngSeed);
-    const bool lcgNoise=argc==12 && std::atoi(argv[11])!=0;
+    const bool lcgNoise=argc>=12 && std::atoi(argv[11])!=0;
+    const int envelopeRate=argc==13 ? std::atoi(argv[12]) : 1;
+    if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
+    EnvelopeSteps envelopes;
     uint32_t lcg=((rngSeed ? rngSeed : 0x606606u)^0xA511E9B3u)&0xffffffu;
     std::ofstream out(argv[7],std::ios::binary); if(!out) return 3;
     for(int i=0;i<samples;++i) {
-        if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0))
+        if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0)) {
             v.trigger(selected,std::max(.05f,decay/127.f),ratio(pitch));
+            if(envelopeRate!=1) envelopes.reset(v,envelopeRate);
+        }
+        if(envelopeRate!=1 && v.isActive()) envelopes.prepare(v);
         if(lcgNoise && v.isActive()) {
             lcg=(lcg*1664525u+1013904223u)&0xffffffu;
             v.noise_.rng_.state_=beforeNext(lcg<<8);

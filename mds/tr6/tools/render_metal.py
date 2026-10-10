@@ -31,12 +31,14 @@ def main():
     p.add_argument('--block-oscillators',action='store_true',help='Keep recursive oscillator states in registers through each block')
     p.add_argument('--resident-state',action='store_true',help='Keep hot state in spare registers within each render call')
     p.add_argument('--end-boundaries',action='store_true',help='Render one complete integer-decay case for every final-block length 1..32')
+    p.add_argument('--envelope-rate',type=int,choices=(1,4,8,16),default=1,help='Interpolate envelope endpoints this many samples apart')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
     if a.block_oscillators and not a.resonators: p.error('--block-oscillators requires --resonators')
     if a.resident_state and not a.block_oscillators: p.error('--resident-state requires --block-oscillators')
     if a.end_boundaries and (a.case or a.blocks): p.error('--end-boundaries requires complete renders and cannot be combined with --case/--blocks')
+    if a.envelope_rate!=1 and not a.resident_state: p.error('--envelope-rate requires --resident-state')
     variant=a.partial_count!=47 or a.no_wobble
     suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
     if a.lean_math: suffix+='-lean'
@@ -44,13 +46,16 @@ def main():
     if a.lcg_noise: suffix+='-lcg'
     if a.block_oscillators: suffix+='-blockosc'
     if a.resident_state: suffix+='-resident'
+    if a.envelope_rate!=1: suffix+=f'-env{a.envelope_rate}'
     if a.end_boundaries: suffix+='-endings'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
-    if a.lcg_noise: model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],1]
+    if a.lcg_noise or a.envelope_rate!=1:
+        model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise)]
+        if a.envelope_rate!=1: model_args += [a.envelope_rate]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -153,7 +158,7 @@ def main():
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
-                     reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32'),
+                     reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate),
                      lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
