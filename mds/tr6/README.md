@@ -12,6 +12,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Source and tool setup](tools/bootstrap.py)
 - [Kick port, comparison results, and remaining gaps](audit/BD-PORT.md)
 - [Snare port and state-isolation evidence](audit/SD-PORT.md)
+- [TX8/TX9 and lab optimization findings; ordered-trace profiler](audit/OPTIMIZATION-INPUTS.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
