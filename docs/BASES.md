@@ -148,6 +148,54 @@ finds the new patch sites; nothing is reused from the older DEV profile.
   category's cached length. The patch refreshes that cache first, so the list of
   added machines draws in full.
 
+## MDX X.20 B (public beta)
+
+X.20 B is jmamma's community OS. It is still a public beta, so X.14, OS 1.63 and DEV
+stay supported alongside it. Its loader streams a packed OS through the DSPs and
+gets the ColdFire image back at boot, so nothing can be discovered in the file:
+Kitbasher patches this one release with a fixed recipe, [`bases/x20.json`](../bases/x20.json),
+and recognises the file by its SHA-256 (any other X.20 file is refused). The recipe
+holds addresses, the bytes X.20 B has at each patch site, and hashes; no firmware bytes.
+
+What a build changes (engine/src/x20.ts):
+
+- **INTERNAL (E12) samples** are trimmed with the usual rule and re-encoded in
+  X.20's E12B flash format; the DSP2 memory and flash they free hold the
+  machines. **Replacing INTERNAL samples is turned off** on the patched OS (its
+  flash file system refuses to erase or write the E12B bank, and DSP2 writes into
+  the bank are refused), because the machines' code lives in that space.
+- **User machines (USR) keep working.** X.20 reserves machine IDs 194..209 for
+  its 16 user-machine slots, and a built-in machine on 192 or 193 freezes the OS
+  when assigned, so added machines take IDs up to 191 only. The record table
+  grows from 159 to 200 entries; X.20's user-machine install, remove and check
+  routines reach that table and the menu through offsets from a base pointer, and
+  the recipe patches them too (without that, every USR install fails with
+  RECV FAIL). The +Drive machine banks keep their own erase.
+- **DSP2 load.** The machines' code goes into DSP2 before DSP2's own loader runs:
+  the build sends a short receiver through the bootstrap's `ELD` command, the
+  code follows, and the receiver's wiper hands DSP2 back to its bootstrap. The
+  dispatch words go after DSP2 starts, through the OS's own block write.
+  Uploading all the code after DSP2 starts makes the OS miss DSP2's startup
+  messages on hardware; `--dsp2-load upload` does it anyway, for the emulator
+  only (whose DSP does not run code written through X memory).
+- Added machines go into X.20's own menu families (analog drums in TRX, FM
+  voices in EFM, effects in NFX, the rest in GND).
+
+Not available on X.20 yet: the room meters and sample swapping in the browser,
+restoring a layout (machine IDs are assigned fresh, bottom-up), MIDI chromatic
+input, pitch note names and the unmute fix. DSP1 is not patched: X.20's DSP1
+bootstrap runs a `PFLUSH` on an `ELD` with its instruction cache off, which is an
+illegal instruction on real hardware, so any DSP1 change needs another route.
+
+Gates, all hard failures: the file's hash; every ColdFire instruction the build
+adds, in its own routines and at every OS and loader site, decodes as ISA_A
+(MCF5206e: the emulators run 68k forms such as `btst #n,abs.l` and
+`move.l #imm,d16(An)` that the CPU traps on); the DSP boot code holds no cache
+instruction. Offline, with a decoded X.20 B image (`KB_X20_OS`, see
+[Testing](TESTING.md)), the tests check every anchor and run a relocation audit:
+every instruction that reaches a table the recipe moves is patched or explained
+in the recipe's `audit` list.
+
 ## Machinedrum without UW
 
 The same OS files run on a Machinedrum with and without the UW option. At boot
