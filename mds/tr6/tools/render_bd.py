@@ -44,12 +44,18 @@ def main():
     ap.add_argument('--simple-impulse',action='store_true',help='Approximation: replace the impulse high-pass biquad with one pole')
     ap.add_argument('--omit-impulse',action='store_true',help='Approximation: omit the impulse layer and its native filter/envelope work')
     ap.add_argument('--sequential-tanh',action='store_true',help='Exact: schedule adjacent saturation-table reads with one pointer')
+    ap.add_argument('--quadratic-saturation',action='store_true',help='Approximation: arithmetic soft clip; requires omitted impulse, excludes sequential tanh')
+    ap.add_argument('--recursive-body',action='store_true',help='Approximation: magic-circle body oscillator; requires omitted impulse and control rate 32')
+    ap.add_argument('--lean-mix',action='store_true',help='Approximation: share one body/click low-pass; requires recursive body and LCG')
     ap.add_argument('--out',type=Path)
     args=ap.parse_args()
     if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
     if args.blocks is not None and args.blocks<1: ap.error('--blocks must be positive')
     if args.control_rate!=1 and not args.resident_state: ap.error('--control-rate requires --resident-state')
     if args.simple_impulse and args.omit_impulse: ap.error('Choose --simple-impulse or --omit-impulse, not both')
+    if args.quadratic_saturation and (not args.omit_impulse or args.sequential_tanh): ap.error('Quadratic saturation requires omitted impulse and excludes sequential tanh')
+    if args.recursive_body and (not args.omit_impulse or args.control_rate!=32): ap.error('Recursive body requires omitted impulse and control rate 32')
+    if args.lean_mix and not (args.recursive_body and args.lcg_noise): ap.error('Lean mix requires recursive body and LCG')
     if args.knobs is not None:
         if args.case is not None: ap.error('--knobs and --case are mutually exclusive')
         if any(not 0<=v<=127 for v in args.knobs[:4]) or args.knobs[4] not in (0,1): ap.error('Invalid custom knob values')
@@ -62,9 +68,12 @@ def main():
     if args.simple_impulse: suffix+='-simple-impulse'
     if args.omit_impulse: suffix+='-omit-impulse'
     if args.sequential_tanh: suffix+='-sequential-tanh'
+    if args.quadratic_saturation: suffix+='-quadratic-saturation'
+    if args.recursive_body: suffix+='-recursive-body'
+    if args.lean_mix: suffix+='-lean-mix'
     if args.knobs is not None: suffix+='-k'+'-'.join(str(v) for v in args.knobs)
     out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh); (out/'bd.asm').write_text(source)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix); (out/'bd.asm').write_text(source)
     states=state_layout(args.control_rate)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
@@ -107,6 +116,9 @@ def main():
         if args.control_rate!=1: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate]
         if args.simple_impulse: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,1]
         if args.omit_impulse: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1]
+        if args.quadratic_saturation: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1,1]
+        if args.recursive_body: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1,int(args.quadratic_saturation),1]
+        if args.lean_mix: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1]
         reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw',*model_args])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321']
@@ -157,6 +169,9 @@ def main():
         if args.control_rate!=1: model['control_rate']=args.control_rate
         if args.simple_impulse: model['impulse_filter']='one-pole-highpass'
         if args.omit_impulse: model['impulse_layer']='omitted'
+        if args.quadratic_saturation: model['saturation']='clipped-quadratic'
+        if args.recursive_body: model['oscillator']='magic-circle-block-pitch'
+        if args.lean_mix: model.update(noise_filter='bypassed',mix_filter='shared-body-lowpass')
         checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
         metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
                      resident_state=args.resident_state,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
