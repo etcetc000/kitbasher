@@ -41,6 +41,8 @@ def main():
     p.add_argument('--rounded-dc',action='store_true',help='Round DC-filter feedback to one state word; requires lean math')
     p.add_argument('--bypass-noise-dc',action='store_true',help='Bypass the noise DC filter before the retained high/low-pass pair; requires lean math')
     p.add_argument('--interpolated-gate',action='store_true',help='Include the fade gate in interpolated envelope endpoints; requires envelope rate > 1')
+    p.add_argument('--render-stride',type=int,choices=(1,2),default=1,help='Output samples per synthesis step; 2 runs at 22050 Hz with sample repetition and requires bounded loops')
+    p.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 initial seed for native/reference ensemble evidence')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
@@ -53,6 +55,8 @@ def main():
     if a.rounded_dc and not a.lean_math: p.error('--rounded-dc requires --lean-math')
     if a.bypass_noise_dc and not a.lean_math: p.error('--bypass-noise-dc requires --lean-math')
     if a.interpolated_gate and a.envelope_rate==1: p.error('--interpolated-gate requires --envelope-rate > 1')
+    if a.render_stride!=1 and not a.bounded_loops: p.error('--render-stride 2 requires --bounded-loops')
+    if a.seed is not None and not 0<=a.seed<=0xffffffff: p.error('--seed must fit uint32')
     if a.cubic_saturation and (not a.lean_math or a.linear_saturation): p.error('--cubic-saturation requires --lean-math and excludes --linear-saturation')
     if a.fused_mix and (not a.block_noise or not a.resident_state): p.error('--fused-mix requires --block-noise and --resident-state')
     if a.bounded_loops and (not a.resident_state or a.envelope_rate==1 or not (a.linear_saturation or a.cubic_saturation)):
@@ -74,10 +78,20 @@ def main():
     if a.rounded_dc: suffix+='-rounded-dc'
     if a.bypass_noise_dc: suffix+='-no-noise-dc'
     if a.interpolated_gate: suffix+='-gate'
+    if a.render_stride!=1: suffix+=f'-stride{a.render_stride}'
+    if a.seed is not None: suffix+=f'-seed{a.seed:08x}'
     if a.end_boundaries: suffix+='-endings'
+    if a.render_stride!=1 or a.seed is not None:
+        # Keep generated paths usable by Windows C++ tools with short-path
+        # limits, while distinguishing the complete option set and fixtures.
+        suffix=f'-stride{a.render_stride}'+(f'-seed{a.seed:08x}' if a.seed is not None else '')+'-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
+    fixture_controls=controls
+    if a.render_stride!=1:
+        controls=json.loads(run([exe,'--tables',kind,a.partial_count,int(a.no_wobble),a.render_stride]).stdout)
+        (out/'fixture-controls.json').write_text(json.dumps(fixture_controls,indent=2)+'\n')
     if a.lcg_noise or a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc:
         model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise)]
         if a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc: model_args += [a.envelope_rate]
@@ -86,8 +100,11 @@ def main():
         if a.bypass_noise_dc: model_args += [1]
     if a.interpolated_gate:
         model_args=[a.partial_count,int(a.no_wobble),{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),1]
+    if a.render_stride!=1 or a.seed is not None:
+        selected_seed=a.seed if a.seed is not None else {'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
+        model_args=[a.partial_count,int(a.no_wobble),selected_seed,int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),int(a.interpolated_gate),a.render_stride]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -112,6 +129,7 @@ def main():
                  ROOT/'tests/metal_reference.cpp',source_root/'HiHats.hpp',source_root/'SynthDrumCommon.hpp',
                  out/'cymbal_spec.hpp',out/'tr6_hihats.hpp',out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),
                  out/'assembly.json',out/'code.bin',out/'sine.bin',out/'init-stub.bin']
+    if a.render_stride!=1: input_paths.append(out/'fixture-controls.json')
     captured_hashes=hashes(input_paths)
     provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(a).items()},
                     captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
@@ -121,23 +139,23 @@ def main():
            ('low_pitch',[127,0],0,0),('short_high_pitch',[0,127],0,0),
            ('retrigger',[default,64],137*32,0),('pretrigger',[default,64],0,10*32),
            ('retrigger_idle',[0,64],173*32,0)]
-    boundary=next((i for i,row in enumerate(controls['decay']) if row['duration']%32==0),None)
+    boundary=next((i for i,row in enumerate(fixture_controls['decay']) if row['duration']%32==0),None)
     if boundary is not None:
         cases.append(('block_boundary',[boundary,64],0,0))
     elif a.case=='block_boundary':
         raise ValueError('No integer decay has a block-aligned lifetime')
     if a.end_boundaries:
         selected={}
-        for knob,row in enumerate(controls['decay']):
+        for knob,row in enumerate(fixture_controls['decay']):
             length=(row['duration']-1)%32+1
-            if length not in selected or row['duration']<controls['decay'][selected[length]]['duration']:
+            if length not in selected or row['duration']<fixture_controls['decay'][selected[length]]['duration']:
                 selected[length]=knob
         if set(selected)!=set(range(1,33)): raise ValueError('Integer decay controls do not cover all final-block lengths')
         cases=[(f'end_{length:02d}',[selected[length],64],0,0) for length in range(1,33)]
     report=[]
     for name,knobs,repeat,delay in cases:
         if a.case and name!=a.case: continue
-        blocks=a.blocks or (1024 if repeat else math.ceil((controls['decay'][knobs[0]]['duration']+delay)/32)+32)
+        blocks=a.blocks or (1024 if repeat else math.ceil((fixture_controls['decay'][knobs[0]]['duration']+delay)/32)+32)
         samples=blocks*32
         reference=run([exe,kind,*knobs,samples,repeat,delay,out/(name+'.reference.raw'),*model_args])
         lines=['load P 110023 code.bin','load P 1000 init-stub.bin','load X 148000 sine.bin','voice 800',
@@ -198,7 +216,11 @@ def main():
         reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate,saturation='linear' if a.linear_saturation else 'cubic' if a.cubic_saturation else 'tanh')
         if a.bypass_noise_dc: reference_model['noise_dc']='bypass'
         if a.interpolated_gate: reference_model['gate']='interpolated'
+        if a.render_stride!=1: reference_model['render_stride']=a.render_stride
+        if a.seed is not None: reference_model['seed']=a.seed
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
+                     render_stride=a.render_stride,synthesis_sample_rate=44100/a.render_stride,
+                     physical_duration_samples=native['duration']*a.render_stride,
                      reference_model=reference_model,
                      lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,deduplicate_tables=a.deduplicate_tables,rounded_dc=a.rounded_dc,bypass_noise_dc=a.bypass_noise_dc,
                      full_source_comparison=not variant,

@@ -46,6 +46,7 @@ def main():
     p.add_argument('--metal-rounded-dc',action='store_true')
     p.add_argument('--metal-bypass-noise-dc',action='store_true')
     p.add_argument('--metal-interpolated-gate',action='store_true')
+    p.add_argument('--metal-render-stride',type=int,choices=(1,2),default=1)
     args=p.parse_args()
     if args.metal_rounded_dc and not args.metal_lean_math:
         p.error('Rounded DC filters require lean math')
@@ -53,6 +54,8 @@ def main():
         p.error('Bypassing the noise DC filter requires lean math')
     if args.metal_interpolated_gate and args.metal_envelope_rate==1:
         p.error('Interpolated gate requires control-rate envelopes')
+    if args.metal_render_stride!=1 and not args.metal_bounded_loops:
+        p.error('Reduced synthesis rate requires bounded loops')
     if args.metal_lean_math and (args.metal_partial_count!=3 or not args.metal_no_wobble):
         p.error('--metal-lean-math requires three partials and no wobble')
     if (args.metal_resonators or args.metal_lcg_noise) and not args.metal_lean_math:
@@ -90,6 +93,7 @@ def main():
     if args.metal_rounded_dc: suffix+='-rounded-dc'
     if args.metal_bypass_noise_dc: suffix+='-no-noise-dc'
     if args.metal_interpolated_gate: suffix+='-gate'
+    if args.metal_render_stride!=1: suffix+=f'-stride{args.metal_render_stride}'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -103,8 +107,9 @@ def main():
         if name in ('lt','ht'):
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout),args.deduplicate_tables)
         elif name in ('ch','oh','cy'):
-            controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble)]).stdout)
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate)
+            table_args=[args.metal_render_stride] if args.metal_render_stride!=1 else []
+            controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble),*table_args]).stdout)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate,args.metal_render_stride)
             imports['mds_track']=(2,6)
             if args.metal_block_oscillators: imports['mds_scratch_x']=(3,7)
             if args.metal_block_noise: imports['mds_scratch_y']=(4,8)
@@ -210,6 +215,7 @@ def main():
                 rounded_dc=args.metal_rounded_dc,
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
+                render_stride=args.metal_render_stride,
                 metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise,saturation='linear' if args.metal_linear_saturation else 'cubic' if args.metal_cubic_saturation else 'tanh',fused_mix=args.metal_fused_mix,bounded_loops=args.metal_bounded_loops),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)

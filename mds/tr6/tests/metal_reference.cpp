@@ -99,8 +99,8 @@ struct EnvelopeSteps {
     }
 };
 
-static void tables(const std::string& kind,int count=47,bool noWobble=false) {
-    const auto& s=spec(kind,count,noWobble); MetalHiHatVoice v; v.init(44100,seed(kind));
+static void tables(const std::string& kind,int count=47,bool noWobble=false,int renderStride=1) {
+    const auto& s=spec(kind,count,noWobble); MetalHiHatVoice v; v.init(44100.0/renderStride,seed(kind));
     std::cout << std::setprecision(17) << "{\"decay\":[";
     for(int i=0;i<128;++i) {
         v.trigger(s,std::max(.05f,i/127.f),1.f);
@@ -127,16 +127,20 @@ static void tables(const std::string& kind,int count=47,bool noWobble=false) {
               << ",\"wobble_drive\":" << v.wobbleDrive_ << ",\"bell_amount\":" << s.bellAccentAmount
               << ",\"click_amount\":" << s.clickAmount << ",\"fast_weight\":" << s.envelopeFastWeight
               << ",\"tonal_mix\":" << s.tonalMix << ",\"noise_mix\":" << s.noiseMix
-              << ",\"drive\":" << s.saturationDrive << ",\"trim\":" << s.outputTrim << "}\n";
+              << ",\"drive\":" << s.saturationDrive << ",\"trim\":" << s.outputTrim;
+    if(renderStride!=1) std::cout << ",\"sample_rate\":" << 44100.0/renderStride;
+    std::cout << "}\n";
 }
 
 int main(int argc,char** argv) {
     if(argc==3 && std::string(argv[1])=="--tables") { tables(argv[2]); return 0; }
-    if(argc==5 && std::string(argv[1])=="--tables") {
+    if((argc==5 || argc==6) && std::string(argv[1])=="--tables") {
         int count=std::atoi(argv[3]); if(count!=3 && count!=6 && count!=47) return 2;
-        tables(argv[2],count,std::atoi(argv[4])!=0); return 0;
+        int stride=argc==6 ? std::atoi(argv[5]) : 1;
+        if(stride!=1 && stride!=2) return 2;
+        tables(argv[2],count,std::atoi(argv[4])!=0,stride); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17 && argc!=18) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     auto selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
@@ -148,7 +152,9 @@ int main(int argc,char** argv) {
         if(!*argv[10] || *end || value>0xffffffffULL) return 2;
         rngSeed=static_cast<uint32_t>(value);
     }
-    MetalHiHatVoice v; v.init(44100,rngSeed);
+    const int renderStride=argc>=18 ? std::atoi(argv[17]) : 1;
+    if((renderStride!=1 && renderStride!=2) || delay%renderStride || repeat%renderStride) return 2;
+    MetalHiHatVoice v; v.init(44100.0/renderStride,rngSeed);
     const bool lcgNoise=argc>=12 && std::atoi(argv[11])!=0;
     const int envelopeRate=argc>=13 ? std::atoi(argv[12]) : 1;
     if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
@@ -168,7 +174,12 @@ int main(int argc,char** argv) {
     EnvelopeSteps envelopes;
     uint32_t lcg=((rngSeed ? rngSeed : 0x606606u)^0xA511E9B3u)&0xffffffu;
     std::ofstream out(argv[7],std::ios::binary); if(!out) return 3;
+    float held=0;
     for(int i=0;i<samples;++i) {
+        if(i%renderStride) {
+            out.write(reinterpret_cast<const char*>(&held),sizeof(held));
+            continue;
+        }
         if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0)) {
             v.trigger(selected,std::max(.05f,decay/127.f),ratio(pitch));
             if(envelopeRate!=1) envelopes.reset(v,envelopeRate,interpolatedGate);
@@ -186,6 +197,7 @@ int main(int argc,char** argv) {
         // high/low-pass filters keep their source behavior.
         if(bypassNoiseDC) { v.noise_.lastIn_=0; v.noise_.lastOut_=0; }
         float value=v.process(); if(!std::isfinite(value)) return 4;
+        held=value;
         out.write(reinterpret_cast<const char*>(&value),sizeof(value));
     }
     std::cout << "active=" << v.isActive() << " frame=" << v.frameIndex_ << " duration=" << v.naturalFrameCount_

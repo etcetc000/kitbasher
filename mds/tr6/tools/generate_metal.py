@@ -54,7 +54,12 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None):
+    if render_stride not in (1,2): raise ValueError('Render stride must be 1 or 2')
+    if render_stride!=1 and not bounded_loops: raise ValueError('Reduced synthesis rate requires bounded loops')
+    sample_rate=c.get('sample_rate',44100)
+    if sample_rate!=44100/render_stride: raise ValueError('Coefficient sample rate does not match render stride')
+    block_samples=32//render_stride
     if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
     table_shift=23-tanh_bits
     partial_count=len(c['partials'])
@@ -98,6 +103,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if interpolated_gate:
         if envelope_rate==1: raise ValueError('Interpolated gate requires control-rate envelopes')
         lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
+    if render_stride!=1: lines.append(f'; Synthesis runs at {sample_rate:g} Hz; each sample is repeated {render_stride} times at the output.')
     tables={}
     resident={}
     def emit(*s): lines.extend(s)
@@ -194,9 +200,14 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
 
     emit('init:','    clr a')
     for n in STATE: save(n)
-    seed={'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
+    if seed is None: seed={'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
+    if not 0<=seed<=0xffffffff: raise ValueError('Seed must fit uint32')
+    if seed==0: seed=0x606606
     for n,salt in [('phase',0x9e3779b9),('wobble',0x51d3b7a1),('noise',0xa511e9b3)]:
         val=seed^salt
+        # Source Random::seed substitutes this state for a zero xorshift seed.
+        # The independent LCG model deliberately permits its own zero state.
+        if val==0 and not (n=='noise' and lcg_noise): val=0x12345678
         emit(f'    move #>${val&0xffffff:06x},x0'); save(n+'lo','x0')
         emit(f'    move #>${val>>24:06x},x0'); save(n+'hi','x0')
     emit('    move r1,a','    asl #9,a,a','    tfr a,b','    asl #1,a,a','    add b,a',
@@ -254,7 +265,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
                  '    move a1,r0','    move x:(r0+>mds_sine),x0')
             extload('amp','y0'); emit('    mpy x0,y0,a'); extsave('phasefrac')
             label=f't_resonator{j}'
-            tables[label]=[word(math.cos(2*math.pi*freq*r['ratio']/44100)) for r in c['pitch']]
+            tables[label]=[word(math.cos(2*math.pi*freq*r['ratio']/sample_rate)) for r in c['pitch']]
             emit(f'    move #>{label},r0','    nop','    move p:(r0+n0),x0'); extsave('inch','x0')
             emit('    move (r2)+n2','    nop')
     emit('    move #>1,x0'); save('active','x0')
@@ -262,7 +273,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if block_oscillators:
         # The last partial block must advance oscillator states only for the
         # remaining active samples. Every scratch word is written before use.
-        load('duration'); load('frame','x0'); emit('    sub x0,a','    move #>32,x0','    cmp x0,a',
+        load('duration'); load('frame','x0'); emit('    sub x0,a',f'    move #>{block_samples},x0','    cmp x0,a',
              '    jle block_count_ready','    move x0,a','block_count_ready:','    move a1,n5')
         if block_noise:
             # RNG/DC history is resident only during this pass. N5 is the
@@ -455,7 +466,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         mulstate('envelope'); save('tonal'); load('noise'); mul(c['click_amount']); mulstate('click')
         load('tonal','x0'); emit('    add x0,a'); mul(c['trim'])
     dc('out')
-    emit('    asl #3,a,a','    move a,y:(r7)+')
+    emit('    asl #3,a,a',*['    move a,y:(r7)+']*render_stride)
     if envelope_rate!=1:
         load('click'); load('bellerr','x0'); emit('    add x0,a'); save('click')
     else: decay('click',2*(1-c['click']))
@@ -469,15 +480,15 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     emit('block_end:')
     if bounded_loops:
         load('frame'); load('duration','x0'); emit('    cmp x0,a','    jlt active_stays','    clr a'); save('active')
-        emit('active_stays:','    move #>32,a','    move r0,x0','    sub x0,a','    jeq output_ready',
-             '    move a1,n0','    clr a','    do n0,zero_tail_end','    move a,y:(r7)+',
+        emit('active_stays:',f'    move #>{block_samples},a','    move r0,x0','    sub x0,a','    jeq output_ready',
+             '    move a1,n0','    clr a','    do n0,zero_tail_end',*['    move a,y:(r7)+']*render_stride,
              'zero_tail_end:','output_ready:')
     if resident_state:
         resident.clear()
         for name,reg in cached.items(): save(name,reg)
     emit('    rts','silent_block:','    clr a','    do #32,zero_end','    move a,y:(r7)+','zero_end:','    rts')
     partials=[]
-    for freq,amp,bell in c['partials']: partials += [*split(freq/44100),word(amp/4),int(bell)]
+    for freq,amp,bell in c['partials']: partials += [*split(freq/sample_rate),word(amp/4),int(bell)]
     tables['partials']=partials
     if not (linear_saturation or cubic_saturation):
         tables['tanh_table']=[word(math.tanh((i-(1<<(tanh_bits-1)))/(1<<(tanh_bits-4)))/16) for i in range((1<<tanh_bits)+1)]
