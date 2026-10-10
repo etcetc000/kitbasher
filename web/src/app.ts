@@ -37,6 +37,9 @@ import { recoverSession } from '../../engine/src/restore.js';
 import { parseLayout, type Layout } from '../../engine/src/layout.js';
 import { num } from '../../engine/src/bytes.js';
 import { select } from '../../engine/src/selection.js';
+import { recipeFor, type X20RecipeFile } from '../../engine/src/x20_recipe.js';
+import { buildX20 } from '../../engine/src/x20.js';
+import { sha256 } from '../../engine/src/bytes.js';
 
 interface Data { bases: BaseSet; packs: Pack[]; core: CorePack | null; source: { commit: string } }
 
@@ -53,7 +56,7 @@ const fmt = (n: number): string => n.toLocaleString('en');
 
 async function loadData(): Promise<Data> {
   const index = await (await fetch('data/index.json')).json() as { bases: string[]; packs: string[]; source: { commit: string } };
-  const files = await Promise.all(index.bases.map(async (f) => (await fetch(`data/bases/${f}`)).json() as Promise<BaseProfileFile | LineageFile>));
+  const files = await Promise.all(index.bases.map(async (f) => (await fetch(`data/bases/${f}`)).json() as Promise<BaseProfileFile | LineageFile | X20RecipeFile>));
   const bases = baseSet(files);
   const all = await Promise.all(index.packs.map(async (f) => (await fetch(`data/packs/${f}`)).json() as Promise<Pack | CorePack>));
   const core = (all.find((p) => p.family === 'CORE') as CorePack | undefined) ?? null;
@@ -80,6 +83,9 @@ let downloadUrl: string | null = null;
 let fileRequest = 0;
 let packedCapacityProblem = false;
 let cachedBuild: { revision: number; result: BuildResult } | null = null;
+/** An X.20 file (a fixed per-release recipe, engine/src/x20.ts): built from step 1, without the plan-based steps. */
+let x20: X20RecipeFile | null = null;
+let x20Url: string | null = null;
 const keepSamples: TrimOptions = { db: -30, minSeconds: Infinity, cap: null };
 let autoTrimOptions: TrimOptions = keepSamples;
 const trimMode = (): string => document.querySelector<HTMLInputElement>('input[name=e12]:checked')!.value;
@@ -471,6 +477,20 @@ async function onFile(f: File): Promise<void> {
   clearDownload();
   try {
     let bytes: Uint8Array = new Uint8Array(await f.arrayBuffer());
+    // MDX X.20 and later: a fixed recipe for that exact file, found by its hash
+    x20 = recipeFor(data.bases.recipes, await sha256(bytes));
+    $('x20-panel').hidden = !x20;
+    if (x20) {
+      if (request !== fileRequest) return;
+      input = bytes; inputName = f.name;
+      $('x20-info').textContent = `${x20.name}: a public beta OS. Kitbasher patches this exact file with a fixed recipe. ` +
+        `${x20.qualification.level === 'hardware-proven' ? '' : `${x20.qualification.unproven ?? "Not yet tested on a Machinedrum"}. `}` +
+        'It builds the ticked machines with the default sample trim; the room meters, sample swapping and the menu editor are not available for it yet. ' +
+        'User machines (USR) keep working; replacing the INTERNAL (E12) samples is turned off on this OS.';
+      status(`Loaded ${f.name} (${x20.name}). Answer the UW question, then build.`, 'ok');
+      refresh();
+      return;
+    }
     let parsed = readFirmware(bytes);
     let b: Base;
     try {
@@ -741,6 +761,35 @@ async function onBuild(destination: 'categories' | 'download' = 'download'): Pro
   }
 }
 
+async function onX20Build(): Promise<void> {
+  if (!x20 || !input || building || !data.core) return;
+  const asked = gate(uwAnswer, true);
+  if (!asked.ok) { status(asked.why!, 'error'); return; }
+  building = true;
+  $('x20-result').replaceChildren();
+  if (x20Url) { URL.revokeObjectURL(x20Url); x20Url = null; }
+  status('Building for X.20…');
+  await new Promise((r) => setTimeout(r, 20));
+  try {
+    const t = performance.now();
+    const { output, report } = await buildX20(input, x20, data.packs, data.core,
+      { uw: uwForBuild(uwAnswer), exclude: excludes(), trim: { db: -30, minSeconds: 0.5, cap: 0.55 } });
+    const name = `${inputName.replace(/.(syx|bin)$/i, '')}-models.syx`;
+    x20Url = URL.createObjectURL(new Blob([output as Uint8Array<ArrayBuffer>], { type: 'application/octet-stream' }));
+    $('x20-result').replaceChildren(el('a', { class: 'download', href: x20Url, download: name }, `Download ${name}`),
+      el('details', {}, el('summary', {}, 'Build details and checks'),
+        el('table', { class: 'ids' }, el('tr', {}, el('th', {}, 'Machine'), el('th', {}, 'Family'), el('th', {}, 'ID')),
+          ...report.machines.map((m) => el('tr', {}, el('td', {}, m.name), el('td', {}, m.family), el('td', {}, String(m.id))))),
+        el('ul', {}, ...report.gates.map((g) => el('li', {}, `${g.ok ? 'passed' : 'FAILED'}: ${g.name} (${g.detail})`)),
+          ...report.notes.map((n) => el('li', {}, n)))));
+    status(`Built in ${((performance.now() - t) / 1000).toFixed(1)} s.`, 'ok');
+  } catch (e) {
+    status((e as Error).message, 'error');
+  } finally {
+    building = false;
+  }
+}
+
 /** Whether a plan's bank was laid with these edits (the same sample data on the same entries). */
 function sameEdits(laid: Trimmed['edits'], now: { swaps: ReadonlyMap<number, ArrayLike<number>>; noTrim: ReadonlySet<number> }): boolean {
   const swaps = laid?.swaps ?? new Map<number, ArrayLike<number>>(), noTrim = laid?.noTrim ?? new Set<number>();
@@ -867,6 +916,7 @@ async function main(): Promise<void> {
     b.addEventListener('click', () => showStep(Number(b.dataset.step ?? b.dataset.back)));
   });
   $('firmware-next').addEventListener('click', () => showStep(2));
+  $('x20-build').addEventListener('click', () => void onX20Build());
   $('samples-next').addEventListener('click', () => showStep(3));
   $('models-next').addEventListener('click', () => void onBuild('categories'));
   $('categories-next').addEventListener('click', () => showStep(5));
