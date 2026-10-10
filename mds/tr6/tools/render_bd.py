@@ -47,6 +47,7 @@ def main():
     ap.add_argument('--quadratic-saturation',action='store_true',help='Approximation: arithmetic soft clip; requires omitted impulse, excludes sequential tanh')
     ap.add_argument('--recursive-body',action='store_true',help='Approximation: magic-circle body oscillator; requires omitted impulse and control rate 32')
     ap.add_argument('--lean-mix',action='store_true',help='Approximation: share one body/click low-pass; requires recursive body and LCG')
+    ap.add_argument('--bounded-activity',action='store_true',help='Exact: omit lifetime checks while the block envelope stays positive; requires lean mix')
     ap.add_argument('--out',type=Path)
     args=ap.parse_args()
     if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
@@ -56,6 +57,7 @@ def main():
     if args.quadratic_saturation and (not args.omit_impulse or args.sequential_tanh): ap.error('Quadratic saturation requires omitted impulse and excludes sequential tanh')
     if args.recursive_body and (not args.omit_impulse or args.control_rate!=32): ap.error('Recursive body requires omitted impulse and control rate 32')
     if args.lean_mix and not (args.recursive_body and args.lcg_noise): ap.error('Lean mix requires recursive body and LCG')
+    if args.bounded_activity and not args.lean_mix: ap.error('Bounded activity requires lean mix')
     if args.knobs is not None:
         if args.case is not None: ap.error('--knobs and --case are mutually exclusive')
         if any(not 0<=v<=127 for v in args.knobs[:4]) or args.knobs[4] not in (0,1): ap.error('Invalid custom knob values')
@@ -71,9 +73,10 @@ def main():
     if args.quadratic_saturation: suffix+='-quadratic-saturation'
     if args.recursive_body: suffix+='-recursive-body'
     if args.lean_mix: suffix+='-lean-mix'
+    if args.bounded_activity: suffix+='-bounded-activity'
     if args.knobs is not None: suffix+='-k'+'-'.join(str(v) for v in args.knobs)
     out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix); (out/'bd.asm').write_text(source)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix,args.bounded_activity); (out/'bd.asm').write_text(source)
     states=state_layout(args.control_rate)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
@@ -174,7 +177,7 @@ def main():
         if args.lean_mix: model.update(noise_filter='bypassed',mix_filter='shared-body-lowpass')
         checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
         metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
-                     resident_state=args.resident_state,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
+                     resident_state=args.resident_state,bounded_activity=args.bounded_activity,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
                      local_words=len(states),control_rate=args.control_rate,sequential_tanh=args.sequential_tanh,
                      peak_error=max(abs(e) for e in error),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
