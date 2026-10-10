@@ -54,7 +54,10 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False,resident_output=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False,resident_output=False,bandpass_noise=False):
+    if bandpass_noise and (not block_noise or c.get('noise_filter')!='fitted-bandpass-v1'):
+        raise ValueError('Band-pass noise requires block noise and fitted controls')
+    if not bandpass_noise and c.get('noise_filter'): raise ValueError('Fitted controls require band-pass noise')
     if resident_output and not register_mix: raise ValueError('Resident output requires register mixing')
     if register_mix and not (fused_mix and bounded_loops): raise ValueError('Register mixing requires fused mixing and bounded loops')
     count_register='r4' if register_mix else 'r0'
@@ -93,6 +96,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if resident_state: lines.append('; Selected state lives in spare R/N registers within RENDER only.')
     if envelope_rate!=1: lines.append(f'; Envelopes use {envelope_rate}-sample endpoints with linear interpolation; '+('gate shares endpoints.' if interpolated_gate else 'gate stays audio-rate.'))
     if block_noise: lines.append('; Noise/filter block passes use imported X coefficient scratch and Y sample scratch.')
+    if bandpass_noise: lines.append('; Approximation: one fitted band-pass replaces the high/low-pass noise cascade.')
     if linear_saturation: lines.append('; Approximation: retain drive gain, replace tanh with identity.')
     if cubic_saturation: lines.append('; Approximation: clamp driven input to +/-1, then apply x - x^3/4.')
     if fused_mix: lines.append('; Fixed gains are folded into envelope state; MAC sums change fixed-point rounding.')
@@ -102,7 +106,8 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         lines.append('; DC feedback rounds to one state word instead of retaining fractional error.')
     if bypass_noise_dc:
         if not lean_math: raise ValueError('Bypassing the noise DC filter requires lean math')
-        lines.append('; Noise DC filter is bypassed; the following high/low-pass filters remain.')
+        lines.append('; Noise DC filter is bypassed before the fitted band-pass.' if bandpass_noise else
+                     '; Noise DC filter is bypassed; the following high/low-pass filters remain.')
     if interpolated_gate:
         if envelope_rate==1: raise ValueError('Interpolated gate requires control-rate envelopes')
         lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
@@ -236,7 +241,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     for n in ('fast','slow'): lookup('t_'+n+'loss',n+'loss',[word(r[n]**envelope_rate if lean_math else 2*(1-r[n])) for r in c['decay']])
     param(1)
     for j,n in enumerate(('ratiohi','ratiolo')): lookup('t_'+n,n,[split(r['ratio']/4)[j] for r in c['pitch']])
-    for i in range(2):
+    for i in range(1 if bandpass_noise else 2):
         for j,n in enumerate(('b0','a1','a2')):
             lookup(f't_f{i}{n}',f'f{i}{n}',[word(r['filters'][i][j]*(.5 if j==0 else -.5)) for r in c['pitch']])
     emit('    move #>$7fffff,x0')
@@ -300,7 +305,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
             resident.clear()
             for name,reg in white_cache.items(): save(name,reg)
             emit('    move #>$fffffd,n3')
-            for i in range(2):
+            for i in range(1 if bandpass_noise else 2):
                 emit('    move #>mds_scratch_x,r3')
                 for name in ('b0','a1','a2'):
                     load(f'f{i}'+name,'x0'); emit('    move x0,x:(r3)+')
@@ -315,8 +320,9 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
                      '    mpy x0,y1,a a1,y:(r5)+','    move x:(r3)+,x0',
                      '    asl a x1,b','    add b,a (r3)+n3')
                 op='sub' if i==0 else 'add'
-                emit(f'    {op} y0,a',f'    {op} y0,a','    move a1,b',
-                     '    mpy x0,y1,a','    asl a','    add y0,a','    move a1,x1',
+                if not bandpass_noise: emit(f'    {op} y0,a',f'    {op} y0,a')
+                emit('    move a1,b',
+                     '    mpy x0,y1,a','    asl a','    sub y0,a' if bandpass_noise else '    add y0,a','    move a1,x1',
                      f'block_filter_{i}_end:')
                 save(f'f{i}z1','b1'); save(f'f{i}z2','x1')
             emit('    move #>8,n2','    move #>mds_scratch_y,r5')

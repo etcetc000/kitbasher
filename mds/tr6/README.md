@@ -38,6 +38,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Rejected half-rate experiment and native seed ensembles](audit/HALF-RATE-METAL.md)
 - [Bit-exact register mixer and full-rate timing savings](audit/REGISTER-MIXER.md)
 - [Resident output-filter history and exact scheduling](audit/RESIDENT-OUTPUT.md)
+- [Single-band-pass noise experiment and perceptual tradeoff](audit/BANDPASS-NOISE.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

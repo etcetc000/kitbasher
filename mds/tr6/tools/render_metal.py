@@ -45,8 +45,10 @@ def main():
     p.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 initial seed for native/reference ensemble evidence')
     p.add_argument('--register-mix',action='store_true',help='Retain mixer temporaries and read X/Y scratch together; requires fused mixing and bounded loops')
     p.add_argument('--resident-output',action='store_true',help='Retain output DC history in registers; requires register mixing')
+    p.add_argument('--bandpass-noise',action='store_true',help='Approximation: fit one noise band-pass in place of two filters; requires block noise and NumPy/SciPy')
     a=p.parse_args(); kind=a.kind
     if a.resident_output and not a.register_mix: p.error('--resident-output requires --register-mix')
+    if a.bandpass_noise and not a.block_noise: p.error('--bandpass-noise requires --block-noise')
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
     if a.block_oscillators and not a.resonators: p.error('--block-oscillators requires --resonators')
@@ -84,10 +86,11 @@ def main():
     if a.interpolated_gate: suffix+='-gate'
     if a.register_mix: suffix+='-register-mix'
     if a.resident_output: suffix+='-resident-output'
+    if a.bandpass_noise: suffix+='-bandpass'
     if a.render_stride!=1: suffix+=f'-stride{a.render_stride}'
     if a.seed is not None: suffix+=f'-seed{a.seed:08x}'
     if a.end_boundaries: suffix+='-endings'
-    if a.render_stride!=1 or a.seed is not None or a.resident_output:
+    if a.render_stride!=1 or a.seed is not None or a.resident_output or a.bandpass_noise:
         # Keep generated paths usable by Windows C++ tools with short-path
         # limits, while distinguishing the complete option set and fixtures.
         suffix=f'-stride{a.render_stride}'+(f'-seed{a.seed:08x}' if a.seed is not None else '')+'-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
@@ -98,6 +101,12 @@ def main():
     if a.render_stride!=1:
         controls=json.loads(run([exe,'--tables',kind,a.partial_count,int(a.no_wobble),a.render_stride]).stdout)
         (out/'fixture-controls.json').write_text(json.dumps(fixture_controls,indent=2)+'\n')
+    if a.bandpass_noise:
+        from fit_noise_bandpass import fit_controls,write_coefficients
+        (out/'cascade-controls.json').write_text(json.dumps(controls,indent=2)+'\n')
+        controls,fit_report=fit_controls(controls)
+        (out/'bandpass-fit.json').write_text(json.dumps(fit_report,indent=2)+'\n')
+        write_coefficients(controls,out/'bandpass-coefficients.txt')
     if a.lcg_noise or a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc:
         model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise)]
         if a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc: model_args += [a.envelope_rate]
@@ -106,11 +115,12 @@ def main():
         if a.bypass_noise_dc: model_args += [1]
     if a.interpolated_gate:
         model_args=[a.partial_count,int(a.no_wobble),{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),1]
-    if a.render_stride!=1 or a.seed is not None:
+    if a.render_stride!=1 or a.seed is not None or a.bandpass_noise:
         selected_seed=a.seed if a.seed is not None else {'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
         model_args=[a.partial_count,int(a.no_wobble),selected_seed,int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),int(a.interpolated_gate),a.render_stride]
+        if a.bandpass_noise: model_args.append(out/'bandpass-coefficients.txt')
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix,a.resident_output); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix,a.resident_output,a.bandpass_noise); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -136,6 +146,8 @@ def main():
                  out/'cymbal_spec.hpp',out/'tr6_hihats.hpp',out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),
                  out/'assembly.json',out/'code.bin',out/'sine.bin',out/'init-stub.bin']
     if a.render_stride!=1: input_paths.append(out/'fixture-controls.json')
+    if a.bandpass_noise:
+        input_paths.extend([ROOT/'tools/fit_noise_bandpass.py',out/'cascade-controls.json',out/'bandpass-fit.json',out/'bandpass-coefficients.txt'])
     captured_hashes=hashes(input_paths)
     provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(a).items()},
                     captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
@@ -224,6 +236,7 @@ def main():
         if a.interpolated_gate: reference_model['gate']='interpolated'
         if a.render_stride!=1: reference_model['render_stride']=a.render_stride
         if a.seed is not None: reference_model['seed']=a.seed
+        if a.bandpass_noise: reference_model['noise_filter']='fitted-bandpass-v1'
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      render_stride=a.render_stride,synthesis_sample_rate=44100/a.render_stride,
                       register_mix=a.register_mix,

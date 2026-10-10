@@ -140,7 +140,7 @@ int main(int argc,char** argv) {
         if(stride!=1 && stride!=2) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0,stride); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17 && argc!=18) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17 && argc!=18 && argc!=19) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     auto selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
@@ -155,6 +155,14 @@ int main(int argc,char** argv) {
     const int renderStride=argc>=18 ? std::atoi(argv[17]) : 1;
     if((renderStride!=1 && renderStride!=2) || delay%renderStride || repeat%renderStride) return 2;
     MetalHiHatVoice v; v.init(44100.0/renderStride,rngSeed);
+    float fitted[128][3]{};
+    const bool bandpassNoise=argc==19;
+    if(bandpassNoise) {
+        std::ifstream coefficients(argv[18]);
+        for(auto& row:fitted) for(auto& value:row)
+            if(!(coefficients>>value) || !std::isfinite(value)) return 2;
+        std::string extra; if(coefficients>>extra || pitch<0 || pitch>127) return 2;
+    }
     const bool lcgNoise=argc>=12 && std::atoi(argv[11])!=0;
     const int envelopeRate=argc>=13 ? std::atoi(argv[12]) : 1;
     if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
@@ -182,6 +190,13 @@ int main(int argc,char** argv) {
         }
         if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0)) {
             v.trigger(selected,std::max(.05f,decay/127.f),ratio(pitch));
+            if(bandpassNoise) {
+                v.noiseHighPass_.b0_=fitted[pitch][0]; v.noiseHighPass_.b1_=0;
+                v.noiseHighPass_.b2_=-fitted[pitch][0];
+                v.noiseHighPass_.a1_=fitted[pitch][1]; v.noiseHighPass_.a2_=fitted[pitch][2];
+                v.noiseLowPass_.b0_=1; v.noiseLowPass_.b1_=v.noiseLowPass_.b2_=0;
+                v.noiseLowPass_.a1_=v.noiseLowPass_.a2_=0;
+            }
             if(envelopeRate!=1) envelopes.reset(v,envelopeRate,interpolatedGate);
             if(interpolatedGate) v.gateFadeFrames_=0; // Already included in the endpoint model.
         }
