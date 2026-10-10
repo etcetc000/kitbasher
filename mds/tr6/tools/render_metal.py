@@ -7,7 +7,7 @@ import re
 import struct
 
 from mds_build import ROOT, assemble_package, mds_format, assembly
-from generate_metal import generate, build_reference, STATE, EXTERNAL_WORDS, OUTPUT_GAIN
+from generate_metal import generate, build_reference, STATE, OUTPUT_GAIN
 from render_bd import run, write_wave
 
 
@@ -20,11 +20,17 @@ def main():
     p.add_argument('--track',type=int,default=3,choices=range(16))
     p.add_argument('--out',type=Path)
     p.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
+    p.add_argument('--partial-count',type=int,choices=(3,6,47),default=47,help='Keep the strongest partials, in original source order')
+    p.add_argument('--no-wobble',action='store_true',help='Remove per-partial random frequency wobble in native and comparison models')
     a=p.parse_args(); kind=a.kind
-    out=(a.out or ROOT/('build/'+kind+('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}'))).resolve(); out.mkdir(parents=True,exist_ok=True)
-    exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind]).stdout)
+    variant=a.partial_count!=47 or a.no_wobble
+    suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
+    out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
+    model_args=[a.partial_count,int(a.no_wobble)] if variant else []
+    exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble); (out/(kind+'.asm')).write_text(source)
+    external_words=a.partial_count*8
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,
                                    {'mds_sine':(1,1),'mds_track':(2,6)})
     (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -54,7 +60,7 @@ def main():
         if a.case and name!=a.case: continue
         blocks=a.blocks or (1024 if repeat else math.ceil((controls['decay'][knobs[0]]['duration']+delay)/32)+32)
         samples=blocks*32
-        reference=run([exe,kind,*knobs,samples,repeat,delay,out/(name+'.reference.raw')])
+        reference=run([exe,kind,*knobs,samples,repeat,delay,out/(name+'.reference.raw'),*model_args])
         lines=['load P 110023 code.bin','load P 1000 init-stub.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321','set X 7ff 123456','set X 840 654321',
                'set Y 7ff 123456','set Y 840 654321']
@@ -84,7 +90,7 @@ def main():
         native={n:dumps[0][i] for i,n in enumerate(STATE)}
         ref={k:int(v) for k,v in re.findall(r'(\w+)=(\d+)',reference.stdout)}
         expected_y=[0x5a5a5a]*64; expected_y[1:3]=[v*128 for v in knobs]
-        other_ext=dumps[8][:a.track*1536]+dumps[8][a.track*1536+EXTERNAL_WORDS:]
+        other_ext=dumps[8][:a.track*1536]+dumps[8][a.track*1536+external_words:]
         checks=dict(parameters=dumps[1]==expected_y,unused_local=dumps[0][len(STATE):]==[0x5a5a5a]*(64-len(STATE)),
                     guards=dumps[2:8]==[[0x123456],[0x654321]]*3,external_base=native['ext']==ext,
                     external_guards=all(v==0x5a5a5a for v in other_ext),
@@ -96,11 +102,13 @@ def main():
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
+                     reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble),
+                     full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      output_gain=OUTPUT_GAIN,peak_error_limit=tolerance,numeric_pass=peak_error<tolerance,
                      checks=checks,source_state=ref,native_state={n:native[n] for n in ('active','frame','duration','tanh_clamps')},
-                     program_words=build['program_words'],local_words=len(STATE),external_words=EXTERNAL_WORDS,
+                     program_words=build['program_words'],local_words=len(STATE),external_words=external_words,
                      host_cycle_table_max_call=max(cycles),cold_cache_measured=False)
         report.append(metrics); (out/'comparison.json').write_text(json.dumps(report,indent=2)+'\n')
         write_wave(out/(name+'.wav'),actual); write_wave(out/(name+'.reference.wav'),[v*OUTPUT_GAIN for v in want])

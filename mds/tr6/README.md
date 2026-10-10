@@ -5,6 +5,10 @@ first; the optimization target is **under 129 cold-cache clocks per sample**.
 The target firmware's separate admission requirements also need verification.
 Optimization may trade perceptual fidelity for CPU, with the full-path ports
 retained as references and changes documented through comparison renders.
+Approximate candidates are ranked with the existing optimization lab's
+`mel-proxy-v1`, including transient/tail diagnostics and multi-seed evidence when
+random-state changes matter. RMS/centroid summaries alone do not establish
+acceptance. This does not relax the CPU, admission, family-fit or delivery goals.
 
 The family is BD, SD, LT, HT, CH, OH, CY, with CP as an extension. Work is in
 progress. Nothing here is hardware-qualified or ready for installation.
@@ -19,6 +23,8 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Clap extension, FIR/reconstruction path and comparisons](audit/CLAP-PORT.md)
 - [TX8/TX9 and lab optimization findings; ordered-trace profiler](audit/OPTIMIZATION-INPUTS.md)
 - [Compact-table candidates, storage savings and local A/B comparisons](audit/COMPACT-TABLES.md)
+- [Reduced-partial hats/cymbal candidates and CPU/sound comparisons](audit/REDUCED-METAL.md)
+- [Existing lab perceptual scorer, results and provenance](audit/PERCEPTUAL-SCORING.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

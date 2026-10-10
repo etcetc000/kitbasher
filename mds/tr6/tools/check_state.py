@@ -27,8 +27,14 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--assembler',required=True); p.add_argument('--host',required=True)
     p.add_argument('--compiler',default='clang++')
-    p.add_argument('--out',type=Path,default=ROOT/'build/state-check')
-    args=p.parse_args(); out=args.out.resolve(); out.mkdir(parents=True,exist_ok=True)
+    p.add_argument('--out',type=Path)
+    p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
+    p.add_argument('--metal-no-wobble',action='store_true')
+    p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
+    args=p.parse_args()
+    variant=args.metal_partial_count!=47 or args.metal_no_wobble or args.metal_tanh_bits!=13
+    suffix=f'-p{args.metal_partial_count}'+('-static' if args.metal_no_wobble else '-wobble')+f'-lut{args.metal_tanh_bits}' if variant else ''
+    out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
     tom_reference=build_reference(out,args.compiler)
@@ -41,7 +47,8 @@ def main():
         if name in ('lt','ht'):
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
         elif name in ('ch','oh','cy'):
-            source=generate_metal(name,json.loads(run([metal_reference,'--tables',name]).stdout))
+            controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble)]).stdout)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble)
             imports['mds_track']=(2,6)
         elif name=='cp':
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
@@ -137,6 +144,7 @@ def main():
         if render(name+'_controls_during_tail',lines)!=isolated[default_track[name]][:137*32]:
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
+                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))

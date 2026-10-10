@@ -170,6 +170,14 @@ equivalence. Retain candidates that trade sound and cost differently when the
 preference needs listening. The under-129 cold-cache target, firmware admission
 contract and complete-family storage requirements remain unchanged.
 
+The user's subsequent correction requires using the existing lab perceptual
+scorer rather than treating rough RMS/centroid summaries as the fidelity basis.
+Use `score_audio.py` / `perceptual.py` (`mel-proxy-v1`) for matched native pairs,
+inspect worst-frame, attack/tail, level and polarity diagnostics, and use the
+existing `wmd_stats.py` ensemble method where altered random-state consumption
+confounds single-seed comparisons. Preserve the full TR6/X.20 delivery objective
+and under-129 cold-cache target. See [scoring evidence](PERCEPTUAL-SCORING.md).
+
 ## External-memory voice traces
 
 The profiler now accepts additional nonoverlapping P images for INIT fixtures
