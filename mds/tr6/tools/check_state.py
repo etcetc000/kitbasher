@@ -29,6 +29,9 @@ def main():
     p.add_argument('--assembler',required=True); p.add_argument('--host',required=True)
     p.add_argument('--compiler',default='clang++')
     p.add_argument('--out',type=Path)
+    p.add_argument('--bd-resident-state',action='store_true')
+    p.add_argument('--bd-lcg-noise',action='store_true')
+    p.add_argument('--bd-tanh-bits',type=int,choices=range(8,14),default=13)
     p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
@@ -115,6 +118,9 @@ def main():
     if args.metal_render_stride!=1: suffix+=f'-stride{args.metal_render_stride}'
     if args.metal_bandpass_noise: suffix='-bandpass-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
     elif args.metal_resident_output: suffix='-resident-output-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
+    if args.bd_resident_state: suffix+='-bd-resident'
+    if args.bd_lcg_noise: suffix+='-bd-lcg'
+    if args.bd_tanh_bits!=13: suffix+=f'-bd-lut{args.bd_tanh_bits}'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -141,6 +147,8 @@ def main():
         elif name=='cp':
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
+        elif name=='bd':
+            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
@@ -241,6 +249,7 @@ def main():
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
+                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,

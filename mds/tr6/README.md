@@ -41,6 +41,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Resident output-filter history and exact scheduling](audit/RESIDENT-OUTPUT.md)
 - [Single-band-pass noise experiment and perceptual tradeoff](audit/BANDPASS-NOISE.md)
 - [Combined gain envelopes and the first sub-129 sampled metal model](audit/COMBINED-MIX.md)
+- [Kick cutoff correction, register scheduling and scored noise changes](audit/BD-OPTIMIZATION.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

@@ -25,9 +25,9 @@ def main():
     scorer_hash=digest(a.scorer); adapter_hash=digest(Path(__file__))
     spec=importlib.util.spec_from_file_location('external_wmd_stats',a.scorer.resolve())
     metric=importlib.util.module_from_spec(spec); spec.loader.exec_module(metric)
-    audio={}; artifacts={}; models={}; seeds={}; fixture=None
+    audio={}; artifacts={}; models={}; seeds={}; effective_seeds={}; fixture=None
     for group,paths in (('reference',a.reference),('split',a.split),('candidate',a.candidate)):
-        audio[group]=[]; artifacts[group]=[]; seeds[group]=[]
+        audio[group]=[]; artifacts[group]=[]; seeds[group]=[]; effective_seeds[group]=[]
         for path in paths:
             path=path.resolve(); rows=json.loads((path/'comparison.json').read_text())
             selected=[row for row in rows if row['case']==a.case]
@@ -39,6 +39,11 @@ def main():
             model=dict(row['reference_model']); seed=model.pop('seed',None)
             if seed is None: raise ValueError('Ensembles require explicit seeds')
             seeds[group].append(seed or 0x606606)
+            # The BD LCG has fixed oscillator phase and ignores seed bits 24..31.
+            # Metal models also seed their phase RNG, so those high bits matter.
+            effective=seed or 0x606606
+            if row['machine']=='bd' and model.get('noise')=='lcg24': effective &= 0xffffff
+            effective_seeds[group].append(effective)
             if group in models and models[group]!=model: raise ValueError('Mixed models within an ensemble')
             models[group]=model
             properties=(row['machine'],row['knobs'],row['samples'],row['output_gain'],trigger_schedule(path,a.case))
@@ -50,9 +55,9 @@ def main():
             audio[group].append(values)
             artifacts[group].append(dict(directory=str(path),raw_sha256=digest(raw),comparison_sha256=digest(path/'comparison.json'),
                                          seed=seed,execution_provenance=provenance))
-        if len(set(seeds[group]))!=len(seeds[group]): raise ValueError('Repeated effective seeds within group')
+        if len(set(effective_seeds[group]))!=len(effective_seeds[group]): raise ValueError('Repeated effective seeds within group')
     if models['reference']!=models['split']: raise ValueError('Reference split must use the same model')
-    if set(seeds['reference']) & set(seeds['split']): raise ValueError('Reference seed groups must be disjoint')
+    if set(effective_seeds['reference']) & set(effective_seeds['split']): raise ValueError('Reference seed groups must be disjoint')
     if set(seeds['reference'])!=set(seeds['candidate']): raise ValueError('Candidate must use the reference seeds')
     ref=metric.ensemble(audio['reference'],44100)
     floor=metric.distance(ref,metric.ensemble(audio['split'],44100))
@@ -62,7 +67,7 @@ def main():
     report=dict(scope='Native DSP seed ensembles; not an audibility threshold or exhaustive seed qualification',
                 scorer_sha256=scorer_hash,adapter_sha256=adapter_hash,sample_rate=44100,
                 raw_encoding='signed little-endian int32 Q23, actual output gain retained',normalization=False,alignment=False,
-                case=a.case,machine=fixture[0],knobs=fixture[1],samples=fixture[2],seeds=seeds,models=models,
+                case=a.case,machine=fixture[0],knobs=fixture[1],samples=fixture[2],seeds=seeds,effective_seeds=effective_seeds,models=models,
                 reference_split_loss=floor,candidate_loss=loss,loss_over_split=loss/floor if floor else None,
                 level_delta_db=metric.level_db(audio['candidate'])-metric.level_db(audio['reference']),
                 body_envelope_error_db=metric.envelope_error(metric.envelope_db(audio['reference'],44100),metric.envelope_db(audio['candidate'],44100)),

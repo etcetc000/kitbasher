@@ -3,6 +3,11 @@
 2026-10-09. This is a functional simulator prototype, before CPU optimization.
 It is not an installable or hardware-qualified machine.
 
+These are the original baseline results. The later
+[cutoff correction and optimization audit](BD-OPTIMIZATION.md) records a fixed
+envelope condition-code bug, current timing and an idle-retrigger numerical
+limitation discovered by the expanded checks.
+
 The full Simple606 kick path is translated: swept sine body, independent click
 and impulse envelopes, the source xorshift32 noise, low-pass filters, impulse
 high-pass biquad, saturation, DC removal, output trim, and plugin heat. Trigger

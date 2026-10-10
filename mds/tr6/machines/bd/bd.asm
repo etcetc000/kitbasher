@@ -232,8 +232,8 @@ sample:
     add b,a
     move a0,x:(r6+$24)
     move #>8,x0
-    cmp x0,a
     clr b
+    cmp x0,a
     tlt b,a
     move a1,x:(r6+$7)
     move a1,y0
@@ -296,8 +296,8 @@ sample:
     add b,a
     move a0,x:(r6+$23)
     move #>4,x0
-    cmp x0,a
     clr b
+    cmp x0,a
     tlt b,a
     move a1,x:(r6+$5)
     move x:(r6+$1c),a
@@ -349,8 +349,8 @@ sample:
     add b,a
     move a0,x:(r6+$25)
     move #>8,x0
-    cmp x0,a
     clr b
+    cmp x0,a
     tlt b,a
     move a1,x:(r6+$9)
     move a1,y0

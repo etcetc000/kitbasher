@@ -8,6 +8,9 @@ import re
 import struct
 import subprocess
 import wave
+import hashlib
+import shutil
+import sys
 
 from mds_build import ROOT, assemble_package, mds_format
 from generate_bd import generate, STATE
@@ -30,11 +33,23 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--assembler',required=True); ap.add_argument('--host',required=True)
     ap.add_argument('--compiler',default='clang++')
-    ap.add_argument('--case',choices=['default','minimum','maximum','retrigger','pretrigger'])
+    ap.add_argument('--case',choices=['default','minimum','maximum','retrigger','pretrigger','retrigger_idle','heat_modulation'])
     ap.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
+    ap.add_argument('--resident-state',action='store_true',help='Keep hot state in R/N registers during each render call')
+    ap.add_argument('--lcg-noise',action='store_true',help='Approximation: use a 24-bit LCG for the click noise')
+    ap.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 noise seed; zero selects the default seed')
+    ap.add_argument('--blocks',type=int,help='Diagnostic render length; may stop before the voice becomes idle')
     ap.add_argument('--out',type=Path)
-    args=ap.parse_args(); out=(args.out or ROOT/('build/bd-comparison' if args.tanh_bits==13 else f'build/bd-lut{args.tanh_bits}')).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits); (out/'bd.asm').write_text(source)
+    args=ap.parse_args()
+    if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
+    if args.blocks is not None and args.blocks<1: ap.error('--blocks must be positive')
+    suffix='bd-comparison' if args.tanh_bits==13 else f'bd-lut{args.tanh_bits}'
+    if args.resident_state: suffix+='-resident'
+    if args.lcg_noise: suffix+='-lcg'
+    if args.seed is not None: suffix+=f'-seed{args.seed:08x}'
+    if args.blocks is not None: suffix+=f'-blocks{args.blocks}'
+    out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed); (out/'bd.asm').write_text(source)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
     (out/'bd.mds').write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -54,11 +69,25 @@ def main():
            ('maximum',[127,127,127,127,1],0,0,16384),
            ('retrigger',[51,102,75,0,0],137*32,0,4096),
            ('pretrigger',[51,102,75,0,0],0,10*32,4096)]
-    report=[]
+    if args.case=='retrigger_idle': cases=[('retrigger_idle',[51,102,75,0,0],4096*32,0,8192)]
+    if args.case=='heat_modulation': cases=[('heat_modulation',[51,102,75,0,0],0,0,4096)]
+    def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    source_root=ROOT/'.audit-sources/Simple606/Source'
+    input_paths=[Path(args.host).resolve(),Path(args.assembler).resolve(),Path(shutil.which(args.compiler) or args.compiler).resolve(),exe,
+                 Path(__file__).resolve(),ROOT/'tools/generate_bd.py',ROOT/'tools/mds_build.py',ROOT/'tests/bd_reference.cpp',
+                 source_root/'BassDrum.hpp',source_root/'SynthDrumCommon.hpp',out/'bd.asm',out/'bd.mds',out/'assembly.json',out/'code.bin',out/'sine.bin']
+    captured_hashes=hashes(input_paths)
+    provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
+                    captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    report=[]; numeric_failures=[]
     for name,knobs,repeat,delay,blocks in cases:
         if args.case and name!=args.case: continue
+        if args.blocks is not None: blocks=args.blocks
         prefix=out/name
-        reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw'])
+        model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606] if args.lcg_noise or args.seed is not None else []
+        if name=='heat_modulation': model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,1]
+        reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw',*model_args])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321']
         for space in ('X','Y'):
@@ -66,6 +95,7 @@ def main():
         for i,value in enumerate(knobs): lines.append(f'set Y {0x801+i:x} {value if i==4 else value*128:x}')
         lines += [f'call {base+image["init_word"]:x}','cycles']
         for block in range(blocks):
+            if name=='heat_modulation': lines.append(f'set Y 804 {(block//3*37)%128*128:x}')
             if block*32==delay or (repeat and block*32>delay and (block*32-delay)%repeat==0):
                 lines += [f'call {base+image["mutate_word"]:x}','cycles']
             # Poison every output sample to detect partial buffer writes.
@@ -73,7 +103,7 @@ def main():
             lines += ['scrub 1f',f'call {base+image["execute_word"]:x}','cycles','out']
         lines += ['dump Y 800 40','dump X 800 40','dump Y ff 1','dump Y 120 1']
         script=out/(name+'.script'); script.write_text('\n'.join(lines)+'\n')
-        result=run([Path(args.host).resolve(),script.name,name+'.raw'],cwd=out)
+        result=run([Path(args.host).resolve(),script.name,name+'.raw'],cwd=out,timeout=600)
         (out/(name+'.host.log')).write_text(result.stdout+'\n'+result.stderr)
         actual_i=list(struct.unpack('<'+'i'*(blocks*32),(out/(name+'.raw')).read_bytes()))
         actual=[v/8388608 for v in actual_i]
@@ -84,6 +114,7 @@ def main():
         dumps=[[int(w,16) for w in row.split()] for row in re.findall(r'^dump (.+)$',result.stdout,re.M)]
         expected_y=[0x5a5a5a]*64
         expected_y[1:6]=[v if i==4 else v*128 for i,v in enumerate(knobs)]
+        if name=='heat_modulation': expected_y[4]=((blocks-1)//3*37)%128*128
         if dumps[0]!=expected_y or dumps[2:]!=[[0x123456],[0x654321]]:
             raise AssertionError(f'{name}: parameter or output guard modified')
         if dumps[1][len(STATE):]!=[0x5a5a5a]*(64-len(STATE)):
@@ -100,7 +131,12 @@ def main():
         # Fixed acceptance bounds for this prototype. The XL case accumulates
         # source float32 oscillator phase error; see audit/BD-PORT.md.
         tolerance=0.005 if name=='maximum' else 0.0002
-        metrics=dict(case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
+        model=dict(synthesis='original') if not args.lcg_noise else dict(synthesis='original',noise='lcg24')
+        if args.seed is not None: model['seed']=args.seed
+        if name=='heat_modulation': model['heat_pattern']='three-block-step37'
+        checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
+        metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
+                     resident_state=args.resident_state,reference_model=model,full_source_comparison=not args.lcg_noise,output_gain=1,checks=checks,
                      peak_error=max(abs(e) for e in error),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      host_cycle_table_max_call=max(cycles),cold_cache_measured=False,
@@ -111,8 +147,16 @@ def main():
         write_wave(out/(name+'.wav'),actual); write_wave(out/(name+'.reference.wav'),want)
         print(json.dumps(metrics),flush=True)
         (out/'comparison.json').write_text(json.dumps(report,indent=2)+'\n')
-        if not metrics['numeric_pass']:
-            raise AssertionError(f'{name}: peak error exceeds {tolerance}')
+        if not metrics['numeric_pass']: numeric_failures.append(name)
+        provenance['cases'].append(dict(name=name,knobs=knobs,samples=len(actual),repeat_samples=repeat,delay_samples=delay,
+                                      output_sha256=hashes([script,out/(name+'.raw'),out/(name+'.reference.raw'),out/(name+'.host.log')]),
+                                      checks_pass=metrics['numeric_pass'],numeric_pass=metrics['numeric_pass']))
+        (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    if hashes(input_paths)!=captured_hashes: raise AssertionError('Render inputs changed during execution')
+    provenance['complete']=True
+    provenance['numeric_failures']=numeric_failures
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    if numeric_failures: raise AssertionError('Peak error exceeds unchanged bounds: '+', '.join(numeric_failures))
 
 
 if __name__=='__main__': main()
