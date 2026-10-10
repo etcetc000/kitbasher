@@ -5,6 +5,9 @@ import math
 from pathlib import Path
 import re
 import struct
+import hashlib
+import shutil
+import sys
 
 from mds_build import ROOT, assemble_package, mds_format
 from generate_toms import generate, build_reference, state_layout, OUTPUT_GAIN
@@ -24,11 +27,12 @@ def main():
     choice.add_argument('--case',choices=[c[0] for c in CASES])
     choice.add_argument('--sweep-decay',action='store_true')
     p.add_argument('--out',type=Path)
+    p.add_argument('--deduplicate-tables',action='store_true',help='Share identical literal tables without changing their values')
     a=p.parse_args(); kind=a.kind
-    out=(a.out or ROOT/f'build/{kind}-comparison').resolve(); out.mkdir(parents=True,exist_ok=True)
+    out=(a.out or ROOT/('build/'+kind+('-dedup' if a.deduplicate_tables else '-comparison'))).resolve(); out.mkdir(parents=True,exist_ok=True)
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind]).stdout)
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.deduplicate_tables); (out/(kind+'.asm')).write_text(source)
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,{'mds_sine':(1,1)})
     (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
     image=mds_format().parse_package(package); base=0x110023
@@ -38,11 +42,21 @@ def main():
     (out/'code.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
     sine=[round(math.sin(i*2*math.pi/32768)*0x7fffff) for i in range(32768)]
     (out/'sine.bin').write_bytes(b''.join((w&0xffffff).to_bytes(3,'big') for w in sine))
+    def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    source_root=ROOT/'.audit-sources/Simple606/Source'
+    input_paths=[Path(a.host).resolve(),Path(a.assembler).resolve(),Path(shutil.which(a.compiler) or a.compiler).resolve(),exe,
+                 Path(__file__).resolve(),ROOT/'tools/generate_toms.py',ROOT/'tools/table_pool.py',ROOT/'tools/mds_build.py',ROOT/'tools/render_bd.py',
+                 ROOT/'tests/tom_reference.cpp',source_root/'Toms.hpp',source_root/'SynthDrumCommon.hpp',
+                 out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),out/'assembly.json',out/'code.bin',out/'sine.bin']
+    captured_hashes=hashes(input_paths)
+    provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(a).items()},
+                    captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
     layout=state_layout(kind); report=[]
     cases=CASES+([(f'decay_{d:03d}',[d,64],0,0) for d in range(128)] if a.sweep_decay else [])
     for name,knobs,repeat,delay in cases:
         if a.case and name!=a.case: continue
-        sweep=name.startswith('decay_'); artifact='sweep' if sweep else name
+        sweep=name.startswith('decay_'); artifact=name
         blocks=1024 if sweep else 2048; samples=blocks*32
         reference=run([exe,kind,*knobs,samples,repeat,delay,out/(artifact+'.reference.raw')])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
@@ -90,13 +104,19 @@ def main():
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      output_gain=OUTPUT_GAIN,peak_error_limit=tolerance,numeric_pass=peak_error<tolerance,
                      checks=checks,source_state=ref,native_state={n:native[n] for n in ('active','frame','duration')},
-                     program_words=build['program_words'],state_words=len(layout),
+                     program_words=build['program_words'],state_words=len(layout),deduplicate_tables=a.deduplicate_tables,
                      host_cycle_table_max_call=max(cycles),cold_cache_measured=False)
         report.append(metrics); (out/'comparison.json').write_text(json.dumps(report,indent=2)+'\n')
         write_wave(out/(artifact+'.wav'),actual)
         write_wave(out/(artifact+'.reference.wav'),[v*OUTPUT_GAIN for v in want])
         print(json.dumps(metrics),flush=True)
         if not metrics['numeric_pass'] or not all(checks.values()): raise AssertionError(f'{kind}/{name} comparison failed')
+        if hashes(input_paths)!=captured_hashes: raise AssertionError('Render input/tool changed during the run')
+        provenance['cases'].append(dict(name=name,knobs=knobs,samples=samples,repeat_samples=repeat,delay_samples=delay,
+            output_sha256=hashes([script,out/(artifact+'.raw'),out/(artifact+'.reference.raw'),out/(artifact+'.host.log')]),checks_pass=True))
+        (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    provenance['complete']=True
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
 
 
 if __name__=='__main__': main()

@@ -37,6 +37,7 @@ def main():
     p.add_argument('--cubic-saturation',action='store_true',help='Approximation: clamp driven input to +/-1 and use x-x^3/4; requires lean math')
     p.add_argument('--fused-mix',action='store_true',help='Fold fixed gains into envelope state and MAC sums; requires block noise and resident state')
     p.add_argument('--bounded-loops',action='store_true',help='Loop over active samples only; requires resident control-rate envelopes and linear/cubic saturation')
+    p.add_argument('--deduplicate-tables',action='store_true',help='Share identical literal tables without changing their values')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
@@ -63,6 +64,7 @@ def main():
     if a.cubic_saturation: suffix+='-cubic'
     if a.fused_mix: suffix+='-fused'
     if a.bounded_loops: suffix+='-bounded'
+    if a.deduplicate_tables: suffix+='-dedup'
     if a.end_boundaries: suffix+='-endings'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
@@ -73,7 +75,7 @@ def main():
         if a.linear_saturation or a.cubic_saturation: model_args += [int(a.linear_saturation)]
         if a.cubic_saturation: model_args += [1]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -94,7 +96,7 @@ def main():
     def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
     source_root=ROOT/'.audit-sources/Simple606/Source'
     input_paths=[Path(a.host).resolve(),Path(a.assembler).resolve(),Path(shutil.which(a.compiler) or a.compiler).resolve(),exe,
-                 Path(__file__).resolve(),ROOT/'tools/generate_metal.py',ROOT/'tools/mds_build.py',ROOT/'tools/render_bd.py',
+                 Path(__file__).resolve(),ROOT/'tools/generate_metal.py',ROOT/'tools/table_pool.py',ROOT/'tools/mds_build.py',ROOT/'tools/render_bd.py',
                  ROOT/'tests/metal_reference.cpp',source_root/'HiHats.hpp',source_root/'SynthDrumCommon.hpp',
                  out/'cymbal_spec.hpp',out/'tr6_hihats.hpp',out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),
                  out/'assembly.json',out/'code.bin',out/'sine.bin',out/'init-stub.bin']
@@ -183,7 +185,7 @@ def main():
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate,saturation='linear' if a.linear_saturation else 'cubic' if a.cubic_saturation else 'tanh'),
-                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,
+                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,deduplicate_tables=a.deduplicate_tables,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),

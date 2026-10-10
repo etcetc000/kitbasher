@@ -13,6 +13,7 @@ import re
 from mds_build import ROOT
 from generate_bd import word
 from render_bd import run
+from table_pool import emit_tables
 
 Q=1<<23
 OUTPUT_GAIN=.5
@@ -53,7 +54,7 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False):
     if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
     table_shift=23-tanh_bits
     partial_count=len(c['partials'])
@@ -453,9 +454,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     tables['partials']=partials
     if not (linear_saturation or cubic_saturation):
         tables['tanh_table']=[word(math.tanh((i-(1<<(tanh_bits-1)))/(1<<(tanh_bits-4)))/16) for i in range((1<<tanh_bits)+1)]
-    for label,values in tables.items():
-        emit(label+':')
-        for i in range(0,len(values),8): emit('    .dc '+','.join(f'${v&0xffffff:06x}' for v in values[i:i+8]))
+    emit(*emit_tables(tables,deduplicate_tables))
     return '\n'.join(lines)+'\n'
 
 
