@@ -8,8 +8,17 @@
 #include <iostream>
 #include <string>
 #include <vector>
+static bool cubicSaturation=false;
+static uint64_t curveClamps=0;
+static float tr6Saturate(float value) {
+    if(!cubicSaturation) return std::tanh(value);
+    if(value < -1.f || value > 1.f) ++curveClamps;
+    const float x=std::max(-1.f,std::min(1.f,value));
+    return x-.25f*x*x*x;
+}
 #define private public
-#include "HiHats.hpp"
+// Generated from the pinned header by replacing only its saturation call.
+#include "tr6_hihats.hpp"
 #undef private
 #include "cymbal_spec.hpp"
 using namespace SynthDrums606;
@@ -117,10 +126,10 @@ int main(int argc,char** argv) {
         int count=std::atoi(argv[3]); if(count!=3 && count!=6 && count!=47) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
-    const auto& selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
+    auto selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
     std::string kind=argv[1]; int decay=std::atoi(argv[2]),pitch=std::atoi(argv[3]);
     int samples=std::atoi(argv[4]),repeat=std::atoi(argv[5]),delay=std::atoi(argv[6]);
     uint32_t rngSeed=seed(kind);
@@ -131,8 +140,18 @@ int main(int argc,char** argv) {
     }
     MetalHiHatVoice v; v.init(44100,rngSeed);
     const bool lcgNoise=argc>=12 && std::atoi(argv[11])!=0;
-    const int envelopeRate=argc==13 ? std::atoi(argv[12]) : 1;
+    const int envelopeRate=argc>=13 ? std::atoi(argv[12]) : 1;
     if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
+    const bool linearSaturation=argc>=14 && std::atoi(argv[13])!=0;
+    cubicSaturation=argc==15 && std::atoi(argv[14])!=0;
+    if(linearSaturation && cubicSaturation) return 2;
+    if(linearSaturation) {
+        // Independently express drive-only processing through the source's
+        // existing bypass path. The separate click/noise term stays unchanged.
+        selected.tonalMix*=selected.saturationDrive;
+        selected.noiseMix*=selected.saturationDrive;
+        selected.saturationDrive=0;
+    }
     EnvelopeSteps envelopes;
     uint32_t lcg=((rngSeed ? rngSeed : 0x606606u)^0xA511E9B3u)&0xffffffu;
     std::ofstream out(argv[7],std::ios::binary); if(!out) return 3;
@@ -153,5 +172,6 @@ int main(int argc,char** argv) {
     }
     std::cout << "active=" << v.isActive() << " frame=" << v.frameIndex_ << " duration=" << v.naturalFrameCount_
               << " phase_rng=" << v.phaseRandom_.state_ << " wobble_rng=" << v.wobbleRandom_.state_
-              << " noise_rng=" << (lcgNoise ? lcg : v.noise_.rng_.state_) << '\n';
+              << " noise_rng=" << (lcgNoise ? lcg : v.noise_.rng_.state_)
+              << " curve_clamps=" << curveClamps << '\n';
 }

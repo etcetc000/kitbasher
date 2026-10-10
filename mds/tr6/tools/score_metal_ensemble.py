@@ -30,7 +30,7 @@ def main():
     exe=build_reference(out,a.compiler)
     source=ROOT/'.audit-sources/Simple606/Source'
     inputs={str(path):digest(path) for path in (scorer,exe,Path(__file__),ROOT/'tests/metal_reference.cpp',
-            source/'HiHats.hpp',source/'SynthDrumCommon.hpp',out/'cymbal_spec.hpp')}
+            source/'HiHats.hpp',source/'SynthDrumCommon.hpp',out/'cymbal_spec.hpp',out/'tr6_hihats.hpp')}
     report=dict(scope='C++ model ensembles only; not native DSP seed coverage or listening acceptance',
                 scorer='External wmd_stats ensemble mel distance; no new scoring algorithm',
                 input_sha256=inputs,sample_rate=44100,common_output_gain=.5,

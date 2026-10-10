@@ -30,6 +30,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Block processing and register state with bit-exact comparisons](audit/BLOCK-METAL.md)
 - [Interpolated envelopes, CPU savings and perceptual tradeoffs](audit/ENVELOPE-METAL.md)
 - [Exact block noise/filter passes and shared scratch checks](audit/BLOCK-NOISE.md)
+- [Cubic and linear saturation: CPU, perceptual loss and storage](audit/SATURATION-METAL.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
