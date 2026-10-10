@@ -32,6 +32,9 @@ def main():
     p.add_argument('--bd-resident-state',action='store_true')
     p.add_argument('--bd-lcg-noise',action='store_true')
     p.add_argument('--bd-tanh-bits',type=int,choices=range(8,14),default=13)
+    p.add_argument('--bd-control-rate',type=int,choices=(1,16,32),default=1)
+    p.add_argument('--bd-simple-impulse',action='store_true')
+    p.add_argument('--bd-omit-impulse',action='store_true')
     p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
@@ -56,6 +59,10 @@ def main():
     p.add_argument('--metal-bandpass-noise',action='store_true')
     p.add_argument('--metal-combined-mix',action='store_true')
     args=p.parse_args()
+    if args.bd_control_rate!=1 and not args.bd_resident_state:
+        p.error('BD control interpolation requires resident state')
+    if args.bd_simple_impulse and args.bd_omit_impulse:
+        p.error('Choose simple or omitted BD impulse, not both')
     if args.metal_envelope_rate>32//args.metal_render_stride:
         p.error('Envelope interval cannot exceed synthesis samples per block')
     if args.metal_combined_mix and not (args.metal_linear_saturation and args.metal_envelope_rate==32 and args.metal_resident_output and args.metal_interpolated_gate and args.metal_bypass_noise_dc):
@@ -121,6 +128,9 @@ def main():
     if args.bd_resident_state: suffix+='-bd-resident'
     if args.bd_lcg_noise: suffix+='-bd-lcg'
     if args.bd_tanh_bits!=13: suffix+=f'-bd-lut{args.bd_tanh_bits}'
+    if args.bd_control_rate!=1: suffix+=f'-bd-control{args.bd_control_rate}'
+    if args.bd_simple_impulse: suffix+='-bd-simple-impulse'
+    if args.bd_omit_impulse: suffix+='-bd-omit-impulse'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -148,7 +158,7 @@ def main():
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
         elif name=='bd':
-            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise)
+            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
@@ -249,7 +259,7 @@ def main():
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
-                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,
+                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,

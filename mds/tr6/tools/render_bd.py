@@ -13,7 +13,7 @@ import shutil
 import sys
 
 from mds_build import ROOT, assemble_package, mds_format
-from generate_bd import generate, STATE
+from generate_bd import generate, state_layout
 
 
 def run(command, cwd=None, timeout=120):
@@ -34,22 +34,36 @@ def main():
     ap.add_argument('--assembler',required=True); ap.add_argument('--host',required=True)
     ap.add_argument('--compiler',default='clang++')
     ap.add_argument('--case',choices=['default','minimum','maximum','retrigger','pretrigger','retrigger_idle','heat_modulation'])
+    ap.add_argument('--knobs',type=int,nargs=5,metavar=('TRAN','DEC','TUNE','HEAT','XL'),help='One custom fixture; first four values 0..127, XL 0 or 1')
     ap.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
     ap.add_argument('--resident-state',action='store_true',help='Keep hot state in R/N registers during each render call')
     ap.add_argument('--lcg-noise',action='store_true',help='Approximation: use a 24-bit LCG for the click noise')
     ap.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 noise seed; zero selects the default seed')
     ap.add_argument('--blocks',type=int,help='Diagnostic render length; may stop before the voice becomes idle')
+    ap.add_argument('--control-rate',type=int,choices=(1,16,32),default=1,help='Approximation: interpolate envelope/pitch endpoints; requires resident state')
+    ap.add_argument('--simple-impulse',action='store_true',help='Approximation: replace the impulse high-pass biquad with one pole')
+    ap.add_argument('--omit-impulse',action='store_true',help='Approximation: omit the impulse layer and its native filter/envelope work')
     ap.add_argument('--out',type=Path)
     args=ap.parse_args()
     if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
     if args.blocks is not None and args.blocks<1: ap.error('--blocks must be positive')
+    if args.control_rate!=1 and not args.resident_state: ap.error('--control-rate requires --resident-state')
+    if args.simple_impulse and args.omit_impulse: ap.error('Choose --simple-impulse or --omit-impulse, not both')
+    if args.knobs is not None:
+        if args.case is not None: ap.error('--knobs and --case are mutually exclusive')
+        if any(not 0<=v<=127 for v in args.knobs[:4]) or args.knobs[4] not in (0,1): ap.error('Invalid custom knob values')
     suffix='bd-comparison' if args.tanh_bits==13 else f'bd-lut{args.tanh_bits}'
     if args.resident_state: suffix+='-resident'
     if args.lcg_noise: suffix+='-lcg'
     if args.seed is not None: suffix+=f'-seed{args.seed:08x}'
     if args.blocks is not None: suffix+=f'-blocks{args.blocks}'
+    if args.control_rate!=1: suffix+=f'-control{args.control_rate}'
+    if args.simple_impulse: suffix+='-simple-impulse'
+    if args.omit_impulse: suffix+='-omit-impulse'
+    if args.knobs is not None: suffix+='-k'+'-'.join(str(v) for v in args.knobs)
     out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed); (out/'bd.asm').write_text(source)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse); (out/'bd.asm').write_text(source)
+    states=state_layout(args.control_rate)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
     (out/'bd.mds').write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -71,6 +85,7 @@ def main():
            ('pretrigger',[51,102,75,0,0],0,10*32,4096)]
     if args.case=='retrigger_idle': cases=[('retrigger_idle',[51,102,75,0,0],4096*32,0,8192)]
     if args.case=='heat_modulation': cases=[('heat_modulation',[51,102,75,0,0],0,0,4096)]
+    if args.knobs is not None: cases=[('custom',args.knobs,0,0,16384 if args.knobs[4] else 4096)]
     def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
     source_root=ROOT/'.audit-sources/Simple606/Source'
     input_paths=[Path(args.host).resolve(),Path(args.assembler).resolve(),Path(shutil.which(args.compiler) or args.compiler).resolve(),exe,
@@ -87,6 +102,9 @@ def main():
         prefix=out/name
         model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606] if args.lcg_noise or args.seed is not None else []
         if name=='heat_modulation': model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,1]
+        if args.control_rate!=1: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate]
+        if args.simple_impulse: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,1]
+        if args.omit_impulse: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1]
         reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw',*model_args])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321']
@@ -117,7 +135,7 @@ def main():
         if name=='heat_modulation': expected_y[4]=((blocks-1)//3*37)%128*128
         if dumps[0]!=expected_y or dumps[2:]!=[[0x123456],[0x654321]]:
             raise AssertionError(f'{name}: parameter or output guard modified')
-        if dumps[1][len(STATE):]!=[0x5a5a5a]*(64-len(STATE)):
+        if dumps[1][len(states):]!=[0x5a5a5a]*(64-len(states)):
             raise AssertionError(f'{name}: state exceeds declared layout')
         expected_active=int(re.search(r'active_at_end=(\d)',reference.stdout)[1])
         if dumps[1][0]!=expected_active:
@@ -130,13 +148,17 @@ def main():
             raise AssertionError(f'{name}: output buffer not fully written')
         # Fixed acceptance bounds for this prototype. The XL case accumulates
         # source float32 oscillator phase error; see audit/BD-PORT.md.
-        tolerance=0.005 if name=='maximum' else 0.0002
+        tolerance=0.005 if knobs[4] else 0.0002
         model=dict(synthesis='original') if not args.lcg_noise else dict(synthesis='original',noise='lcg24')
         if args.seed is not None: model['seed']=args.seed
         if name=='heat_modulation': model['heat_pattern']='three-block-step37'
+        if args.control_rate!=1: model['control_rate']=args.control_rate
+        if args.simple_impulse: model['impulse_filter']='one-pole-highpass'
+        if args.omit_impulse: model['impulse_layer']='omitted'
         checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
         metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
-                     resident_state=args.resident_state,reference_model=model,full_source_comparison=not args.lcg_noise,output_gain=1,checks=checks,
+                     resident_state=args.resident_state,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
+                     local_words=len(states),control_rate=args.control_rate,
                      peak_error=max(abs(e) for e in error),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      host_cycle_table_max_call=max(cycles),cold_cache_measured=False,
