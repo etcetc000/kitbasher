@@ -31,7 +31,7 @@ def main():
     p.add_argument('--block-oscillators',action='store_true',help='Keep recursive oscillator states in registers through each block')
     p.add_argument('--resident-state',action='store_true',help='Keep hot state in spare registers within each render call')
     p.add_argument('--end-boundaries',action='store_true',help='Render one complete integer-decay case for every final-block length 1..32')
-    p.add_argument('--envelope-rate',type=int,choices=(1,4,8,16),default=1,help='Interpolate envelope endpoints this many samples apart')
+    p.add_argument('--envelope-rate',type=int,choices=(1,4,8,16,32),default=1,help='Interpolate envelope endpoints this many samples apart; 32 requires full-rate synthesis')
     p.add_argument('--block-noise',action='store_true',help='Render noise/filter passes through shared Y scratch')
     p.add_argument('--linear-saturation',action='store_true',help='Approximation: keep drive gain and bypass tanh; requires lean math')
     p.add_argument('--cubic-saturation',action='store_true',help='Approximation: clamp driven input to +/-1 and use x-x^3/4; requires lean math')
@@ -46,7 +46,11 @@ def main():
     p.add_argument('--register-mix',action='store_true',help='Retain mixer temporaries and read X/Y scratch together; requires fused mixing and bounded loops')
     p.add_argument('--resident-output',action='store_true',help='Retain output DC history in registers; requires register mixing')
     p.add_argument('--bandpass-noise',action='store_true',help='Approximation: fit one noise band-pass in place of two filters; requires block noise and NumPy/SciPy')
+    p.add_argument('--combined-mix',action='store_true',help='Approximation: interpolate combined tonal/noise gains; requires linear saturation, envelope rate 32, resident output, gate interpolation and bypassed noise DC')
     a=p.parse_args(); kind=a.kind
+    if a.envelope_rate>32//a.render_stride: p.error('--envelope-rate cannot exceed synthesis samples per block')
+    if a.combined_mix and not (a.linear_saturation and a.envelope_rate==32 and a.resident_output and a.interpolated_gate and a.bypass_noise_dc):
+        p.error('--combined-mix requires linear saturation, envelope rate 32, resident output, interpolated gate and bypassed noise DC')
     if a.resident_output and not a.register_mix: p.error('--resident-output requires --register-mix')
     if a.bandpass_noise and not a.block_noise: p.error('--bandpass-noise requires --block-noise')
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
@@ -87,6 +91,7 @@ def main():
     if a.register_mix: suffix+='-register-mix'
     if a.resident_output: suffix+='-resident-output'
     if a.bandpass_noise: suffix+='-bandpass'
+    if a.combined_mix: suffix+='-combined'
     if a.render_stride!=1: suffix+=f'-stride{a.render_stride}'
     if a.seed is not None: suffix+=f'-seed{a.seed:08x}'
     if a.end_boundaries: suffix+='-endings'
@@ -115,12 +120,13 @@ def main():
         if a.bypass_noise_dc: model_args += [1]
     if a.interpolated_gate:
         model_args=[a.partial_count,int(a.no_wobble),{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),1]
-    if a.render_stride!=1 or a.seed is not None or a.bandpass_noise:
+    if a.render_stride!=1 or a.seed is not None or a.bandpass_noise or a.combined_mix:
         selected_seed=a.seed if a.seed is not None else {'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
         model_args=[a.partial_count,int(a.no_wobble),selected_seed,int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),int(a.interpolated_gate),a.render_stride]
-        if a.bandpass_noise: model_args.append(out/'bandpass-coefficients.txt')
+        if a.bandpass_noise or a.combined_mix: model_args.append(out/'bandpass-coefficients.txt' if a.bandpass_noise else '-')
+        if a.combined_mix: model_args.append(1)
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix,a.resident_output,a.bandpass_noise); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix,a.resident_output,a.bandpass_noise,a.combined_mix); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -237,6 +243,7 @@ def main():
         if a.render_stride!=1: reference_model['render_stride']=a.render_stride
         if a.seed is not None: reference_model['seed']=a.seed
         if a.bandpass_noise: reference_model['noise_filter']='fitted-bandpass-v1'
+        if a.combined_mix: reference_model['mix_envelopes']='combined'
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      render_stride=a.render_stride,synthesis_sample_rate=44100/a.render_stride,
                       register_mix=a.register_mix,

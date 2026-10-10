@@ -66,8 +66,15 @@ struct EnvelopeSteps {
     float fast=1,slow=1,attack=1,envelope=0,bell=1,click=1;
     float fastPole=1,slowPole=1,attackPole=1,bellPole=1,clickPole=1,weight=1;
     float envelopeStep=0,bellStep=0,clickStep=0;
-    void reset(const MetalHiHatVoice& v,int stride,bool interpolateGate=false) {
+    bool combined=false;
+    float toneGain=0,noiseGain=0,bellAmount=0,clickAmount=0,tone=0,noise=0,toneStep=0,noiseStep=0;
+    void reset(const MetalHiHatVoice& v,int stride,bool interpolateGate=false,bool combineMix=false) {
         *this=EnvelopeSteps(); rate=stride;
+        combined=combineMix;
+        if(combined) {
+            toneGain=v.tonalMix_; noiseGain=v.noiseMix_;
+            bellAmount=v.bellAccentAmount_; clickAmount=v.clickAmount_; noise=clickAmount;
+        }
         gated=interpolateGate; duration=v.naturalFrameCount_;
         fade=v.gateFadeFrames_; inverseFade=v.inverseGateFadeFrames_;
         fastPole=std::pow(v.fastDecayCoefficient_,rate);
@@ -85,9 +92,23 @@ struct EnvelopeSteps {
                 const int64_t remaining=static_cast<int64_t>(duration)-frame-rate+1;
                 endpoint*=std::min(1.f,std::max(0.f,remaining*inverseFade));
             }
-            envelopeStep=(endpoint-envelope)/rate;
-            bellStep=(bell*bellPole-bell)/rate;
-            clickStep=(click*clickPole-click)/rate;
+            if(combined) {
+                bell*=bellPole; click*=clickPole;
+                toneStep=(endpoint*toneGain*(1+bellAmount*bell)-tone)/rate;
+                noiseStep=(endpoint*noiseGain+clickAmount*click-noise)/rate;
+            } else {
+                envelopeStep=(endpoint-envelope)/rate;
+                bellStep=(bell*bellPole-bell)/rate;
+                clickStep=(click*clickPole-click)/rate;
+            }
+        }
+        if(combined) {
+            tone+=toneStep; noise+=noiseStep;
+            v.tonalMix_=tone; v.noiseMix_=noise; v.bellAccentAmount_=v.clickAmount_=0;
+            v.attackEnvelope_=1; v.attackCoefficient_=0;
+            v.fastEnvelope_=1; v.slowEnvelope_=0; v.fastEnvelopeWeight_=1;
+            v.fastDecayCoefficient_=v.slowDecayCoefficient_=1;
+            ++frame; return;
         }
         envelope+=envelopeStep;
         v.attackEnvelope_=1; v.attackCoefficient_=0;
@@ -140,7 +161,7 @@ int main(int argc,char** argv) {
         if(stride!=1 && stride!=2) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0,stride); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17 && argc!=18 && argc!=19) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16 && argc!=17 && argc!=18 && argc!=19 && argc!=20) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     auto selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
@@ -156,7 +177,8 @@ int main(int argc,char** argv) {
     if((renderStride!=1 && renderStride!=2) || delay%renderStride || repeat%renderStride) return 2;
     MetalHiHatVoice v; v.init(44100.0/renderStride,rngSeed);
     float fitted[128][3]{};
-    const bool bandpassNoise=argc==19;
+    const bool bandpassNoise=argc>=19 && std::string(argv[18])!="-";
+    const bool combinedMix=argc==20 && std::atoi(argv[19])!=0;
     if(bandpassNoise) {
         std::ifstream coefficients(argv[18]);
         for(auto& row:fitted) for(auto& value:row)
@@ -165,11 +187,13 @@ int main(int argc,char** argv) {
     }
     const bool lcgNoise=argc>=12 && std::atoi(argv[11])!=0;
     const int envelopeRate=argc>=13 ? std::atoi(argv[12]) : 1;
-    if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
+    if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16 && envelopeRate!=32) return 2;
+    if(envelopeRate>32/renderStride) return 2;
     const bool linearSaturation=argc>=14 && std::atoi(argv[13])!=0;
     cubicSaturation=argc>=15 && std::atoi(argv[14])!=0;
     const bool bypassNoiseDC=argc>=16 && std::atoi(argv[15])!=0;
     const bool interpolatedGate=argc>=17 && std::atoi(argv[16])!=0;
+    if(combinedMix && (!linearSaturation || envelopeRate!=32 || !interpolatedGate || !bypassNoiseDC)) return 2;
     if(interpolatedGate && envelopeRate==1) return 2;
     if(linearSaturation && cubicSaturation) return 2;
     if(linearSaturation) {
@@ -197,7 +221,7 @@ int main(int argc,char** argv) {
                 v.noiseLowPass_.b0_=1; v.noiseLowPass_.b1_=v.noiseLowPass_.b2_=0;
                 v.noiseLowPass_.a1_=v.noiseLowPass_.a2_=0;
             }
-            if(envelopeRate!=1) envelopes.reset(v,envelopeRate,interpolatedGate);
+            if(envelopeRate!=1) envelopes.reset(v,envelopeRate,interpolatedGate,combinedMix);
             if(interpolatedGate) v.gateFadeFrames_=0; // Already included in the endpoint model.
         }
         if(envelopeRate!=1 && v.isActive()) envelopes.prepare(v);

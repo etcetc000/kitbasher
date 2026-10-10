@@ -113,7 +113,9 @@ down from 568 / 1,778. With this experiment, the seven-voice family would use
 the published library-byte field. The working cascade candidate's resource
 totals remain those in [RESIDENT-OUTPUT.md](RESIDENT-OUTPUT.md).
 
-Under 129 remains unmet even in raw instruction-host timing. The cold model
+This band-pass/cubic candidate remains above 129 even in raw instruction-host
+timing. The later [combined-mix experiment](COMBINED-MIX.md) adds linear
+saturation and combined 32-sample gain endpoints. The cold model
 uses uncalibrated fetch waits and additive penalties, excludes data waits,
 dispatch and DMA, and is not a hardware worst-case bound. Packages remain
 zero-cycle drafts, with installable SysEx blocked by the upstream export gate.

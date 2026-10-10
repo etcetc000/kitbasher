@@ -37,7 +37,7 @@ def main():
     p.add_argument('--metal-lcg-noise',action='store_true')
     p.add_argument('--metal-block-oscillators',action='store_true')
     p.add_argument('--metal-resident-state',action='store_true')
-    p.add_argument('--metal-envelope-rate',type=int,choices=(1,4,8,16),default=1)
+    p.add_argument('--metal-envelope-rate',type=int,choices=(1,4,8,16,32),default=1)
     p.add_argument('--metal-block-noise',action='store_true')
     p.add_argument('--metal-linear-saturation',action='store_true')
     p.add_argument('--metal-cubic-saturation',action='store_true')
@@ -51,7 +51,12 @@ def main():
     p.add_argument('--metal-register-mix',action='store_true')
     p.add_argument('--metal-resident-output',action='store_true')
     p.add_argument('--metal-bandpass-noise',action='store_true')
+    p.add_argument('--metal-combined-mix',action='store_true')
     args=p.parse_args()
+    if args.metal_envelope_rate>32//args.metal_render_stride:
+        p.error('Envelope interval cannot exceed synthesis samples per block')
+    if args.metal_combined_mix and not (args.metal_linear_saturation and args.metal_envelope_rate==32 and args.metal_resident_output and args.metal_interpolated_gate and args.metal_bypass_noise_dc):
+        p.error('Combined mixing requires linear saturation, envelope rate 32, resident output, interpolated gate and bypassed noise DC')
     if args.metal_bandpass_noise and not args.metal_block_noise:
         p.error('Band-pass noise requires block noise')
     if args.metal_resident_output and not args.metal_register_mix:
@@ -106,6 +111,7 @@ def main():
     if args.metal_register_mix: suffix+='-register-mix'
     if args.metal_resident_output: suffix+='-resident-output'
     if args.metal_bandpass_noise: suffix+='-bandpass'
+    if args.metal_combined_mix: suffix+='-combined'
     if args.metal_render_stride!=1: suffix+=f'-stride{args.metal_render_stride}'
     if args.metal_bandpass_noise: suffix='-bandpass-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
     elif args.metal_resident_output: suffix='-resident-output-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
@@ -128,7 +134,7 @@ def main():
                 from fit_noise_bandpass import fit_controls
                 controls,fit_report=fit_controls(controls)
                 (out/(name+'-bandpass-fit.json')).write_text(json.dumps(fit_report,indent=2)+'\n')
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate,args.metal_render_stride,register_mix=args.metal_register_mix,resident_output=args.metal_resident_output,bandpass_noise=args.metal_bandpass_noise)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops,args.deduplicate_tables,args.metal_rounded_dc,args.metal_bypass_noise_dc,args.metal_interpolated_gate,args.metal_render_stride,register_mix=args.metal_register_mix,resident_output=args.metal_resident_output,bandpass_noise=args.metal_bandpass_noise,combined_mix=args.metal_combined_mix)
             imports['mds_track']=(2,6)
             if args.metal_block_oscillators: imports['mds_scratch_x']=(3,7)
             if args.metal_block_noise: imports['mds_scratch_y']=(4,8)
@@ -238,6 +244,7 @@ def main():
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,
+                combined_mix=args.metal_combined_mix,
                 metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise,saturation='linear' if args.metal_linear_saturation else 'cubic' if args.metal_cubic_saturation else 'tanh',fused_mix=args.metal_fused_mix,bounded_loops=args.metal_bounded_loops),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)

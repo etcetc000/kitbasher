@@ -54,7 +54,9 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False,resident_output=False,bandpass_noise=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False,resident_output=False,bandpass_noise=False,combined_mix=False):
+    if combined_mix and not (linear_saturation and envelope_rate==32 and resident_output and interpolated_gate and bypass_noise_dc):
+        raise ValueError('Combined mixing requires linear saturation, 32-sample envelopes, resident output, interpolated gate and bypassed noise DC')
     if bandpass_noise and (not block_noise or c.get('noise_filter')!='fitted-bandpass-v1'):
         raise ValueError('Band-pass noise requires block noise and fitted controls')
     if not bandpass_noise and c.get('noise_filter'): raise ValueError('Fitted controls require band-pass noise')
@@ -75,7 +77,8 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if (resonators or lcg_noise) and not lean_math: raise ValueError('Resonators/LCG noise require lean math')
     if block_oscillators and not resonators: raise ValueError('Block oscillators require resonators')
     if resident_state and not block_oscillators: raise ValueError('Resident state requires block oscillators')
-    if envelope_rate not in (1,4,8,16): raise ValueError('Envelope rate must be 1, 4, 8 or 16')
+    if envelope_rate not in (1,4,8,16,32): raise ValueError('Envelope rate must be 1, 4, 8, 16 or 32')
+    if envelope_rate>block_samples: raise ValueError('Envelope interval cannot exceed synthesis samples per block')
     if envelope_rate!=1 and not resident_state: raise ValueError('Control-rate envelopes require resident state')
     if block_noise and not block_oscillators: raise ValueError('Block noise requires block oscillators')
     if linear_saturation and not lean_math: raise ValueError('Linear saturation requires lean math')
@@ -113,7 +116,9 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
     if render_stride!=1: lines.append(f'; Synthesis runs at {sample_rate:g} Hz; each sample is repeated {render_stride} times at the output.')
     if register_mix: lines.append('; Mixer temporaries stay in registers; paired X/Y reads consume the block scratch buffers.')
-    if resident_output: lines.append('; Output DC history stays in R4/X1; final bell gain is reconstructed once per block.')
+    if resident_output: lines.append('; Output DC history stays in R4/X1.' if combined_mix else
+                                     '; Output DC history stays in R4/X1; final bell gain is reconstructed once per block.')
+    if combined_mix: lines.append('; Combined gain envelopes reuse whitein/whiteout/whiteerr/clickerr; these histories are otherwise bypassed or unused.')
     tables={}
     resident={}
     def emit(*s): lines.extend(s)
@@ -178,6 +183,12 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    asl #16,a,a','    or x0,a','    move #>$800000,x0','    eor x0,a','    move a1,a')
     def dc(n):
         if bypass_noise_dc and n=='white': return
+        if combined_mix and rounded_dc and n=='out':
+            # The preceding MAC/ASL preload the coefficient/old input. Truncate
+            # the integer input difference, then round the feedback MAC once.
+            emit('    sub x0,a a1,r4')
+            emit('    move a1,a','    macr x1,y0,a','    move a1,x1')
+            return
         if resident_output and rounded_dc and n=='out':
             # Parallel moves capture the pre-ALU input/difference, preserving
             # the original truncation while advancing the filter in registers.
@@ -232,6 +243,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     emit('    move a1,r2','    move #>$ffffff,m2','    clr a',f'    do #{partial_count*8},init_clear_end',
          '    move a,x:(r2)+','init_clear_end:','    rts','trigger:','    clr a')
     preserved={'ext','phaselo','phasehi','wobblelo','wobblehi','noiselo','noisehi','whitein','whiteout','whiteerr','tanh_clamps'}
+    if combined_mix: preserved-= {'whitein','whiteout','whiteerr'}
     for n in STATE:
         if n not in preserved: save(n)
     emit('    move #>$ffffff,m2','    move #>$ffffff,m3')
@@ -250,6 +262,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         imm(c['trim']/2); save('fastenv','x0'); save('slowenv','x0')
         imm(c['bell_amount']*tone_base); save('bell','x0')
         imm(c['click_amount']*c['trim']/2); save('click','x0')
+        if combined_mix: save('whiteout','x0')
     else:
         for n in ('fastenv','slowenv','attack','bell','click'): save(n,'x0')
     load('ext','r2'); emit('    move #>partials,r3','    move #>8,n2',f'    do #{partial_count},trigger_partials_end')
@@ -338,12 +351,12 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
             extsave('phase','x0'); extsave('phasefrac','x1')
             emit('    move (r2)+n2','    nop')
         emit('    move #>mds_scratch_x,'+('r0' if register_mix else 'r4'))
-    if resident_output:
+    if resident_output and envelope_rate!=32:
         # Capture the outer loop count before N5 becomes the click envelope.
         # R0's advancing scratch pointer supplies the consumed count at return.
         emit('    move n5,a',f'    add #>{envelope_rate-1},a',
              f'    asr #{int(math.log2(envelope_rate))},a,a','    move a1,n0')
-    elif bounded_loops: emit(f'    move n5,{count_register}')
+    elif bounded_loops and not resident_output: emit(f'    move n5,{count_register}')
     if resident_state:
         cached=dict(attack='n1',fastenv='n2',slowenv='n3',bell='n4',click='n5',
                     fastloss='n6',slowloss='n7',duration='r1',frame='r3',tonal='r2',envelope='r5')
@@ -359,11 +372,17 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         if resident_output:
             cached.pop('bellgain')
             cached.update(outin='r4',outout='x1')
+        if combined_mix:
+            cached=dict(whitein='n1',whiteout='n2',whiteerr='n3',clickerr='n6',bell='n4',click='n5',
+                        duration='r1',frame='r3',envelope='n7',outin='r4',outout='x1')
         for name,reg in cached.items():
             if not (register_mix and name in ('tonal','noise','bellgain')): load(name,reg)
         resident.update(cached)
+        if combined_mix and rounded_dc: imm(.995,'r2')
     if envelope_rate!=1:
-        if bounded_loops:
+        if envelope_rate==32:
+            pass  # One control interval per full-rate block; no outer DO.
+        elif bounded_loops:
             if not resident_output:
                 emit(f'    move {count_register},a',f'    add #>{envelope_rate-1},a',
                      f'    asr #{int(math.log2(envelope_rate))},a,a','    move a1,n0')
@@ -388,9 +407,17 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
             load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope')
             emit('    jmp control_gate_ready','control_gate_zero:','    clr a','    jmp control_gate_ready','control_gate_full:')
             load('envelope'); emit('control_gate_ready:')
-        load('fastenverr','x0'); emit('    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save('slowenverr')
-        for n,step in (('bell','attackerr'),('click','bellerr')):
-            load(n,'x0'); imm(c[n]**envelope_rate,'y0'); emit('    mpyr x0,y0,a','    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save(step)
+        if combined_mix:
+            save('envelope')
+            decay('bell',2*(1-c['bell']**envelope_rate)); imm(tone_base); emit('    add x0,a'); mulstate('envelope')
+            load('whitein','x0'); emit('    sub x0,a','    asr #5,a,a'); save('whiteerr')
+            decay('click',2*(1-c['click']**envelope_rate))
+            load('envelope'); mul(c['noise_mix']*c['drive']); load('click','x0'); emit('    add x0,a')
+            load('whiteout','x0'); emit('    sub x0,a','    asr #5,a,a'); save('clickerr')
+        else:
+            load('fastenverr','x0'); emit('    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save('slowenverr')
+            for n,step in (('bell','attackerr'),('click','bellerr')):
+                load(n,'x0'); imm(c[n]**envelope_rate,'y0'); emit('    mpyr x0,y0,a','    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save(step)
         emit('control_ready:')
         if bounded_loops:
             load('duration'); load('frame','x0')
@@ -512,8 +539,18 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     else:
         mulstate('envelope'); save('tonal'); load('noise'); mul(c['click_amount']); mulstate('click')
         load('tonal','x0'); emit('    add x0,a'); mul(c['trim'])
+    if combined_mix:
+        # Advance only two combined gain envelopes, then sum two products.
+        # Endpoints include bell, drive, base envelope and the noise click.
+        lines[sample_mix_start:]=[]
+        emit('lean_combined_mix:','    move n1,a','    move n3,x0','    add x0,a n2,b','    move a1,n1',
+             '    move n6,x0','    add x0,b a1,y0','    move b1,n2',
+             '    move x:(r0)+,x0 y:(r5)+,y1','    mpy x0,y0,a b1,x0',
+             '    mac x0,y1,a r2,y0' if rounded_dc else '    mac x0,y1,a',
+             *(['    asl a r4,x0'] if rounded_dc else ['    asl a','    move a1,a']))
     dc('out')
-    if resident_output:
+    if combined_mix: emit('    asl #3,a,a','    move a,y:(r7)+')
+    elif resident_output:
         emit('    asl #3,a,a','    move n5,b','    move n6,x0',
              '    add x0,b a,y:(r7)+',*['    move a,y:(r7)+']*(render_stride-1),'    move b1,n5')
     else: emit('    asl #3,a,a',*['    move a,y:(r7)+']*render_stride)
@@ -529,7 +566,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    jmp sample_done','sample_silent:','    clr a','    move a,y:(r7)+','sample_done:','    nop')
     if envelope_rate!=1: emit('control_samples_end:','    nop')
     emit('block_end:')
-    if register_mix:
+    if register_mix and not combined_mix:
         # N0 is about to become the zero-suffix loop count. Persist the final
         # scratch values first, preserving even diagnostic state bit-for-bit.
         for name in ('tonal','noise') if resident_output else ('tonal','noise','bellgain'):
@@ -552,7 +589,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if resident_state:
         resident.clear()
         for name,reg in cached.items():
-            if resident_output and interpolated_gate and name=='envelope': reg='n1'
+            if resident_output and interpolated_gate and not combined_mix and name=='envelope': reg='n1'
             if not (register_mix and name in ('tonal','noise','bellgain')): save(name,reg)
     emit('    rts','silent_block:','    clr a','    do #32,zero_end','    move a,y:(r7)+','zero_end:','    rts')
     partials=[]
