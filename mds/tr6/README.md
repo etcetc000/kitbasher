@@ -33,6 +33,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Cubic and linear saturation: CPU, perceptual loss and storage](audit/SATURATION-METAL.md)
 - [Folded mixer gains and exact active-sample loops](audit/FUSED-METAL.md)
 - [Exact coefficient-table compaction and family storage](audit/POOLED-TABLES.md)
+- [Rounded DC feedback and noise pre-filter bypass](audit/DC-METAL.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

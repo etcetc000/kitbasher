@@ -126,7 +126,7 @@ int main(int argc,char** argv) {
         int count=std::atoi(argv[3]); if(count!=3 && count!=6 && count!=47) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12 && argc!=13 && argc!=14 && argc!=15 && argc!=16) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     auto selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
@@ -143,7 +143,8 @@ int main(int argc,char** argv) {
     const int envelopeRate=argc>=13 ? std::atoi(argv[12]) : 1;
     if(envelopeRate!=1 && envelopeRate!=4 && envelopeRate!=8 && envelopeRate!=16) return 2;
     const bool linearSaturation=argc>=14 && std::atoi(argv[13])!=0;
-    cubicSaturation=argc==15 && std::atoi(argv[14])!=0;
+    cubicSaturation=argc>=15 && std::atoi(argv[14])!=0;
+    const bool bypassNoiseDC=argc>=16 && std::atoi(argv[15])!=0;
     if(linearSaturation && cubicSaturation) return 2;
     if(linearSaturation) {
         // Independently express drive-only processing through the source's
@@ -167,6 +168,10 @@ int main(int argc,char** argv) {
             Random verify; verify.state_=v.noise_.rng_.state_;
             if(verify.next()!=(lcg<<8)) return 5;
         }
+        // Reset only the optional pre-filter's history so its existing process
+        // returns the next raw noise value. RNG draws and the following
+        // high/low-pass filters keep their source behavior.
+        if(bypassNoiseDC) { v.noise_.lastIn_=0; v.noise_.lastOut_=0; }
         float value=v.process(); if(!std::isfinite(value)) return 4;
         out.write(reinterpret_cast<const char*>(&value),sizeof(value));
     }

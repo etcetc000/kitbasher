@@ -54,7 +54,7 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False):
     if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
     table_shift=23-tanh_bits
     partial_count=len(c['partials'])
@@ -89,6 +89,12 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if cubic_saturation: lines.append('; Approximation: clamp driven input to +/-1, then apply x - x^3/4.')
     if fused_mix: lines.append('; Fixed gains are folded into envelope state; MAC sums change fixed-point rounding.')
     if bounded_loops: lines.append('; Loop counts cover only active samples; remaining output is zero-filled once.')
+    if rounded_dc:
+        if not lean_math: raise ValueError('Rounded DC filters require lean math')
+        lines.append('; DC feedback rounds to one state word instead of retaining fractional error.')
+    if bypass_noise_dc:
+        if not lean_math: raise ValueError('Bypassing the noise DC filter requires lean math')
+        lines.append('; Noise DC filter is bypassed; the following high/low-pass filters remain.')
     tables={}
     resident={}
     def emit(*s): lines.extend(s)
@@ -152,6 +158,11 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    asr #8,a,a','    and #>$ffff,a','    move a1,x0'); load(n+'hi')
         emit('    asl #16,a,a','    or x0,a','    move #>$800000,x0','    eor x0,a','    move a1,a')
     def dc(n):
+        if bypass_noise_dc and n=='white': return
+        if rounded_dc:
+            load(n+'in','x0'); save(n+'in'); emit('    sub x0,a','    move a1,y1')
+            load(n+'out','x0'); imm(.995,'y0'); emit('    mpyr x0,y0,a','    add y1,a'); save(n+'out')
+            return
         if lean_math:
             load(n+'in','x0'); save(n+'in'); emit('    sub x0,a','    move a1,y1')
             load(n+'out','x0'); imm(.995,'y0'); emit('    mpy x0,y0,a','    clr b'); load(n+'err','b0')
@@ -254,6 +265,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
             # RNG/DC history is resident only during this pass. N5 is the
             # active sample count, including the final partial block.
             white_cache=dict(noiselo='n1',noisehi='n2',whitein='n3',whiteout='n4',whiteerr='n6')
+            if bypass_noise_dc: white_cache=dict(noiselo='n1',noisehi='n2')
             for name,reg in white_cache.items(): load(name,reg)
             resident.update(white_cache)
             emit('    move #>mds_scratch_y,r5','    do n5,block_white_end')
