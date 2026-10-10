@@ -1,0 +1,1159 @@
+{
+ "format": "md-recipe/1",
+ "id": "x20",
+ "name": "MDX OS X.20 B",
+ "about": "The Machinedrum SPS-1 UW community OS X.20 B (by jmamma). Its loader decodes the OS at boot, so the build never reads the OS image: it re-packs the loader's stage image with a boot routine that writes the sites below once the loader has decoded the OS. The anchors (the bytes X.20 B has at each site) are checked offline against a decoded X.20 B (engine/test/x20_recipe.test.ts with KB_X20_OS); the build only accepts the exact X.20 B file (identify.syx_sha256). Addresses, anchors and hashes only: no firmware bytes.",
+ "identify": {
+  "syx_sha256": "dae8210a03f91135c1ce20c741ea32c9b572686f066bb5db99cf8a1c52f381cc",
+  "container_bytes": 966656,
+  "stage_sha256": "56d521fdd33afa454a8e449f2a7db101b2fbb40454454beaf7910475e3dc60e0"
+ },
+ "qualification": {
+  "level": "emulator-gated",
+  "by": "Emulator: boots; every bundled machine plays (or is silent for want of UW samples or input audio) without stopping the OS; a USR machine installs through the Machine Manager",
+  "unproven": "Not yet run on a Machinedrum. The DSP2 pre-boot load the build uses runs only on hardware (the emulator was given the post-start upload)"
+ },
+ "loader": {
+  "stage2": "0x2f8000",
+  "header": "0x40",
+  "stage2_bytes": "0x3060",
+  "copy_longs_at": "0x18",
+  "copy_longs": "0xc18",
+  "s2md": "0x2fb000",
+  "slot0_flash": "0x4008",
+  "payload_flash": "0x7014",
+  "handoff": {
+   "at": "0x2fa680",
+   "old": "4eb9002f8066",
+   "enter": "0x2f8066"
+  },
+  "dsp2_first_command": {
+   "at": "0x2f819c",
+   "old": "243c00454c44",
+   "what": "move.l #'ELD',d2: the loader's first command to DSP2's bootstrap"
+  }
+ },
+ "ram": {
+  "os_image": [
+   "0x200000",
+   "0x2be93c"
+  ],
+  "boot_code": [
+   "0x2fb060",
+   "0x2fc098"
+  ],
+  "window": [
+   "0x2fc0a0",
+   "0x2fd000"
+  ],
+  "menu": "0x2fd000",
+  "records": "0x2fd100",
+  "record_cap": 200,
+  "stack_bottom": "0x2fe800",
+  "list": "0x2ce300",
+  "list_room": 3816,
+  "upload_buffer": [
+   "0x2c0000",
+   "0x2eb000"
+  ],
+  "stock_list": {
+   "at": "0x2b31a6",
+   "entries": 8,
+   "entry_bytes": 60
+  },
+  "handler_table": {
+   "at": "0x2b0d04",
+   "classes": 76
+  },
+  "menu_fields": {
+   "usr_list": "0xbc",
+   "usr_count": "0xcc",
+   "index_entries": "0x9f"
+  }
+ },
+ "hooks": {
+  "VALID": "0x2130ca",
+  "FAM": "0x217f36",
+  "CLS": "0x217686",
+  "GUARD": "0x202a82",
+  "COPYLIST_READS": "0x2beb00",
+  "ERGUARD": {
+   "resume": "0x20da12",
+   "context": "0x2b3dce"
+  }
+ },
+ "host": {
+  "dsp2": "0x600000",
+  "upload_vector": "0x89"
+ },
+ "flash_alias": "0x10000000",
+ "e12": {
+  "table": "0x103d7b",
+  "count": 21,
+  "bank_end": "0x135206",
+  "pairs": [
+   [
+    12,
+    15
+   ],
+   [
+    12,
+    11
+   ],
+   [
+    9,
+    10
+   ],
+   [
+    14,
+    13
+   ],
+   [
+    6,
+    5
+   ],
+   [
+    20,
+    0
+   ]
+  ]
+ },
+ "dsp2": {
+  "free": [
+   [
+    "0x147c01",
+    "0x147d80"
+   ]
+  ],
+  "dispatch": {
+   "init": "0x145af5",
+   "trigger": "0x145bb6",
+   "render": "0x145c77",
+   "entries": 193
+  },
+  "dispatch_relocated": {
+   "init": "0x145d38",
+   "trigger": "0x145e0b",
+   "render": "0x145ede",
+   "entries": 211
+  },
+  "workspace": {
+   "base": "0x12d000",
+   "slice": "0x800"
+  },
+  "pi": {
+   "ids": [
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72
+   ],
+   "inits": [
+    "0x142100",
+    "0x142d49",
+    "0x1434a6",
+    "0x143e0d",
+    "0x145aa7",
+    "0x144ab9",
+    "0x145624",
+    "0x144fec",
+    "0x14584f"
+   ],
+   "ws": "0x135600",
+   "slice": "0x600",
+   "track": "0x142"
+  },
+  "usr_bank_end": "0x13f846",
+  "runtime": {
+   "abi": "md-voice/1",
+   "evidence": "X.20 B leaves DSP2 memory as X.14 has it wherever X.14 writes it (offline decode of X.20 B); assembly models sound in the emulator"
+  },
+  "boot_loader": {
+   "about": "DSP2's bootstrap takes an ELD before its own: a receiver at P:$148000 loads the models' code into DSP2 before its loader and runtime start; a wiper at the end of the second free region clears the receiver and returns to the bootstrap's RDY. DSP1 is not used (its bootstrap runs PFLUSH with the cache off on an ELD, which traps on hardware).",
+   "receiver": "0x148000",
+   "wiper": "0x147d80",
+   "save": "0x147df0",
+   "save_end": "0x147e00",
+   "rdy": "0x14f025"
+  }
+ },
+ "ids": {
+  "usable": [
+   6,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   30,
+   31,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   73,
+   74,
+   75,
+   76,
+   77,
+   78,
+   79,
+   88,
+   89,
+   90,
+   91,
+   92,
+   93,
+   94,
+   95,
+   124,
+   125,
+   126,
+   127,
+   164,
+   169,
+   170,
+   171,
+   172,
+   173,
+   174,
+   175
+  ],
+  "not_usable": {
+   "114..119": "no knob data on X.20",
+   "1 4 5 7 8 9 86 87": "X.20's own machines",
+   "192..209": "X.20's user-machine IDs (194..209 are its 16 USR slots): a built-in machine on 192 or 193 freezes the OS when assigned"
+  }
+ },
+ "families": {
+  "GND": 0,
+  "TRX": 1,
+  "EFM": 2,
+  "NFX": 10
+ },
+ "pack_menu": {
+  "AN": "TRX",
+  "FX": "NFX",
+  "*": "GND"
+ },
+ "key_menu": {
+  "FMS": "EFM"
+ },
+ "audit": {
+  "about": "Relocation audit (engine/src/x20_audit.ts, run with KB_X20_OS): every instruction reaching what the recipe moves or resizes is patched by a site or explained here.",
+  "code_end": "0x2ad000",
+  "regions": [
+   {
+    "what": "old records",
+    "lo": "0x2ce300",
+    "hi": "0x2cf1e8"
+   },
+   {
+    "what": "old menu",
+    "lo": "0x2cf4a8",
+    "hi": "0x2cf580"
+   },
+   {
+    "what": "stock new-machine list",
+    "lo": "0x2b31a6",
+    "hi": "0x2b3386"
+   },
+   {
+    "what": "stack region and RAM above the heap",
+    "lo": "0x2fc098",
+    "hi": "0x300000"
+   }
+  ],
+  "displacements": [
+   "0x16e8",
+   "0x16ec",
+   "0x17ec",
+   "0x19a8",
+   "0x19c5",
+   "0x1a64",
+   "0x1a74",
+   "0x1a75",
+   "0x1a76",
+   "0x1a77",
+   "0x07e8",
+   "0x0ee8"
+  ],
+  "constants": [
+   "0x9e",
+   "0x9f",
+   "0xa0"
+  ],
+  "allow": {
+   "0x203738": "a byte/length range check, not the record cap",
+   "0x209b30": "a byte/length range check, not the record cap",
+   "0x209b46": "a byte/length range check, not the record cap",
+   "0x21324e": "ID range check 0..159 inside the validity routine the VALID hook replaces for our IDs",
+   "0x21e736": "a byte/length range check, not the record cap",
+   "0x230f62": "a byte/length range check, not the record cap",
+   "0x270bb4": "menu category bound, not the record cap",
+   "0x29f524": "a byte/length range check, not the record cap",
+   "0x24e7b6": "a struct field offset, not the record cap",
+   "0x27ea94": "byte range check ($a0/$a1 values), not the record cap",
+   "0x27eba2": "byte range check, not the record cap",
+   "0x209c8c": "stack-frame offset bytes ($2f(a7)), not an address",
+   "0x242bc8": "stack-frame offset bytes, not an address",
+   "0x20ba7e": "stack-frame offset bytes ($2c(a7)), not an address",
+   "0x2212f2": "stack-frame offset bytes, not an address",
+   "0x2353da": "stack-frame offset bytes, not an address",
+   "0x21bf7c": "end bound of the globals block 0x2cdb00..0x2ce300 (a checksum range), which does not move",
+   "0x2a43a8": "the heap end 0x2fc098; window A starts above it",
+   "0x2177f8": "USR info at base+$17ec does not move",
+   "0x217c20": "USR info at base+$17ec does not move",
+   "0x266094": "USR info at base+$17ec does not move",
+   "0x217c34": "per-ID flags at base+$16ec do not move",
+   "0x2660a8": "per-ID flags at base+$16ec do not move",
+   "0x217c38": "the record count at base+$16e8 does not move",
+   "0x217c80": "the record count does not move",
+   "0x217ca2": "the record count does not move",
+   "0x2660ba": "the record count does not move",
+   "0x26612e": "the record count does not move",
+   "0x26616a": "the record count does not move",
+   "0x26609a": "base+$1a77 is only read through the USR descriptor; kept at its stock address",
+   "0x2706d6": "$1a64(a0): a0 is the base patched at 0x2706d2 (menu group)",
+   "0x270812": "$19a8(base): the base is patched at 0x270756 (menu group)",
+   "0x270832": "$19c5(base): patched base (0x270756)",
+   "0x270896": "$19c5(base): patched base (0x270756)",
+   "0x2708aa": "$19c5(base): patched base (0x270756)",
+   "0x27ceac": "a different struct (fields $5a2/$7e2), not the globals base",
+   "0x280ece": "low word of the absolute address $2d17ec, not a displacement",
+   "0x280f18": "low word of $2d17ec",
+   "0x280fb8": "low word of $2d17ec",
+   "0x29146a": "low word of $2d17ec",
+   "0x2a87a0": "low word of $2d17ec"
+  }
+ },
+ "sites": [
+  {
+   "group": "stack",
+   "at": "0x200266",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "stack",
+   "at": "0x283998",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "stack",
+   "at": "0x2839fe",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "stack",
+   "at": "0x283ac0",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "stack",
+   "at": "0x283b0c",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "stack",
+   "at": "0x283b54",
+   "old": "002fd000",
+   "new": {
+    "u32": "STACK"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x217d12",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x217d36",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x270628",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x27069a",
+   "old": "002ce301",
+   "new": {
+    "u32": "RECS+0x1"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x270762",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x27084c",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x270870",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x27096a",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2709da",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x270df8",
+   "old": "002ce301",
+   "new": {
+    "u32": "RECS+0x1"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2788e0",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abb76",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abbf4",
+   "old": "002ce301",
+   "new": {
+    "u32": "RECS+0x1"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abc66",
+   "old": "002ce308",
+   "new": {
+    "u32": "RECS+0x8"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abcb4",
+   "old": "002ce308",
+   "new": {
+    "u32": "RECS+0x8"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abcbc",
+   "old": "002ce30c",
+   "new": {
+    "u32": "RECS+0xc"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abd18",
+   "old": "002ce314",
+   "new": {
+    "u32": "RECS+0x14"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abd60",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abdea",
+   "old": "002ce300",
+   "new": {
+    "u32": "RECS"
+   }
+  },
+  {
+   "group": "records",
+   "at": "0x2abbe0",
+   "old": "002cdb00",
+   "new": {
+    "u32": "RECS-0x800"
+   },
+   "what": "the builder addresses the records as $800(a5)"
+  },
+  {
+   "group": "cap",
+   "at": "0x2abadc",
+   "old": "0000009e",
+   "new": {
+    "u32": "CAP-1"
+   }
+  },
+  {
+   "group": "cap",
+   "at": "0x2abbae",
+   "old": "0000009e",
+   "new": {
+    "u32": "CAP-1"
+   }
+  },
+  {
+   "group": "cap",
+   "at": "0x2abd82",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   }
+  },
+  {
+   "group": "cap",
+   "at": "0x2705fa",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x200356",
+   "old": "002cf574",
+   "new": {
+    "u32": "MENU+M_U"
+   },
+   "what": "cleared at boot"
+  },
+  {
+   "group": "menu",
+   "at": "0x2705ea",
+   "old": "002cf574",
+   "new": {
+    "u32": "MENU+M_U"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x27066e",
+   "old": "002cf574",
+   "new": {
+    "u32": "MENU+M_U"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x270682",
+   "old": "002cf564",
+   "new": {
+    "u32": "MENU+M_L"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x2706ca",
+   "old": "002cf574",
+   "new": {
+    "u32": "MENU+M_U"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x2706d2",
+   "old": "002cdb00",
+   "new": {
+    "u32": "MENU+M_L-0x1a64"
+   },
+   "what": "addressed as $1a64(a)"
+  },
+  {
+   "group": "menu",
+   "at": "0x2708ca",
+   "old": "002cf575",
+   "new": {
+    "u32": "MENU+M_U+1"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x2708d2",
+   "old": "002cf576",
+   "new": {
+    "u32": "MENU+M_U+2"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x270900",
+   "old": "002cf576",
+   "new": {
+    "u32": "MENU+M_U+2"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x27090a",
+   "old": "002cf575",
+   "new": {
+    "u32": "MENU+M_U+1"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x2aba74",
+   "old": "002cf576",
+   "new": {
+    "u32": "MENU+M_U+2"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x27072e",
+   "old": "002cf4a8",
+   "new": {
+    "u32": "MENU"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x27074e",
+   "old": "002cf4c4",
+   "new": {
+    "u32": "MENU+0x1c"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x27091c",
+   "old": "002cf4a8",
+   "new": {
+    "u32": "MENU"
+   }
+  },
+  {
+   "group": "menu",
+   "at": "0x270756",
+   "old": "002cdb00",
+   "new": {
+    "u32": "MENU-0x19a8"
+   },
+   "what": "addressed as $19a8(a)/$19c5(a)"
+  },
+  {
+   "group": "menu",
+   "at": "0x217ed6",
+   "old": "00cc",
+   "new": {
+    "u16": "M_U"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x217edc",
+   "old": "00bc",
+   "new": {
+    "u16": "M_L"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x270ae8",
+   "old": "00cd",
+   "new": {
+    "u16": "M_U+1"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x270b1c",
+   "old": "00cc",
+   "new": {
+    "u16": "M_U"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x270b2a",
+   "old": "00bc",
+   "new": {
+    "u16": "M_L"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x270d16",
+   "old": "00cd",
+   "new": {
+    "u16": "M_U+1"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x270d34",
+   "old": "00cc",
+   "new": {
+    "u16": "M_U"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x278952",
+   "old": "00cd",
+   "new": {
+    "u16": "M_U+1"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu",
+   "at": "0x278990",
+   "old": "00cd",
+   "new": {
+    "u16": "M_U+1"
+   },
+   "what": "field displacement"
+  },
+  {
+   "group": "menu-frame",
+   "at": "0x2705c8",
+   "old": "4fefff0c",
+   "new": {
+    "hex": "4feffe0c"
+   },
+   "what": "menu builder frame: a family byte per record"
+  },
+  {
+   "group": "menu-frame",
+   "at": "0x2708da",
+   "old": "4fef00f4",
+   "new": {
+    "hex": "4fef01f4"
+   }
+  },
+  {
+   "group": "menu-frame",
+   "at": "0x2708c4",
+   "old": "41ef00fb",
+   "new": {
+    "hex": "41ef01fb"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abac8",
+   "old": "002b31a6",
+   "new": {
+    "u32": "LIST"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abb0c",
+   "old": "002b31a7",
+   "new": {
+    "u32": "LIST+1"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abb22",
+   "old": "002b31ad",
+   "new": {
+    "u32": "LIST+7"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abb30",
+   "old": "002b31d5",
+   "new": {
+    "u32": "LIST+0x2f"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abb48",
+   "old": "002b31de",
+   "new": {
+    "u32": "LIST+0x38"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abd2c",
+   "old": "002b31a6",
+   "new": {
+    "u32": "LIST"
+   }
+  },
+  {
+   "group": "list",
+   "at": "0x2abb9e",
+   "old": "7008",
+   "new": {
+    "moveq": "LIST_N"
+   },
+   "what": "entries (loop 1)"
+  },
+  {
+   "group": "list",
+   "at": "0x2abe14",
+   "old": "7008",
+   "new": {
+    "moveq": "LIST_N"
+   },
+   "what": "entries (loop 2)"
+  },
+  {
+   "group": "e12",
+   "at": "0x29087e",
+   "old": "00135206",
+   "new": {
+    "u32": "BANK_END"
+   },
+   "what": "sample validator: bank end"
+  },
+  {
+   "group": "e12",
+   "at": "0x20da0a",
+   "old": "4feffff048d7",
+   "new": {
+    "jmp": "ERGUARD"
+   },
+   "what": "flash file system erase: refused for the E12B instance only (the +Drive machine banks use it too)"
+  },
+  {
+   "group": "e12",
+   "at": "0x20dcca",
+   "old": "4fefffd8",
+   "new": {
+    "hex": "70004e75"
+   },
+   "what": "E12B program refused"
+  },
+  {
+   "group": "hook",
+   "at": "0x2130c2",
+   "old": "2f032f02242f",
+   "new": {
+    "jmp": "VALID"
+   },
+   "what": "machine ID validity"
+  },
+  {
+   "group": "hook",
+   "at": "0x217f30",
+   "old": "2f02222f0008",
+   "new": {
+    "jmp": "FAM"
+   },
+   "what": "menu family of a machine"
+  },
+  {
+   "group": "hook",
+   "at": "0x217680",
+   "old": "2f02222f0008",
+   "new": {
+    "jmp": "CLS"
+   },
+   "what": "parameter class of a machine"
+  },
+  {
+   "group": "hook",
+   "at": "0x202a7c",
+   "old": "2f0a4aaf000c",
+   "new": {
+    "jmp": "GUARD"
+   },
+   "what": "DSP2 block write"
+  },
+  {
+   "group": "hook",
+   "at": "0x2aba40",
+   "old": "2039002beb00",
+   "new": {
+    "jsr": "COPYLIST"
+   },
+   "what": "record builder start"
+  },
+  {
+   "group": "hook",
+   "at": "0x29475a",
+   "old": "002b0d04",
+   "new": {
+    "u32": "HTAB"
+   },
+   "what": "class handler table"
+  },
+  {
+   "group": "usr",
+   "at": "0x21780e",
+   "old": "41e8ed892d48ffec",
+   "new": {
+    "parts": [
+     {
+      "jsr": "USRCHKREC"
+     },
+     {
+      "nop": 1
+     }
+    ]
+   },
+   "what": "USR check descriptor: records"
+  },
+  {
+   "group": "usr",
+   "at": "0x217818",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR check descriptor: capacity"
+  },
+  {
+   "group": "usr",
+   "at": "0x217820",
+   "old": "41e80ee8",
+   "new": {
+    "hex": "41e8fc71"
+   },
+   "what": "USR check descriptor: count (a0 = base+$1a77)"
+  },
+  {
+   "group": "usr",
+   "at": "0x21782e",
+   "old": "0680000019a8",
+   "new": {
+    "parts": [
+     {
+      "hex": "203c"
+     },
+     {
+      "u32": "MENU"
+     }
+    ]
+   },
+   "what": "USR check descriptor: menu struct"
+  },
+  {
+   "group": "usr",
+   "at": "0x2177a0",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR check worker: capacity"
+  },
+  {
+   "group": "usr",
+   "at": "0x2177cc",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR check worker: full"
+  },
+  {
+   "group": "usr",
+   "at": "0x217c24",
+   "old": "420115411a76",
+   "new": {
+    "parts": [
+     {
+      "hex": "4239"
+     },
+     {
+      "u32": "MENU+M_U+2"
+     }
+    ]
+   },
+   "what": "USR remove: menu valid"
+  },
+  {
+   "group": "usr",
+   "at": "0x217c3e",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR remove: capacity"
+  },
+  {
+   "group": "usr",
+   "at": "0x217c44",
+   "old": "41ea080042822a480280000000ff",
+   "new": {
+    "parts": [
+     {
+      "jsr": "USRREM"
+     },
+     {
+      "nop": 4
+     }
+    ]
+   },
+   "what": "USR remove: records"
+  },
+  {
+   "group": "usr",
+   "at": "0x217c6a",
+   "old": "0680000007e8",
+   "new": {
+    "parts": [
+     {
+      "hex": "203c"
+     },
+     {
+      "u32": "RECS-0x18"
+     }
+    ]
+   },
+   "what": "USR remove: records - 24"
+  },
+  {
+   "group": "usr",
+   "at": "0x2660a2",
+   "old": "068300000800",
+   "new": {
+    "parts": [
+     {
+      "hex": "263c"
+     },
+     {
+      "u32": "RECS"
+     }
+    ]
+   },
+   "what": "USR install: records"
+  },
+  {
+   "group": "usr",
+   "at": "0x2660b2",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR install: capacity"
+  },
+  {
+   "group": "usr",
+   "at": "0x2660c6",
+   "old": "41ea19a82d48ffa0",
+   "new": {
+    "parts": [
+     {
+      "jsr": "USRINSMENU"
+     },
+     {
+      "nop": 1
+     }
+    ]
+   },
+   "what": "USR install: menu struct"
+  },
+  {
+   "group": "usr",
+   "at": "0x266134",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR install: capacity check"
+  },
+  {
+   "group": "usr",
+   "at": "0x266160",
+   "old": "0000009f",
+   "new": {
+    "u32": "CAP"
+   },
+   "what": "USR install: full"
+  },
+  {
+   "group": "usr",
+   "at": "0x266188",
+   "old": "420115411a76",
+   "new": {
+    "parts": [
+     {
+      "hex": "4239"
+     },
+     {
+      "u32": "MENU+M_U+2"
+     }
+    ]
+   },
+   "what": "USR install: menu valid"
+  }
+ ]
+}

@@ -12,7 +12,6 @@ import type { Base } from './bases.js';
 import { hostSendReorder, levBarStub } from './coldfire.js';
 import { menuRefreshSite, menuRefreshCode, type MenuRefreshSite } from './menu_refresh.js';
 import { hiddenIndex, recordName, uwMenuCode } from './uw_menu.js';
-import {MODEL_SYMBOLS} from './model_runtime.js';
 import type { Firmware } from './container.js';
 import { records } from './dsp.js';
 import { trimBank, type TrimEntry, type TrimOptions } from './e12.js';
@@ -25,12 +24,11 @@ import {recoveryFeatures,cleanBaseProblems,reserveRecovery} from './clean_recove
 import { unmuteBlock, type UnmuteBlock } from './unmute.js';
 import { assemble as chromaAssemble, buildTable as chromaTable, channelByte, type ChromaCode, type Chroma, type ChromaTable } from './midi_chroma.js';
 import { assemble as labelAssemble, buildLabelTable, type LabelCode, type LabelTable, type PitchLabelSite } from './pitch_labels.js';
-import { linkCode, words, type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
+import { type CorePack, type Pack, type PackModel, type PackNeed, type PackTable } from './packs.js';
 import { ctrCoverage, type CtrCoverage } from './scan.js';
 import { baseFamilies, checkLayout, listedFreeIds, LAYOUT_FORMAT, menuLimits, type Layout } from './layout.js';
-import { PI_CLEAN_MODE, piCleanProgram, piSpanOf, piStubWords, type PiSpan } from './pi_clean.js';
-import { alignOf, alignUp, SECTOR } from './align.js';
-import { tablePool } from './table_pool.js';
+import { type PiSpan } from './pi_clean.js';
+import { placeDsp2 } from './dsp2_place.js';
 
 /**
  * The model-facing features, each on by default where the base profile says it is supported.
@@ -716,146 +714,10 @@ export function plan(fw: Firmware, base: Base, packs: Pack[], core: CorePack, op
   const first: [number, number] = [trim.end, workspace ? Math.max(trim.end, D.workspace.base) : D.bankEnd];
   const regions: [number, number][] = opt.features?.cleanRecovery ? reserveRecovery([first,...D.freeRegions]) : [first, ...D.freeRegions];
   if(opt.features?.cleanRecovery)problems.push(...cleanBaseProblems(fw,base));
-  const capacity = regions.reduce((n, [a, b]) => n + b - a, 0);
-  const cursors = regions.map(([a, b]) => [a, b]);
-  // Words skipped to put an aligned machine on its cache offset. They are handed back as gaps and
-  // taken first by whatever is placed next -- which is that machine's own tables -- so a machine
-  // with tables of its own usually costs nothing to align. With alignment off no gap is ever made
-  // and `alloc` is a plain first-fit bump.
-  const gaps: number[][] = [];
-  let overflow: string | null = null;
-  const alloc = (n: number, what: string): number => {
-    for (const g of gaps) {
-      if (g[0] + n <= g[1]) { const a = g[0]; g[0] += n; return a; }
-    }
-    for (const c of cursors) {
-      if (c[0] + n <= c[1]) { const a = c[0]; c[0] += n; return a; }
-    }
-    if (!overflow) overflow = what;
-    return -1;
-  };
-  /** `n` words with the origin on one of `mask`'s cache offsets; null when no region has the room. */
-  const allocAligned = (n: number, mask: string): { org: number; pad: number } | null => {
-    for (const span of [...gaps, ...cursors]) {
-      const a = alignUp(span[0], mask);
-      if (a + n <= span[1]) {
-        const pad = a - span[0];
-        if (pad) gaps.push([span[0], a]);
-        span[0] = a + n;
-        return { org: a, pad };
-      }
-    }
-    return null;
-  };
-  const recs: [number, number[]][] = [];
-  const placed: Record<string, number> = { ws: D.workspace.base, ws_slice: D.workspace.slice };
-  // Qualify the interface from its components, not the firmware's version label.
-  // P-I geometry is independently discovered below; never infer it from these constants.
-  if (sel.some(s => s.m.contract?.components.dsp2?.source)) {
-    if (!base.modelRuntime?.ok) problems.push(`assembly md-voice/1: runtime ABI not qualified: ${base.modelRuntime?.why ?? 'component evidence missing'}`);
-    Object.assign(placed, MODEL_SYMBOLS);
-  }
-  const assemblyPi = sel.filter(s => s.m.contract?.components.dsp2?.source && s.m.workspace_kind === 'pi');
-  const assemblyScratch = sel.filter(s => s.m.contract?.components.dsp2?.source && s.m.workspace_kind === 'private');
-  if (assemblyScratch.length && (D.workspace.slice !== 2048 || D.workspace.base % 2048 ||
-      D.workspace.base + 16 * D.workspace.slice > D.bankEnd))
-    problems.push('assembly scratch workspace requires 16 isolated, 2048-word aligned slices inside the carved E12 bank');
-  if (assemblyPi.length) {
-    if (!D.pi || D.pi.slice !== 1536 || D.pi.ws % 512)
-      problems.push('assembly P-I users require discovered 1536-word, 512-aligned track slices');
-    else placed.pi_ws = D.pi.ws;
-  }
-  const wanted = new Set(sel.flatMap((s) => s.m.wants_shared));
-  let demand = 0;
-  for (const t of shared) {
-    if (!t.always && !wanted.has(t.name)) continue;
-    const tw = words(t.words);
-    demand += tw.length;
-    placed[t.name] = alloc(tw.length, t.name);
-    if (link) recs.push([placed[t.name], tw]);
-  }
-  const machines: Placement[] = [];
-  const tableAlloc = tablePool(alloc);
-  let sharedTableWords = 0;
-  const doAlign = opt.align !== false;
-  for (const s of sel) {
-    const n = atob(s.m.code.words).length / 3;
-    const a = doAlign ? alignOf(s.m, n) : null;
-    let org = -1;
-    let at: Placement['align'];
-    if (a) {
-      const got = allocAligned(n, a.offsets);
-      if (got) { org = got.org; at = { offset: got.org % SECTOR, pad: got.pad, sectors: [a.sectors[0], a.sectors[1]] }; }
-      else notes.push(`${s.m.name.trim()}: no room to put its code on one of its measured cache offsets, placed as ` +
-                      `before (up to ${a.sectors[2]} cache sectors instead of ${a.sectors[1]}, up to ${a.metric[2]} c/s instead of ${a.metric[1]})`);
-    }
-    if (org < 0) org = alloc(n, `${s.m.name.trim()}`);
-    const tab: Record<string, number> = { ...placed };
-    let total = n;
-    for (const t of s.m.tables) {
-      const tw = words(t.words);
-      const placedTable = tableAlloc(t.words, tw.length, `${s.m.name.trim()} (table ${t.name})`,
-        !!s.m.contract?.components.dsp2?.source);
-      tab[t.name] = placedTable.address;
-      if (placedTable.fresh) {
-        total += tw.length;
-        if (link) recs.push([tab[t.name], tw]);
-      } else sharedTableWords += tw.length;
-    }
-    demand += total;
-    for (const u of s.m.uses_shared) if (placed[u] === undefined) throw new Error(`${s.m.name} reads shared table ${u}, which no pack placed`);
-    if (link && !overflow) {
-      recs.push([org, linkCode(s.m, org, tab)]);
-      for (const k of ['init', 'trigger', 'render'] as const) recs.push([D.dispatch[k] + s.id + 1, [org + s.m.code.entry[k]]]);
-    }
-    machines.push({ key: s.m.key, name: s.m.name, family: s.family, id: s.id, preferred: s.preferred, org, words: n, total, align: at });
-  }
-  if (sharedTableWords) notes.push(`Shared ${sharedTableWords.toLocaleString('en-US')} identical immutable assembly table words; per-track scratch is never shared`);
-
-  // The P-I clean stub, placed after every machine, only when a selected machine leaves state in
-  // its P-I slice.
-  let piClean: Plan['piClean'] = null;
-  const piUsers = sel.filter((s) => s.m.pi_clean);
-  if (piUsers.length) {
-    const names = piUsers.map((s) => s.m.name.trim());
-    const who = `${names.join(', ')} ${names.length === 1 ? 'leaves' : 'leave'} state in the track's P-I slice`;
-    const P = D.pi;
-    const wrong = P ? piUsers.filter((s) => s.m.pi_clean!.pi_ws !== P.ws || s.m.pi_clean!.pi_slice !== P.slice) : [];
-    if (!P) {
-      problems.push(`${who}, and the build cannot clear it for the stock P-I machines on ${base.name} ` +
-                    `(${base.support.piClean?.why ?? 'not discovered'}): leave ${names.length === 1 ? 'it' : 'them'} out`);
-    } else if (wrong.length) {
-      problems.push(`${wrong.map((s) => s.m.name.trim()).join(', ')}: built for the P-I workspace at ${h(wrong[0].m.pi_clean!.pi_ws)} ` +
-                    `(${h(wrong[0].m.pi_clean!.pi_slice)} per track), and ${base.name}'s is at ${h(P.ws)} (${h(P.slice)} per track)`);
-    } else {
-      const span = piSpanOf(piUsers.map((s) => ({ offset: s.m.pi_clean!.offset, words: s.m.pi_clean!.words })))!;
-      // In 'dirty' mode each slice-using machine's own init marks its track (pi_clean.ts)
-      const markIds = PI_CLEAN_MODE === 'irq' ? [] : piUsers.map((s) => s.id);
-      const n = piStubWords(P.ids.length, markIds.length, span.words);
-      demand += n;
-      const org = alloc(n, 'the P-I clean stub');
-      let marks: [number, number][] = [];
-      if (link && !overflow) {
-        marks = markIds.map((id) => {
-          const r = recs.filter(([a]) => a === D.dispatch.init + id + 1);
-          if (r.length !== 1 || r[0][1].length !== 1) throw new Error(`P-I clean: machine ${id} has ${r.length} init dispatch records`);
-          return [id, r[0][1][0]] as [number, number];
-        });
-        const prog = piCleanProgram(org, P, span, marks);
-        recs.push([org, prog.words]);
-        P.ids.forEach((id, k) => recs.push([D.dispatch.init + id + 1, [prog.entries[k]]]));
-        marks.forEach(([id], j) => { recs.find(([a]) => a === D.dispatch.init + id + 1)![1] = [prog.markEntries[j]]; });
-      }
-      piClean = { org, words: n, span, ids: P.ids, machines: names, marks };
-    }
-  }
-  if (overflow) {
-    const over = demand - capacity;
-    problems.push(over > 0
-      ? `DSP2 is ${over.toLocaleString('en')} words short: untick machines or trim the E12 samples harder`
-      : `DSP2 has ${(-over).toLocaleString('en')} words left in total, but not in one piece big enough for ${overflow}: untick a machine or trim harder`);
-  }
-  const free = overflow ? 0 : cursors.reduce((n, c) => n + c[1] - c[0], 0) + gaps.reduce((n, g) => n + g[1] - g[0], 0);
+  const placedDsp2 = placeDsp2({ name: base.name, dispatch: D.dispatch, workspace: D.workspace, bankEnd: D.bankEnd, pi: D.pi,
+    piWhy: base.support.piClean?.why, runtime: { ok: !!base.modelRuntime?.ok, why: base.modelRuntime?.why } },
+    regions, sel, shared, { link, align: opt.align !== false }, problems, notes);
+  const { capacity, demand, free, overflow, records: recs, machines, piClean } = placedDsp2;
   const { ram, feats } = placeRam(base, main, core, driveLaws(core, packs), menus, sel, opt.features ?? {}, flashAt ?? base.features.descFlash?.alias ?? 0);
   problems.push(...feats.problems);
   return {
