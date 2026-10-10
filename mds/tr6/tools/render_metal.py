@@ -26,16 +26,22 @@ def main():
     p.add_argument('--partial-count',type=int,choices=(3,6,47),default=47,help='Keep the strongest partials, in original source order')
     p.add_argument('--no-wobble',action='store_true',help='Remove per-partial random frequency wobble in native and comparison models')
     p.add_argument('--lean-math',action='store_true',help='Register-based kernels and rounded Q23 envelopes; requires three partials and no wobble')
+    p.add_argument('--resonators',action='store_true',help='Recursive sine oscillators; requires lean math')
+    p.add_argument('--lcg-noise',action='store_true',help='24-bit LCG noise model; requires lean math')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
+    if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
     variant=a.partial_count!=47 or a.no_wobble
     suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
     if a.lean_math: suffix+='-lean'
+    if a.resonators: suffix+='-resonators'
+    if a.lcg_noise: suffix+='-lcg'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
+    if a.lcg_noise: model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],1]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,
                                    {'mds_sine':(1,1),'mds_track':(2,6)})
@@ -116,11 +122,12 @@ def main():
                     buffer_written=0x5a5a5a not in native_i,pretrigger=not delay or not any(native_i[:delay]),
                     idle=bool(ref['active']) or not any(native_i[-32:]),tanh_range=native['tanh_clamps']==0)
         for n in ('phase','wobble','noise'): checks[n+'_rng']=(native[n+'hi']<<24|native[n+'lo'])==ref[n+'_rng']
+        if a.lcg_noise: checks['noise_rng']=native['noiselo']==ref['noise_rng']
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
-                     reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble),
-                     lean_math=a.lean_math,
+                     reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32'),
+                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),

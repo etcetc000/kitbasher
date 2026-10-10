@@ -26,6 +26,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Reduced-partial hats/cymbal candidates and CPU/sound comparisons](audit/REDUCED-METAL.md)
 - [Existing lab perceptual scorer, results and provenance](audit/PERCEPTUAL-SCORING.md)
 - [Lean three-partial kernels, incremental loss and timing](audit/LEAN-METAL.md)
+- [Recursive oscillators, cheaper noise and multi-seed loss](audit/RECURSIVE-METAL.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

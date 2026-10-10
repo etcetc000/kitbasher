@@ -32,12 +32,18 @@ def main():
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
     p.add_argument('--metal-lean-math',action='store_true')
+    p.add_argument('--metal-resonators',action='store_true')
+    p.add_argument('--metal-lcg-noise',action='store_true')
     args=p.parse_args()
     if args.metal_lean_math and (args.metal_partial_count!=3 or not args.metal_no_wobble):
         p.error('--metal-lean-math requires three partials and no wobble')
+    if (args.metal_resonators or args.metal_lcg_noise) and not args.metal_lean_math:
+        p.error('Resonators/LCG noise require lean math')
     variant=args.metal_partial_count!=47 or args.metal_no_wobble or args.metal_tanh_bits!=13
     suffix=f'-p{args.metal_partial_count}'+('-static' if args.metal_no_wobble else '-wobble')+f'-lut{args.metal_tanh_bits}' if variant else ''
     if args.metal_lean_math: suffix+='-lean'
+    if args.metal_resonators: suffix+='-resonators'
+    if args.metal_lcg_noise: suffix+='-lcg'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -52,7 +58,7 @@ def main():
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
         elif name in ('ch','oh','cy'):
             controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble)]).stdout)
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise)
             imports['mds_track']=(2,6)
         elif name=='cp':
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
@@ -148,7 +154,7 @@ def main():
         if render(name+'_controls_during_tail',lines)!=isolated[default_track[name]][:137*32]:
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
-                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math),
+                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))

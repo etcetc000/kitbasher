@@ -80,7 +80,7 @@ def main():
         cases.append(dict(name=name,baseline_execution_provenance=render_metadata(directory,name),
                           candidate_execution_provenance=render_metadata(candidate,name),
                           **{k:v for k,v in row.items() if k!='case'}))
-    report=dict(scope='Retained native full-path baseline versus native candidate',
+    report=dict(scope='Matched native baseline versus native candidate; see each render model',
                 provenance_captured_at='scoring time; original render tool identity is not independently reconstructed',
                 original_render_tool_attestation=False,input_sha256=hashes,
                 execution_time_provenance=dict(baseline=all(r['baseline_execution_provenance'] is not None for r in cases),

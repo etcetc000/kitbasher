@@ -35,6 +35,18 @@ static uint32_t seed(const std::string& kind) {
 }
 static float ratio(int knob) { return std::pow(2.f,(-12.f+24.f*knob/127.f)/12.f); }
 
+// The optional LCG model changes only the input to the existing WhiteNoise
+// filter. Invert xorshift so the original process() consumes the desired value.
+static uint32_t undoLeft(uint32_t value,int shift) {
+    uint32_t x=value; for(int i=0;i<32;i+=shift) x=value^(x<<shift); return x;
+}
+static uint32_t undoRight(uint32_t value,int shift) {
+    uint32_t x=value; for(int i=0;i<32;i+=shift) x=value^(x>>shift); return x;
+}
+static uint32_t beforeNext(uint32_t value) {
+    return undoLeft(undoRight(undoLeft(value,5),17),13);
+}
+
 static void tables(const std::string& kind,int count=47,bool noWobble=false) {
     const auto& s=spec(kind,count,noWobble); MetalHiHatVoice v; v.init(44100,seed(kind));
     std::cout << std::setprecision(17) << "{\"decay\":[";
@@ -72,27 +84,35 @@ int main(int argc,char** argv) {
         int count=std::atoi(argv[3]); if(count!=3 && count!=6 && count!=47) return 2;
         tables(argv[2],count,std::atoi(argv[4])!=0); return 0;
     }
-    if(argc!=8 && argc!=10 && argc!=11) return 2;
+    if(argc!=8 && argc!=10 && argc!=11 && argc!=12) return 2;
     int count=argc>=10 ? std::atoi(argv[8]) : 47;
     if(count!=3 && count!=6 && count!=47) return 2;
     const auto& selected=spec(argv[1],count,argc>=10 && std::atoi(argv[9])!=0);
     std::string kind=argv[1]; int decay=std::atoi(argv[2]),pitch=std::atoi(argv[3]);
     int samples=std::atoi(argv[4]),repeat=std::atoi(argv[5]),delay=std::atoi(argv[6]);
     uint32_t rngSeed=seed(kind);
-    if(argc==11) {
+    if(argc>=11) {
         char* end=nullptr; auto value=std::strtoull(argv[10],&end,0);
         if(!*argv[10] || *end || value>0xffffffffULL) return 2;
         rngSeed=static_cast<uint32_t>(value);
     }
     MetalHiHatVoice v; v.init(44100,rngSeed);
+    const bool lcgNoise=argc==12 && std::atoi(argv[11])!=0;
+    uint32_t lcg=((rngSeed ? rngSeed : 0x606606u)^0xA511E9B3u)&0xffffffu;
     std::ofstream out(argv[7],std::ios::binary); if(!out) return 3;
     for(int i=0;i<samples;++i) {
         if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0))
             v.trigger(selected,std::max(.05f,decay/127.f),ratio(pitch));
+        if(lcgNoise && v.isActive()) {
+            lcg=(lcg*1664525u+1013904223u)&0xffffffu;
+            v.noise_.rng_.state_=beforeNext(lcg<<8);
+            Random verify; verify.state_=v.noise_.rng_.state_;
+            if(verify.next()!=(lcg<<8)) return 5;
+        }
         float value=v.process(); if(!std::isfinite(value)) return 4;
         out.write(reinterpret_cast<const char*>(&value),sizeof(value));
     }
     std::cout << "active=" << v.isActive() << " frame=" << v.frameIndex_ << " duration=" << v.naturalFrameCount_
               << " phase_rng=" << v.phaseRandom_.state_ << " wobble_rng=" << v.wobbleRandom_.state_
-              << " noise_rng=" << v.noise_.rng_.state_ << '\n';
+              << " noise_rng=" << (lcgNoise ? lcg : v.noise_.rng_.state_) << '\n';
 }
