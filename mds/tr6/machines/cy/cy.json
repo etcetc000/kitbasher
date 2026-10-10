@@ -1,0 +1,19 @@
+{
+  "id": "org.kitbasher.tr6.cy",
+  "display_name": "TR6 CYMBAL",
+  "category": "TR6",
+  "short_label": "CY",
+  "machine_version": "0.1",
+  "params": [
+    {
+      "name": "DEC",
+      "default": 102,
+      "transform": "raw14"
+    },
+    {
+      "name": "TUNE",
+      "default": 64,
+      "transform": "raw14"
+    }
+  ]
+}

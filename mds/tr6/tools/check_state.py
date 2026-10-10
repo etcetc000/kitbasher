@@ -10,13 +10,16 @@ import math
 from pathlib import Path
 import struct
 
-from mds_build import ROOT, assemble_package, mds_format
+from mds_build import ROOT, assemble_package, mds_format, assembly
 from render_bd import run
 
 MACHINES={'bd':dict(base=0x110023,knobs=[51,102,75,0,0]),
           'sd':dict(base=0x120031,knobs=[102,64,95,64]),
           'lt':dict(base=0x130023,knobs=[102,64]),
-          'ht':dict(base=0x140001,knobs=[102,64])}
+          'ht':dict(base=0x140001,knobs=[102,64]),
+          'ch':dict(base=0x150023,knobs=[89,64]),
+          'oh':dict(base=0x170031,knobs=[89,64]),
+          'cy':dict(base=0x180041,knobs=[102,64])}
 
 
 def main():
@@ -28,17 +31,23 @@ def main():
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
     tom_reference=build_reference(out,args.compiler)
+    from generate_metal import build_reference as build_metal_reference, generate as generate_metal
+    metal_reference=build_metal_reference(out/'metal-reference',args.compiler)
     for name,settings in MACHINES.items():
+        imports={'mds_sine':(1,1)}
         if name in ('lt','ht'):
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
+        elif name in ('ch','oh','cy'):
+            source=generate_metal(name,json.loads(run([metal_reference,'--tables',name]).stdout))
+            imports['mds_track']=(2,6)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
-            json.loads((ROOT/f'machines/{name}/{name}.json').read_text()),args.assembler,{'mds_sine':(1,1)})
+            json.loads((ROOT/f'machines/{name}/{name}.json').read_text()),args.assembler,imports)
         parsed=mds_format().parse_package(package); base=settings['base']
         code=[int.from_bytes(parsed['program'][i:i+3],'big') for i in range(0,len(parsed['program']),3)]
         for i in parsed['relocations']: code[i]+=base
-        for imp in parsed['imports']: code[imp.patch_word]+=0x148000
+        for imp in parsed['imports']: code[imp.patch_word]+={1:0x148000,6:0x160000}[imp.symbol]
         (out/(name+'.bin')).write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
         loads.append(f'load P {base:x} {name}.bin')
         entries[name]={key:base+parsed[value] for key,value in
@@ -46,6 +55,14 @@ def main():
     sine=[round(math.sin(i*2*math.pi/32768)*0x7fffff) for i in range(32768)]
     (out/'sine.bin').write_bytes(b''.join((w&0xffffff).to_bytes(3,'big') for w in sine))
     loads+=['load X 148000 sine.bin']
+    # Test fixtures supply INIT's ABI R1 value, which the host cannot set directly.
+    stubs=[]
+    for name in MACHINES:
+        for track in range(16):
+            stubs += [f'stub_{name}_{track}:',f'    move #>{track},r1',f'    jmp >${entries[name]["init"]:x}']
+    words,labels=assembly.assemble('\n'.join(stubs)+'\n',0x1000,exe=args.assembler)
+    (out/'init-stubs.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in words))
+    loads+=['load P 1000 init-stubs.bin']
 
     def setup(name,voice,dirty=True,knobs=None):
         lines=[f'voice {voice:x}']
@@ -53,7 +70,9 @@ def main():
             for space in ('X','Y'): lines += [f'set {space} {voice+i:x} 5a5a5a' for i in range(64)]
         for i,value in enumerate(knobs or MACHINES[name]['knobs']):
             lines.append(f'set Y {voice+1+i:x} {value if name=="bd" and i==4 else value*128:x}')
-        return lines+['scrub 1f',f'call {entries[name]["init"]:x}']
+        track=(voice-0x800)//64
+        if not 0<=track<16 or voice!=0x800+track*64: raise ValueError('Invalid fixture track')
+        return lines+['scrub 1f',f'call {labels[f"stub_{name}_{track}"]:x}']
 
     def block(name,voice,index):
         lines=[f'voice {voice:x}']
@@ -69,7 +88,8 @@ def main():
 
     count=512
     tracks=[('bd',0x800,None),('sd',0x840,None),('sd',0x880,[127,0,127,127]),
-            ('lt',0x8c0,None),('ht',0x900,None),('ht',0x940,[127,0])]
+            ('lt',0x8c0,None),('ht',0x900,None),('ht',0x940,[127,0]),
+            ('ch',0x980,None),('oh',0x9c0,None),('cy',0xa00,None)]
     isolated=[]
     for i,(name,voice,knobs) in enumerate(tracks):
         lines=setup(name,voice,knobs=knobs)
@@ -87,8 +107,10 @@ def main():
                 raise AssertionError(f'interleaved track {i}, block {n}')
 
     reassignments=(('bd','sd'),('sd','bd'),('lt','ht'),('ht','lt'),
-                   ('bd','lt'),('lt','bd'),('sd','ht'),('ht','sd'))
-    default_track={'bd':0,'sd':1,'lt':3,'ht':4}
+                   ('bd','lt'),('lt','bd'),('sd','ht'),('ht','sd'),
+                   ('ch','oh'),('oh','ch'),('oh','cy'),('cy','oh'),
+                   ('lt','ch'),('ch','lt'),('bd','cy'),('cy','bd'))
+    default_track={'bd':0,'sd':1,'lt':3,'ht':4,'ch':6,'oh':7,'cy':8}
     for before,after in reassignments:
         lines=setup(before,0x800)
         for n in range(173): lines+=block(before,0x800,n)
@@ -97,7 +119,8 @@ def main():
         actual=render(before+'_to_'+after,lines)[173*32:]
         baseline=isolated[default_track[after]]
         if actual!=baseline: raise AssertionError(f'{before} -> {after} reassignment')
-    for name,knobs in (('sd',(127,0,127,127)),('lt',(127,0)),('ht',(0,127))):
+    for name,knobs in (('sd',(127,0,127,127)),('lt',(127,0)),('ht',(0,127)),
+                       ('ch',(127,0)),('oh',(0,127)),('cy',(0,0))):
         lines=setup(name,0x800)
         for n in range(137):
             if n==30:
@@ -107,7 +130,7 @@ def main():
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
-                controls_captured_at_trigger=['sd','lt','ht'],hardware_validated=False)
+                controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))
 
 

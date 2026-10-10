@@ -1,0 +1,19 @@
+{
+  "id": "org.kitbasher.tr6.ch",
+  "display_name": "TR6 CLOSED HAT",
+  "category": "TR6",
+  "short_label": "CH",
+  "machine_version": "0.1",
+  "params": [
+    {
+      "name": "DEC",
+      "default": 89,
+      "transform": "raw14"
+    },
+    {
+      "name": "TUNE",
+      "default": 64,
+      "transform": "raw14"
+    }
+  ]
+}
