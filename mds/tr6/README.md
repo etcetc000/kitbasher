@@ -34,6 +34,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Folded mixer gains and exact active-sample loops](audit/FUSED-METAL.md)
 - [Exact coefficient-table compaction and family storage](audit/POOLED-TABLES.md)
 - [Rounded DC feedback and noise pre-filter bypass](audit/DC-METAL.md)
+- [Interpolated fade gates and exact voice lifetime](audit/GATED-ENVELOPES.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

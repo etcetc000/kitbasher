@@ -54,7 +54,7 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False):
     if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
     table_shift=23-tanh_bits
     partial_count=len(c['partials'])
@@ -83,7 +83,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if lcg_noise: lines.append('; Noise uses a 24-bit LCG; the phase RNG remains the original xorshift32.')
     if block_oscillators: lines.append('; Oscillators render into imported 32-word X scratch; no scratch survives calls.')
     if resident_state: lines.append('; Selected state lives in spare R/N registers within RENDER only.')
-    if envelope_rate!=1: lines.append(f'; Envelopes use {envelope_rate}-sample endpoints with linear interpolation; gate stays audio-rate.')
+    if envelope_rate!=1: lines.append(f'; Envelopes use {envelope_rate}-sample endpoints with linear interpolation; '+('gate shares endpoints.' if interpolated_gate else 'gate stays audio-rate.'))
     if block_noise: lines.append('; Noise/filter block passes use imported X coefficient scratch and Y sample scratch.')
     if linear_saturation: lines.append('; Approximation: retain drive gain, replace tanh with identity.')
     if cubic_saturation: lines.append('; Approximation: clamp driven input to +/-1, then apply x - x^3/4.')
@@ -95,6 +95,9 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
     if bypass_noise_dc:
         if not lean_math: raise ValueError('Bypassing the noise DC filter requires lean math')
         lines.append('; Noise DC filter is bypassed; the following high/low-pass filters remain.')
+    if interpolated_gate:
+        if envelope_rate==1: raise ValueError('Interpolated gate requires control-rate envelopes')
+        lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
     tables={}
     resident={}
     def emit(*s): lines.extend(s)
@@ -333,6 +336,17 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         load('fastenv'); mul(c['fast_weight']); save('temp1'); load('slowenv'); mul(1-c['fast_weight'])
         load('temp1','x0'); emit('    add x0,a'); save('envelope')
         emit('    move #>$7fffff,a'); load('attack','x0'); emit('    sub x0,a'); mulstate('envelope')
+        if interpolated_gate:
+            # The powered endpoint is the sample at frame+rate-1. A final
+            # partial interval can extend beyond the lifetime; clamp its gate
+            # to zero and retain the exact active-sample loop/zero suffix.
+            save('envelope'); load('duration'); load('frame','x0')
+            emit('    sub x0,a',f'    sub #>{envelope_rate-1},a','    tst a','    jle control_gate_zero')
+            load('fade','x0'); emit('    cmp x0,a','    jge control_gate_full','    move a1,x0')
+            load('invhi','y0'); emit('    mpy x0,y0,a','    asl #23,a,a')
+            load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope')
+            emit('    jmp control_gate_ready','control_gate_zero:','    clr a','    jmp control_gate_ready','control_gate_full:')
+            load('envelope'); emit('control_gate_ready:')
         load('fastenverr','x0'); emit('    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save('slowenverr')
         for n,step in (('bell','attackerr'),('click','bellerr')):
             load(n,'x0'); imm(c[n]**envelope_rate,'y0'); emit('    mpyr x0,y0,a','    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save(step)
@@ -406,9 +420,10 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         load('fastenv'); mul(c['fast_weight']); save('temp1'); load('slowenv'); mul(1-c['fast_weight'])
         load('temp1','x0'); emit('    add x0,a'); save('envelope')
         emit('    move #>$7fffff,a'); load('attack','x0'); emit('    sub x0,a'); mulstate('envelope'); save('envelope')
-    load('duration'); load('frame','x0'); emit('    sub x0,a'); load('fade','x0'); emit('    cmp x0,a','    jge gate_ready')
-    emit('    move a1,x0'); load('invhi','y0'); emit('    mpy x0,y0,a','    asl #23,a,a')
-    load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope'); save('envelope')
+    if not interpolated_gate:
+        load('duration'); load('frame','x0'); emit('    sub x0,a'); load('fade','x0'); emit('    cmp x0,a','    jge gate_ready')
+        emit('    move a1,x0'); load('invhi','y0'); emit('    mpy x0,y0,a','    asl #23,a,a')
+        load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope'); save('envelope')
     emit('gate_ready:')
     if fused_mix:
         load('tonal'); load('noise','x0'); imm(c['noise_mix']*c['drive'],'y0'); emit('    mac x0,y0,a')

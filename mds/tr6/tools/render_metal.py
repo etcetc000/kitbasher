@@ -40,6 +40,7 @@ def main():
     p.add_argument('--deduplicate-tables',action='store_true',help='Share identical literal tables without changing their values')
     p.add_argument('--rounded-dc',action='store_true',help='Round DC-filter feedback to one state word; requires lean math')
     p.add_argument('--bypass-noise-dc',action='store_true',help='Bypass the noise DC filter before the retained high/low-pass pair; requires lean math')
+    p.add_argument('--interpolated-gate',action='store_true',help='Include the fade gate in interpolated envelope endpoints; requires envelope rate > 1')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
@@ -51,6 +52,7 @@ def main():
     if a.linear_saturation and not a.lean_math: p.error('--linear-saturation requires --lean-math')
     if a.rounded_dc and not a.lean_math: p.error('--rounded-dc requires --lean-math')
     if a.bypass_noise_dc and not a.lean_math: p.error('--bypass-noise-dc requires --lean-math')
+    if a.interpolated_gate and a.envelope_rate==1: p.error('--interpolated-gate requires --envelope-rate > 1')
     if a.cubic_saturation and (not a.lean_math or a.linear_saturation): p.error('--cubic-saturation requires --lean-math and excludes --linear-saturation')
     if a.fused_mix and (not a.block_noise or not a.resident_state): p.error('--fused-mix requires --block-noise and --resident-state')
     if a.bounded_loops and (not a.resident_state or a.envelope_rate==1 or not (a.linear_saturation or a.cubic_saturation)):
@@ -71,6 +73,7 @@ def main():
     if a.deduplicate_tables: suffix+='-dedup'
     if a.rounded_dc: suffix+='-rounded-dc'
     if a.bypass_noise_dc: suffix+='-no-noise-dc'
+    if a.interpolated_gate: suffix+='-gate'
     if a.end_boundaries: suffix+='-endings'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
@@ -81,8 +84,10 @@ def main():
         if a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc: model_args += [int(a.linear_saturation)]
         if a.cubic_saturation or a.bypass_noise_dc: model_args += [int(a.cubic_saturation)]
         if a.bypass_noise_dc: model_args += [1]
+    if a.interpolated_gate:
+        model_args=[a.partial_count,int(a.no_wobble),{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),1]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -192,6 +197,7 @@ def main():
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate,saturation='linear' if a.linear_saturation else 'cubic' if a.cubic_saturation else 'tanh')
         if a.bypass_noise_dc: reference_model['noise_dc']='bypass'
+        if a.interpolated_gate: reference_model['gate']='interpolated'
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      reference_model=reference_model,
                      lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,deduplicate_tables=a.deduplicate_tables,rounded_dc=a.rounded_dc,bypass_noise_dc=a.bypass_noise_dc,
