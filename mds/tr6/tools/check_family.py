@@ -13,11 +13,17 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--build-root',type=Path,default=ROOT/'build')
     p.add_argument('--out',type=Path,default=ROOT/'build/family-resources.json')
-    a=p.parse_args(); fmt=mds_format(); rows=[]
+    p.add_argument('--package',action='append',default=[],metavar='MACHINE=PATH',help='Use an explicit candidate package for a family member')
+    a=p.parse_args(); fmt=mds_format(); rows=[]; overrides={}
+    for item in a.package:
+        name,separator,path=item.partition('=')
+        if not separator or not path or name not in ('bd','sd','lt','ht','ch','oh','cy','cp') or name in overrides:
+            p.error('Each --package must specify a unique known MACHINE=PATH')
+        overrides[name]=Path(path)
     for name in ('bd','sd','lt','ht','ch','oh','cy','cp'):
-        path=a.build_root/f'{name}-comparison/{name}.mds'
+        path=overrides.get(name,a.build_root/f'{name}-comparison/{name}.mds')
         data=path.read_bytes(); image=fmt.parse_package(data)
-        rows.append(dict(machine=name,program_words=len(image['program'])//3,
+        rows.append(dict(machine=name,path=str(path.resolve()),program_words=len(image['program'])//3,
                          package_bytes=len(data),declared_cycles=image['max_track_cycles']))
     groups={}
     for name,voices in (('tr6',rows[:-1]),('tr6_with_cp',rows)):

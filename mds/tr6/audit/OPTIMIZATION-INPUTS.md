@@ -169,3 +169,34 @@ Numerical and spectral metrics support comparison but do not establish listening
 equivalence. Retain candidates that trade sound and cost differently when the
 preference needs listening. The under-129 cold-cache target, firmware admission
 contract and complete-family storage requirements remain unchanged.
+
+## External-memory voice traces
+
+The profiler now accepts additional nonoverlapping P images for INIT fixtures
+that supply R1's track index. Every image is hashed and disassembled; the fixture
+instructions are included in the cost. It also samples the largest observed
+later render separately from the first render after a trigger.
+
+CH default, CP below-unity tuning (TUNE=63), and compact-table CH default replay
+bit-exactly against the ordinary host for audio, every call's raw cycles and
+final state/guards. At program base `$110023`, selected results are:
+
+| Call | Raw clocks | Modeled interlocks | Cold instruction-word misses | Additive clocks at 3/miss |
+| --- | ---: | ---: | ---: | ---: |
+| CH default trigger | 8,700 | 783 | 261 | 10,266 |
+| CH default render block 151 | 245,430 | 30,784 | 454 | 277,576 |
+| CP below-unity trigger | 223,797 | 24,050 | 443 | 249,176 |
+| CP below-unity first render | 1,331,140 | 105,944 | 26,587 | 1,516,845 |
+| CP below-unity later render block 76 | 698,932 | 60,801 | 28,480 | 845,173 |
+
+The compact CH replay has identical raw/interlock/fetch counts to full-table CH.
+The model limitations above apply, especially omitted table/data waits and
+uncalibrated wait-state assumptions. These are sampled paths, not certified
+worst-case cold-cache timings. CP's first render spends 839,040 raw clocks in the
+FIR-index loop group alone; reducing filter/reconstruction work is necessary.
+
+```powershell
+python tools/profile_trace.py build/ch-comparison/default.script --host $env:MD_DSP_HOST --trace-host $env:MD_DSP_TRACE_HOST --disassembler $env:MD_DSP_DISASSEMBLER --interlocks $env:MD_INTERLOCK_ANALYZER --out build/ch-trace
+python tools/profile_trace.py build/cp-comparison/below_unity.script --host $env:MD_DSP_HOST --trace-host $env:MD_DSP_TRACE_HOST --disassembler $env:MD_DSP_DISASSEMBLER --interlocks $env:MD_INTERLOCK_ANALYZER --out build/cp-trace
+python tools/profile_trace.py build/ch-lut8/default.script --host $env:MD_DSP_HOST --trace-host $env:MD_DSP_TRACE_HOST --disassembler $env:MD_DSP_DISASSEMBLER --interlocks $env:MD_INTERLOCK_ANALYZER --out build/ch-lut8-trace
+```

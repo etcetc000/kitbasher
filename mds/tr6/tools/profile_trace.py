@@ -42,7 +42,7 @@ def cold_fetch_misses(trace, sizes):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('script', type=Path, help='Existing render_bd/render_sd case script')
+    p.add_argument('script', type=Path, help='Existing single-machine TR6 render script')
     p.add_argument('--host', required=True)
     p.add_argument('--trace-host', required=True)
     p.add_argument('--disassembler', required=True)
@@ -57,7 +57,7 @@ def main():
     build_path = script.parent / 'assembly.json'
     build = json.loads(build_path.read_text())
     source_lines = script.read_text().splitlines()
-    lines, program, base = [], None, None
+    lines, programs = [], []
     inputs = {str(script): digest(script), str(build_path): digest(build_path)}
     for line in source_lines:
         if line.startswith('load '):
@@ -68,12 +68,20 @@ def main():
             inputs[str(path)] = digest(path)
             line = f'load {space} {address} {path}'
             if space == 'P':
-                if program is not None:
-                    raise ValueError('Expected one program image')
-                program, base = path, int(address, 16)
+                start=int(address,16); size=path.stat().st_size
+                if size%3: raise ValueError('Program image is not packed 24-bit words')
+                end=start+size//3
+                if start<0x302 and end>0x300:
+                    raise ValueError('Program overlaps the instruction-host call stub')
+                if any(start<b+n and end>b for _,b,n in programs):
+                    raise ValueError('Overlapping program images are not supported')
+                programs.append((path,start,size//3))
         lines.append(line)
-    if program is None:
+    if not programs:
         raise ValueError('No program image loaded')
+    program,base,words=programs[0]
+    if words!=build['program_words']:
+        raise ValueError('The first P load must be the complete machine program')
     calls = [int(s.split()[1], 16) for s in lines if s.startswith('call ')]
     render = base + build['labels']['render']
     renders = [i for i, pc in enumerate(calls) if pc == render]
@@ -81,7 +89,7 @@ def main():
         raise ValueError('No render calls')
     ordinary_script = out / 'ordinary.script'
     ordinary_script.write_text('\n'.join(lines) + '\n')
-    normal = run([Path(a.host).resolve(), ordinary_script, 'ordinary.raw'], cwd=out)
+    normal = run([Path(a.host).resolve(), ordinary_script, 'ordinary.raw'], cwd=out,timeout=600)
     (out / 'ordinary.log').write_text(normal.stdout + normal.stderr)
     cycles = [int(x) for x in re.findall(r'instructions \d+ cycles (\d+)', normal.stdout)]
     if len(cycles) != len(calls):
@@ -90,9 +98,21 @@ def main():
     # deliberately not described as an exhaustive cold-cache worst-case search.
     selected = set(renders[:3] + renders[-1:])
     selected.update((max(renders, key=lambda i: cycles[i]), min(renders, key=lambda i: cycles[i])))
+    first_renders=set(); pending=False
+    for i,pc in enumerate(calls):
+        if pc==base+build['labels']['trigger']: pending=True
+        elif pc==render:
+            if pending: first_renders.add(i)
+            pending=False
+    later=[i for i in renders if i not in first_renders]
+    if later: selected.add(max(later,key=lambda i: cycles[i]))
     for target in (base + build['labels']['init'], base + build['labels']['trigger']):
         matches = [i for i, pc in enumerate(calls) if pc == target]
         selected.update(matches[:2])
+    # External-memory fixtures set INIT's R1 track number in a separate P stub.
+    # Trace that actual entry too, including its setup and jump into INIT.
+    selected.update(i for i,pc in enumerate(calls)
+                    if any(start<=pc<start+size for _,start,size in programs[1:]))
     traced, index = [], 0
     for line in lines:
         if line.startswith('call '):
@@ -105,7 +125,7 @@ def main():
             traced.append(line)
     trace_script = out / 'ordered.script'
     trace_script.write_text('\n'.join(traced) + '\n')
-    traced_run = run([Path(a.trace_host).resolve(), trace_script, 'ordered.raw'], cwd=out)
+    traced_run = run([Path(a.trace_host).resolve(), trace_script, 'ordered.raw'], cwd=out,timeout=600)
     (out / 'ordered.log').write_text(traced_run.stdout + traced_run.stderr)
     if (out / 'ordinary.raw').read_bytes() != (out / 'ordered.raw').read_bytes():
         raise AssertionError('Ordered tracer differs from ordinary host audio')
@@ -114,19 +134,22 @@ def main():
         raise AssertionError('Ordered tracer differs from ordinary host call cycles')
     if re.findall(r'^dump .+$', normal.stdout, re.M) != re.findall(r'^dump .+$', traced_run.stdout, re.M):
         raise AssertionError('Ordered tracer differs from ordinary host final state/guards')
-    listing = out / 'code.asm'
-    run([Path(a.disassembler).resolve(), '-in', program, '-pc', f'{base:x}', '-nops', '-out', listing])
     items = []
-    for line in listing.read_text().splitlines():
-        m = LINE.match(line)
-        if m:
-            items.append((int(m[1], 16), len(m[3].split()), m[2]))
+    for segment,(path,start,_) in enumerate(programs):
+        listing=out/f'code-{segment}.asm'
+        run([Path(a.disassembler).resolve(), '-in', path, '-pc', f'{start:x}', '-nops', '-out', listing])
+        for line in listing.read_text().splitlines():
+            m = LINE.match(line)
+            if m:
+                items.append((int(m[1], 16), len(m[3].split()), m[2]))
     # The instruction host adds its own two-word JSR at internal P:$300.
     items.append((0x300, 2, 'jsr >$0'))
     sizes = {pc: n for pc, n, _ in items}
     spec = importlib.util.spec_from_file_location('external_interlocks', a.interlocks.resolve())
     interlocks = importlib.util.module_from_spec(spec); spec.loader.exec_module(interlocks)
-    labels = sorted((base + pc, label) for label, pc in build['labels'].items())
+    labels = sorted([(base + pc, label) for label, pc in build['labels'].items()]
+                    +[(start,'fixture_'+path.stem) for path,start,_ in programs[1:]]
+                    +[(0x300,'host_stub')])
     addresses = [pc for pc, _ in labels]
     rows = []
     for index in sorted(selected):
@@ -148,8 +171,9 @@ def main():
             k = bisect_right(addresses, pc) - 1
             groups[labels[k][1] if k >= 0 else 'host_stub'] += after - before
         rows.append(dict(call_index=index, entry=f'{calls[index]:06x}',
-                         phase='render' if index in renders else 'init' if calls[index] == base + build['labels']['init'] else 'trigger',
+                         phase='render' if index in renders else 'init' if calls[index] == base + build['labels']['init'] else 'trigger' if calls[index] == base + build['labels']['trigger'] else 'fixture_entry',
                          render_block=renders.index(index) if index in renders else None,
+                         first_render_after_trigger=index in first_renders,
                          host_cycles=cycles[index], instructions=len(trace),
                          modeled_interlocks=totals, cold_instruction_word_misses=fetches,
                          additive_sensitivity={str(ws): cycles[index] + sum(totals.values()) + ws*fetches for ws in (1, 2, 3)},
@@ -159,6 +183,7 @@ def main():
     report = dict(input_sha256=inputs,
                   tool_sha256={str(Path(x).resolve()): digest(x) for x in (a.host, a.trace_host, a.disassembler, a.interlocks, __file__)},
                   base=f'{base:06x}', source_program_words=build['program_words'],
+                  program_segments=[dict(path=str(path),base=f'{start:06x}',words=size) for path,start,size in programs],
                   ordinary_vs_tracer_audio_bitexact=True, ordinary_vs_tracer_cycles_equal=True,
                   ordinary_vs_tracer_final_dumps_equal=True,
                   cold_cache_measured=False, rows=rows,

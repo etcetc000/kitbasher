@@ -19,11 +19,12 @@ def main():
     p.add_argument('--blocks',type=int,help='Diagnostic override; may end before the voice goes idle')
     p.add_argument('--track',type=int,default=3,choices=range(16))
     p.add_argument('--out',type=Path)
+    p.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
     a=p.parse_args(); kind=a.kind
-    out=(a.out or ROOT/f'build/{kind}-comparison').resolve(); out.mkdir(parents=True,exist_ok=True)
+    out=(a.out or ROOT/('build/'+kind+('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}'))).resolve(); out.mkdir(parents=True,exist_ok=True)
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind]).stdout)
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits); (out/(kind+'.asm')).write_text(source)
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,
                                    {'mds_sine':(1,1),'mds_track':(2,6)})
     (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -94,7 +95,7 @@ def main():
         for n in ('phase','wobble','noise'): checks[n+'_rng']=(native[n+'hi']<<24|native[n+'lo'])==ref[n+'_rng']
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
-        metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,
+        metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      output_gain=OUTPUT_GAIN,peak_error_limit=tolerance,numeric_pass=peak_error<tolerance,

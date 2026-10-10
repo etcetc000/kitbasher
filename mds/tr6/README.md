@@ -18,6 +18,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Full 47-partial hats/cymbal engine and external-state checks](audit/METAL-PORT.md)
 - [Clap extension, FIR/reconstruction path and comparisons](audit/CLAP-PORT.md)
 - [TX8/TX9 and lab optimization findings; ordered-trace profiler](audit/OPTIMIZATION-INPUTS.md)
+- [Compact-table candidates, storage savings and local A/B comparisons](audit/COMPACT-TABLES.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

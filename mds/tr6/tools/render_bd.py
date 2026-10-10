@@ -31,9 +31,10 @@ def main():
     ap.add_argument('--assembler',required=True); ap.add_argument('--host',required=True)
     ap.add_argument('--compiler',default='clang++')
     ap.add_argument('--case',choices=['default','minimum','maximum','retrigger','pretrigger'])
-    ap.add_argument('--out',type=Path,default=ROOT/'build/bd-comparison')
-    args=ap.parse_args(); out=args.out.resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(); (out/'bd.asm').write_text(source)
+    ap.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
+    ap.add_argument('--out',type=Path)
+    args=ap.parse_args(); out=(args.out or ROOT/('build/bd-comparison' if args.tanh_bits==13 else f'build/bd-lut{args.tanh_bits}')).resolve(); out.mkdir(parents=True,exist_ok=True)
+    source=generate(args.tanh_bits); (out/'bd.asm').write_text(source)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
     (out/'bd.mds').write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -99,7 +100,7 @@ def main():
         # Fixed acceptance bounds for this prototype. The XL case accumulates
         # source float32 oscillator phase error; see audit/BD-PORT.md.
         tolerance=0.005 if name=='maximum' else 0.0002
-        metrics=dict(case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),
+        metrics=dict(case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
                      peak_error=max(abs(e) for e in error),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
                      host_cycle_table_max_call=max(cycles),cold_cache_measured=False,
