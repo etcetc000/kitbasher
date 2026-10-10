@@ -40,6 +40,7 @@ def main():
     p.add_argument('--bd-recursive-body',action='store_true')
     p.add_argument('--bd-lean-mix',action='store_true')
     p.add_argument('--bd-bounded-activity',action='store_true')
+    p.add_argument('--bd-scheduled-mix',action='store_true')
     p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
@@ -74,6 +75,8 @@ def main():
         p.error('Recursive body requires omitted impulse and control rate 32')
     if args.bd_lean_mix and not (args.bd_recursive_body and args.bd_lcg_noise):
         p.error('Lean mix requires recursive body and LCG')
+    if args.bd_scheduled_mix and not (args.bd_lean_mix and (args.bd_quadratic_saturation or args.bd_sequential_tanh)):
+        p.error('Scheduled BD mix requires lean mix and quadratic or sequential saturation')
     if args.bd_bounded_activity and not args.bd_lean_mix:
         p.error('Bounded BD activity requires lean mix')
     if args.metal_envelope_rate>32//args.metal_render_stride:
@@ -149,6 +152,7 @@ def main():
     if args.bd_recursive_body: suffix+='-bd-recursive-body'
     if args.bd_lean_mix: suffix+='-bd-lean-mix'
     if args.bd_bounded_activity: suffix+='-bd-bounded-activity'
+    if args.bd_scheduled_mix: suffix+='-bd-scheduled-mix'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -176,7 +180,7 @@ def main():
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
         elif name=='bd':
-            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse,sequential_tanh=args.bd_sequential_tanh,quadratic_saturation=args.bd_quadratic_saturation,recursive_body=args.bd_recursive_body,lean_mix=args.bd_lean_mix,bounded_activity=args.bd_bounded_activity)
+            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse,sequential_tanh=args.bd_sequential_tanh,quadratic_saturation=args.bd_quadratic_saturation,recursive_body=args.bd_recursive_body,lean_mix=args.bd_lean_mix,bounded_activity=args.bd_bounded_activity,scheduled_mix=args.bd_scheduled_mix)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
@@ -277,7 +281,7 @@ def main():
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
-                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,bd_sequential_tanh=args.bd_sequential_tanh,bd_quadratic_saturation=args.bd_quadratic_saturation,bd_recursive_body=args.bd_recursive_body,bd_lean_mix=args.bd_lean_mix,bd_bounded_activity=args.bd_bounded_activity,
+                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,bd_sequential_tanh=args.bd_sequential_tanh,bd_quadratic_saturation=args.bd_quadratic_saturation,bd_recursive_body=args.bd_recursive_body,bd_lean_mix=args.bd_lean_mix,bd_bounded_activity=args.bd_bounded_activity,bd_scheduled_mix=args.bd_scheduled_mix,
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,

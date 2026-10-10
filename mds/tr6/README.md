@@ -46,6 +46,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Exact kick saturation-table scheduling and accumulator-boundary checks](audit/BD-TANH-SCHEDULE.md)
 - [Arithmetic saturation, recursive kick body and shared-filter tradeoffs](audit/BD-ARITHMETIC.md)
 - [Exact kick activity/tail specialization and boundary checks](audit/BD-ACTIVITY.md)
+- [Exact kick mixer/DC scheduling and two-loop activity dispatch](audit/BD-MIX-SCHEDULE.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
