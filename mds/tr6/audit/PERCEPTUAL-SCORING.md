@@ -23,6 +23,11 @@ does not retrospectively attest the original render-tool binary identities.
 Future render-and-score runs should capture source/host identity at execution.
 The existing timing reports retain their separate host-tool hashes and limits.
 
+The later [lean-kernel runs](LEAN-METAL.md) now capture metal source/tool/image
+hashes before execution and verify them after each case. Their scoring reports
+embed that candidate provenance and reject changed recorded artifacts. Older
+baseline renders remain marked as lacking execution-time provenance.
+
 ## Paired native results
 
 All **86 pairs** were scored: five BD compact-table cases, nine compact-table

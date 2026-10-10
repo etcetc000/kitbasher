@@ -25,6 +25,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Compact-table candidates, storage savings and local A/B comparisons](audit/COMPACT-TABLES.md)
 - [Reduced-partial hats/cymbal candidates and CPU/sound comparisons](audit/REDUCED-METAL.md)
 - [Existing lab perceptual scorer, results and provenance](audit/PERCEPTUAL-SCORING.md)
+- [Lean three-partial kernels, incremental loss and timing](audit/LEAN-METAL.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
@@ -52,8 +53,8 @@ python tools/check_family.py
 
 The host must support the script protocol documented in the kick report.
 The resulting `.mds` packages have a zero cycle declaration and are development
-artifacts. No installable SysEx is emitted. All eight drum ports are still
-unoptimized and not cold-cache qualified.
+artifacts. No installable SysEx is emitted. All eight reference ports remain
+CPU-unqualified; separate optimization candidates are documented in the audits.
 The aggregate draft code and package sizes also exceed the published library
 capacity field widths; individual package fit does not establish kit fit.
 

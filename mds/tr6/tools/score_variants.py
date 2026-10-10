@@ -1,7 +1,8 @@
 """Validate TR6 render pairs, then invoke the existing optimization-lab scorer.
 
 No scoring algorithm is copied here. Retained renders are hashed at scoring
-time; this does not retrospectively attest which tool binaries rendered them.
+time. Execution-time provenance is verified and forwarded when available;
+missing historical tool identities are not retrospectively reconstructed.
 """
 import argparse
 import json
@@ -20,6 +21,28 @@ def provenance(directory,name):
     for pattern in ('*.asm','*.mds','*.bin','controls.json','provenance.json'):
         paths.update(directory.glob(pattern))
     return {str(path):digest(path) for path in sorted(paths) if path.is_file()}
+
+
+def render_metadata(directory,name):
+    path=directory/'provenance.json'
+    if not path.is_file(): return None
+    document=json.loads(path.read_text())
+    if not document.get('complete') or not document.get('captured_before_render'):
+        raise ValueError('Incomplete execution-time render provenance')
+    cases=[row for row in document['cases'] if row['name']==name]
+    if len(cases)!=1: raise ValueError('Render provenance does not uniquely cover case')
+    case=cases[0]
+    if str((directory/f'{name}.raw').resolve()) not in case['output_sha256']:
+        raise ValueError('Native audio absent from execution-time provenance')
+    for filename,expected in case['output_sha256'].items():
+        if digest(Path(filename))!=expected: raise ValueError('Recorded render output changed before scoring')
+    for filename,expected in document['inputs_sha256'].items():
+        # Local assembly/images/coefficients must still describe these renders.
+        # External source/tool hashes are historical identities, not a demand
+        # that the current external checkout has never changed since rendering.
+        if Path(filename).is_relative_to(directory) and digest(Path(filename))!=expected:
+            raise ValueError('Recorded local render input changed before scoring')
+    return dict(path=str(path),sha256=digest(path),inputs_sha256=document['inputs_sha256'],case=case)
 
 
 def main():
@@ -54,10 +77,14 @@ def main():
             shutil.copyfile(source,dest)
             if digest(dest)!=expected: raise ValueError('Render changed while staging scoring inputs')
         hashes.update(provenance(directory,name)); hashes.update(provenance(candidate,name))
-        cases.append(dict(name=name,**{k:v for k,v in row.items() if k!='case'}))
+        cases.append(dict(name=name,baseline_execution_provenance=render_metadata(directory,name),
+                          candidate_execution_provenance=render_metadata(candidate,name),
+                          **{k:v for k,v in row.items() if k!='case'}))
     report=dict(scope='Retained native full-path baseline versus native candidate',
                 provenance_captured_at='scoring time; original render tool identity is not independently reconstructed',
                 original_render_tool_attestation=False,input_sha256=hashes,
+                execution_time_provenance=dict(baseline=all(r['baseline_execution_provenance'] is not None for r in cases),
+                                               candidate=all(r['candidate_execution_provenance'] is not None for r in cases)),
                 adapter_sha256=digest(Path(__file__)),model_change_allowed=a.allow_model_change,
                 sample_rate=44100,raw_encoding='signed little-endian int32 Q23 mono',
                 timing='Raw host call maxima in cases; not calibrated cold-cache cost',cases=cases)

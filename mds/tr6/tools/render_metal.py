@@ -5,6 +5,9 @@ import math
 from pathlib import Path
 import re
 import struct
+import hashlib
+import shutil
+import sys
 
 from mds_build import ROOT, assemble_package, mds_format, assembly
 from generate_metal import generate, build_reference, STATE, OUTPUT_GAIN
@@ -22,14 +25,17 @@ def main():
     p.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
     p.add_argument('--partial-count',type=int,choices=(3,6,47),default=47,help='Keep the strongest partials, in original source order')
     p.add_argument('--no-wobble',action='store_true',help='Remove per-partial random frequency wobble in native and comparison models')
+    p.add_argument('--lean-math',action='store_true',help='Register-based kernels and rounded Q23 envelopes; requires three partials and no wobble')
     a=p.parse_args(); kind=a.kind
+    if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     variant=a.partial_count!=47 or a.no_wobble
     suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
+    if a.lean_math: suffix+='-lean'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
     exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,
                                    {'mds_sine':(1,1),'mds_track':(2,6)})
@@ -45,6 +51,17 @@ def main():
     (out/'init-stub.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in stub))
     sine=[round(math.sin(i*2*math.pi/32768)*0x7fffff) for i in range(32768)]
     (out/'sine.bin').write_bytes(b''.join((w&0xffffff).to_bytes(3,'big') for w in sine))
+    def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    source_root=ROOT/'.audit-sources/Simple606/Source'
+    input_paths=[Path(a.host).resolve(),Path(a.assembler).resolve(),Path(shutil.which(a.compiler) or a.compiler).resolve(),exe,
+                 Path(__file__).resolve(),ROOT/'tools/generate_metal.py',ROOT/'tools/mds_build.py',ROOT/'tools/render_bd.py',
+                 ROOT/'tests/metal_reference.cpp',source_root/'HiHats.hpp',source_root/'SynthDrumCommon.hpp',
+                 out/'cymbal_spec.hpp',out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),
+                 out/'assembly.json',out/'code.bin',out/'sine.bin',out/'init-stub.bin']
+    captured_hashes=hashes(input_paths)
+    provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(a).items()},
+                    captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
     default=102 if kind=='cy' else 89
     cases=[('default',[default,64],0,0),('minimum',[0,0],0,0),('maximum',[127,127],0,0),
            ('low_pitch',[127,0],0,0),('short_high_pitch',[0,127],0,0),
@@ -103,6 +120,7 @@ def main():
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble),
+                     lean_math=a.lean_math,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
@@ -114,6 +132,12 @@ def main():
         write_wave(out/(name+'.wav'),actual); write_wave(out/(name+'.reference.wav'),[v*OUTPUT_GAIN for v in want])
         print(json.dumps(metrics),flush=True)
         if not metrics['numeric_pass'] or not all(checks.values()): raise AssertionError(f'{kind}/{name} comparison failed')
+        if hashes(input_paths)!=captured_hashes: raise AssertionError('Render input/tool changed during the run')
+        provenance['cases'].append(dict(name=name,knobs=knobs,samples=samples,repeat_samples=repeat,delay_samples=delay,
+            output_sha256=hashes([script,out/(name+'.raw'),out/(name+'.reference.raw'),out/(name+'.host.log')]),checks_pass=True))
+        (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    provenance['complete']=True
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
 
 
 if __name__=='__main__': main()
