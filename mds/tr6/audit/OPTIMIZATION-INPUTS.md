@@ -154,3 +154,18 @@ ordered host  a5f9e301eeb149db77a5d024a8ba8a3c300f7c911c76afef0941f482b61345a0
 disassembler c0fc002da5aa1c330f178a434986c57ce2e81348be5901b642bcd01fe48623f9
 interlock.py be5a58a3ec866a590edbc486415e2faac463cc040e106d4eee37ce7401cc4d8b
 ```
+## Accepted optimization tradeoff
+
+On 2026-10-10 the user explicitly accepted perceptual drift to reach the CPU
+target. The complete source-path ports remain the comparison baseline. The next
+phase may evaluate reduced partial counts, simpler wobble/noise generation,
+shorter or replacement clap filters, smaller tables and other synthesis changes;
+it does not need to preserve sample-level agreement with that baseline.
+
+For each candidate, record its signal-path changes, control/seed coverage,
+program and state sizes, trigger/first/later render costs, and A/B render files.
+Check tuning, attack, decay, level, spectral shape, silence and retrigger behavior.
+Numerical and spectral metrics support comparison but do not establish listening
+equivalence. Retain candidates that trade sound and cost differently when the
+preference needs listening. The under-129 cold-cache target, firmware admission
+contract and complete-family storage requirements remain unchanged.

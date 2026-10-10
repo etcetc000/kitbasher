@@ -2,7 +2,18 @@
 
 Audited 2026-10-09. Scope: a TR-606-style MDS machine family based on Simple606. Working performance target supplied by the user: **under 129 cold-cache clocks per sample**. Priority: **functional ports first, optimization afterward**.
 
-**Verdict: proceed with a staged DSP port.** MDS provides the deployment mechanism; CPU cost is the main uncertainty. A functional implementation is plausible, but this audit does not establish that all source algorithms meet the performance target. Preserve the algorithms for the initial ports and measure before changing their sound. The clap has the strongest evidence of requiring a substantial later optimization or an explicitly accepted approximation.
+Update, 2026-10-10: the user accepts perceptual drift for optimization. Keep the
+full-path ports as references while evaluating cheaper synthesis variants; the
+shipping candidate does not need sample-level agreement with Simple606. Document
+the audible tradeoffs and provide comparison renders alongside timing evidence.
+
+**Verdict: functional reference ports work; a shipping kit is not yet qualified.**
+All eight full-path prototypes render on the DSP56303 instruction host and pass
+the stated source comparisons. Their CPU costs exceed the target before cache
+and memory penalties, and the complete family also exceeds the published library
+capacity field widths. Continue with CPU and storage optimization, including the
+accepted perceptual changes. The 47-partial metal engine and clap are the largest
+cost risks. Preserve these working versions as audio references.
 
 ## Pinned sources
 
@@ -21,6 +32,24 @@ MDS requires DSP56303 assembly with INIT/TRIG/RENDER entry points, producing 32 
 The published admission limit is 3,951 clocks per block, including trigger and dispatch costs with slow external program memory. The firmware checks the declaration, not actual execution. Keep this distinct from the user's sub-129 cold-cache benchmark: 129 × 32 = 4,128, whereas 3,951 / 32 = 123.46875. Resolve the accounting difference against the actual target firmware and measurement harness before release; do not replace the user's development target with an assumed equivalent. [Timing contract](https://github.com/jmamma/MDS/blob/c446179d6d73a82b117ee20eb2216af78734a795/docs/MDX_MachineDumpStandard.txt#L123-L142).
 
 The bank has 16 installation slots; the protocol exposes program/library capacity and admission budgets. Seven voices occupy seven slots; optional clap makes eight. Query actual capacity before installation: code size across the family matters independently of track CPU. [MDS protocol](https://github.com/jmamma/MDS/blob/c446179d6d73a82b117ee20eb2216af78734a795/docs/MDX_MachineDumpProtocol.txt).
+
+The completed functional prototypes also expose a **family storage problem**.
+`python tools/check_family.py` validates the generated packages and reports:
+
+| Baseline set | Slots | Program words | Canonical package bytes |
+| --- | ---: | ---: | ---: |
+| Seven TR6 voices | 7 | 58,165 | 184,560 |
+| TR6 plus CP | 8 | 71,026 | 225,144 |
+
+The published capability reply uses two unpacked bytes for total shared program
+words and library package-byte capacity. Under that contract, each field can
+represent at most 65,535. Both baseline sets exceed even that representable
+library-byte capacity; the eight-voice set also exceeds the program-word field.
+Individual package validation therefore does not establish a complete kit fit.
+Code/table compaction is required for a single-library release under the
+published contract. Actual device capacity may be lower and has not been queried.
+The host's ability to load these programs at separate test addresses does not
+model the firmware's allocator or establish installability.
 
 ## Voice-by-voice assessment
 
@@ -96,9 +125,10 @@ This changes no persistent execution-policy setting. Requires the pinned checkou
 - First assembly milestone: a full-path BD prototype now renders on the instruction host and passes five stated numerical/state comparisons. See [kick port evidence](BD-PORT.md). Its current CPU cost exceeds the target before cache costs.
 - SD now also renders the complete signal path, with seven base scenarios, all 128 integer decay settings, all 16 knob corners, and exact random-state checks. See [snare evidence](SD-PORT.md), including the required output trim and the still-excessive CPU cost. Interleaved BD/SD tracks and reassignment match isolated native renders bit-for-bit.
 - LT and HT preserve their full audible paths and fit local state. Both pass eight base scenarios and all 128 integer decay settings, with exact frame counts, activity and all three RNG states. See [tom evidence](TOMS-PORT.md) for numerical differences and the still-excessive CPU costs.
-- CH/OH/CY now retain the full 47-partial signal path, including per-partial wobble and all source noise history. Each fits 58 local and 376 external words. The [metal-port report](METAL-PORT.md) describes numerical, external-memory and integration limits. CP remains unported. The metal baseline is around 7,670 raw host clocks/sample, before cache and memory penalties; a shipping implementation is not established.
+- CH/OH/CY now retain the full 47-partial signal path, including per-partial wobble and all source noise history. Each fits 58 local and 376 external words. The [metal-port report](METAL-PORT.md) describes numerical, external-memory and integration limits. The metal baseline is around 7,670 raw host clocks/sample, before cache and memory penalties; a shipping implementation is not established.
+- CP now retains all four shared-noise FIRs, pitch-dependent coefficient compression, the full 128-tap reconstruction path, all envelopes and the noise/air controls. It fits 71 local and 1,472 external words. The [clap report](CLAP-PORT.md) documents numerical approximations and validation. First-block reconstruction look-ahead is a major cost; the functional port does not establish CPU viability.
 - The supplied X.20 TX8/TX9 banks and local optimization findings have now been inspected. All 43 supplied machine packages validate and reconstruct exactly. Six BD/SD ordered-trace replays match the ordinary host's audio, cycles and final state; [optimization inputs](OPTIMIZATION-INPUTS.md) separates measured raw cycles from modeled cache/interlock penalties. No cold-cache or hardware qualification is implied.
-- Not established: the remaining voice ports, cold-cache DSP cycle counts, hardware sound quality, shared program-memory fit of completed ports, or installation compatibility with a particular device/firmware build.
-- Draft BD, SD, LT, HT, CH, OH, CY and sine-test `.mds` packages are generated in ignored build directories with zero cycle declarations. No `.syx` was generated and no hardware was modified. An existing external assembler and instruction host are now used; they are not bundled. The supplied MDS example cycle declarations were inspected, not independently benchmarked.
+- Not established: cold-cache DSP cycle counts, hardware sound quality, shared program-memory fit of completed ports, or installation compatibility with a particular device/firmware build.
+- Draft BD, SD, LT, HT, CH, OH, CY, CP and sine-test `.mds` packages are generated in ignored build directories with zero cycle declarations. No `.syx` was generated and no hardware was modified. An existing external assembler and instruction host are now used; they are not bundled. The supplied MDS example cycle declarations were inspected, not independently benchmarked.
 
 Recommendation: **green-light the functional-port milestone, with no promise yet that the full 47-partial metal engine or clap will ship unchanged under 129.** Revisit feasibility using measured cold-cache results from the first working assembly versions.

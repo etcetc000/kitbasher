@@ -19,7 +19,8 @@ MACHINES={'bd':dict(base=0x110023,knobs=[51,102,75,0,0]),
           'ht':dict(base=0x140001,knobs=[102,64]),
           'ch':dict(base=0x150023,knobs=[89,64]),
           'oh':dict(base=0x170031,knobs=[89,64]),
-          'cy':dict(base=0x180041,knobs=[102,64])}
+          'cy':dict(base=0x180041,knobs=[102,64]),
+          'cp':dict(base=0x190041,knobs=[102,64,64])}
 
 
 def main():
@@ -33,12 +34,17 @@ def main():
     tom_reference=build_reference(out,args.compiler)
     from generate_metal import build_reference as build_metal_reference, generate as generate_metal
     metal_reference=build_metal_reference(out/'metal-reference',args.compiler)
+    from generate_clap import build_reference as build_clap_reference, generate as generate_clap
+    clap_reference=build_clap_reference(out/'clap-reference',args.compiler)
     for name,settings in MACHINES.items():
         imports={'mds_sine':(1,1)}
         if name in ('lt','ht'):
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
         elif name in ('ch','oh','cy'):
             source=generate_metal(name,json.loads(run([metal_reference,'--tables',name]).stdout))
+            imports['mds_track']=(2,6)
+        elif name=='cp':
+            source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
         else:
             source=importlib.import_module('generate_'+name).generate()
@@ -81,7 +87,7 @@ def main():
 
     def render(tag,lines):
         (out/(tag+'.script')).write_text('\n'.join(loads+lines)+'\n')
-        result=run([Path(args.host).resolve(),tag+'.script',tag+'.raw'],cwd=out)
+        result=run([Path(args.host).resolve(),tag+'.script',tag+'.raw'],cwd=out,timeout=600)
         (out/(tag+'.log')).write_text(result.stdout+'\n'+result.stderr)
         raw=(out/(tag+'.raw')).read_bytes()
         return list(struct.unpack('<'+'i'*(len(raw)//4),raw))
@@ -89,7 +95,8 @@ def main():
     count=512
     tracks=[('bd',0x800,None),('sd',0x840,None),('sd',0x880,[127,0,127,127]),
             ('lt',0x8c0,None),('ht',0x900,None),('ht',0x940,[127,0]),
-            ('ch',0x980,None),('oh',0x9c0,None),('cy',0xa00,None)]
+            ('ch',0x980,None),('oh',0x9c0,None),('cy',0xa00,None),
+            ('cp',0xa40,None),('cp',0xa80,[127,63,127])]
     isolated=[]
     for i,(name,voice,knobs) in enumerate(tracks):
         lines=setup(name,voice,knobs=knobs)
@@ -109,8 +116,9 @@ def main():
     reassignments=(('bd','sd'),('sd','bd'),('lt','ht'),('ht','lt'),
                    ('bd','lt'),('lt','bd'),('sd','ht'),('ht','sd'),
                    ('ch','oh'),('oh','ch'),('oh','cy'),('cy','oh'),
-                   ('lt','ch'),('ch','lt'),('bd','cy'),('cy','bd'))
-    default_track={'bd':0,'sd':1,'lt':3,'ht':4,'ch':6,'oh':7,'cy':8}
+                   ('lt','ch'),('ch','lt'),('bd','cy'),('cy','bd'),
+                   ('cp','bd'),('bd','cp'),('cp','cy'),('cy','cp'),('cp','sd'),('sd','cp'))
+    default_track={'bd':0,'sd':1,'lt':3,'ht':4,'ch':6,'oh':7,'cy':8,'cp':9}
     for before,after in reassignments:
         lines=setup(before,0x800)
         for n in range(173): lines+=block(before,0x800,n)
@@ -120,7 +128,7 @@ def main():
         baseline=isolated[default_track[after]]
         if actual!=baseline: raise AssertionError(f'{before} -> {after} reassignment')
     for name,knobs in (('sd',(127,0,127,127)),('lt',(127,0)),('ht',(0,127)),
-                       ('ch',(127,0)),('oh',(0,127)),('cy',(0,0))):
+                       ('ch',(127,0)),('oh',(0,127)),('cy',(0,0)),('cp',(127,0,0))):
         lines=setup(name,0x800)
         for n in range(137):
             if n==30:
@@ -130,7 +138,7 @@ def main():
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
-                controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy'],hardware_validated=False)
+                controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))
 
 
