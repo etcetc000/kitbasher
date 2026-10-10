@@ -15,6 +15,7 @@ static bool bdRecursive=false;
 static bool bdLinearBase=false;
 static float bdLinearBaseGain=1;
 static float bdBaseClipPeak=0;
+static int bdRenderStride=1;
 inline float quadraticSoft(float x) {
     x=clampf(x,-2.f,2.f);
     return x*(1.f-.25f*std::fabs(x));
@@ -63,7 +64,13 @@ float processLeanMix(SynthDrums606::BassDrum& b,float noise) {
     const float click=noise*b.clickEnv_.process();
     const float mix=body*(.92f+b.drive*.10f)+click*(.06f+b.clickAmount*.90f);
     const float filtered=b.bodyLPF_.process(mix);
-    return b.dc_.process(SynthDrums606::bdSoft(filtered*(1.12f+b.drive*.12f))*b.level);
+    const float shaped=SynthDrums606::bdSoft(filtered*(1.12f+b.drive*.12f))*b.level;
+    if(SynthDrums606::bdRenderStride==2) {
+        const float value=shaped-b.dc_.x1_+(.995f*.995f)*b.dc_.y1_;
+        b.dc_.x1_=shaped; b.dc_.y1_=value;
+        return value;
+    }
+    return b.dc_.process(shaped);
 }
 
 struct ControlSteps {
@@ -111,7 +118,7 @@ struct ControlSteps {
 };
 
 int main(int argc, char** argv) {
-    if (argc != 10 && (argc < 12 || argc > 22)) return 2;
+    if (argc != 10 && (argc < 12 || argc > 23)) return 2;
     float trans=std::atoi(argv[1])/127.0f, decay=std::atoi(argv[2])/127.0f;
     float tune=-12+24*std::atoi(argv[3])/127.0f, heat=std::atoi(argv[4])/127.0f;
     bool xl=std::atoi(argv[5])!=0;
@@ -129,21 +136,24 @@ int main(int argc, char** argv) {
     const bool linearBase=argc>=20 && std::atoi(argv[19])!=0;
     const bool roundedDC=argc>=21 && std::atoi(argv[20])!=0;
     const float linearBaseGain=argc>=22 ? std::strtof(argv[21],nullptr) : 1;
+    const int renderStride=argc>=23 ? std::atoi(argv[22]) : 1;
     if(simpleImpulse && omitImpulse) return 2;
     if(quadraticSaturation && !omitImpulse) return 2;
     if(recursiveBody && (!omitImpulse || controlRate!=32)) return 2;
     if(leanMix && (!recursiveBody || !lcgNoise)) return 2;
     if((linearBase || roundedDC) && !leanMix) return 2;
     if(!std::isfinite(linearBaseGain) || linearBaseGain<=0 || linearBaseGain>1 || (!linearBase && linearBaseGain!=1)) return 2;
+    if((renderStride!=1 && renderStride!=2) || (renderStride==2 && (!leanMix || controlRate!=32 || repeat%2 || delay%2))) return 2;
     SynthDrums606::bdQuadratic=quadraticSaturation;
     SynthDrums606::bdRecursive=recursiveBody;
     SynthDrums606::bdLinearBase=linearBase;
     SynthDrums606::bdLinearBaseGain=linearBaseGain;
+    SynthDrums606::bdRenderStride=renderStride;
     ControlSteps controls;
     const uint32_t seed=requestedSeed ? requestedSeed : 0x606606u;
     uint32_t noiseState=seed&0xffffffu;
     SynthDrums606::BassDrumVoice voice;
-    voice.init(44100,seed);
+    voice.init(44100/renderStride,seed);
     if(simpleImpulse) {
         const float pole=std::exp(-2.f*SynthDrums606::kPi*1350.f/44100.f);
         auto& f=voice.bassDrum_.impulseHPF_;
@@ -156,11 +166,16 @@ int main(int argc, char** argv) {
     std::ofstream out(argv[9],std::ios::binary);
     if (!out) return 3;
     uint64_t noiseDraws=0;
+    float previousOutput=0,currentOutput=0;
     for(int i=0;i<samples;++i) {
+        if(renderStride==2 && i%2) {
+            out.write(reinterpret_cast<char*>(&currentOutput),sizeof(currentOutput));
+            continue;
+        }
         if(heatModulation) heat=((i/96*37)%128)/127.f;
         if(i==delay || (repeat>0 && i>delay && (i-delay)%repeat==0)) {
             voice.trigger(std::pow(trans,.75f),xl?decay:decay*.45f,tune,0);
-            if(controlRate!=1) controls.reset(voice,controlRate);
+            if(controlRate!=1) controls.reset(voice,controlRate/renderStride);
         }
         const bool wasActive=voice.isActive();
         if(wasActive) ++noiseDraws;
@@ -177,13 +192,16 @@ int main(int argc, char** argv) {
                     voice.noise_.lastIn_=x; voice.noise_.lastOut_=noise;
                 }
             } else noise=voice.noise_.process();
+            // Preserve continuous-band noise power when the engine rate halves.
+            if(renderStride==2) noise*=1.f/std::sqrt(2.f);
             if(controlRate!=1) controls.prepare(voice);
             value=(leanMix ? processLeanMix(voice.bassDrum_,noise) : voice.bassDrum_.process(noise))*SynthDrums606::kVoiceOutputTrim;
             if(controlRate!=1) controls.advance(voice);
             // Preserve BassDrumVoice's activity/tail policy with the changed noise.
             if(voice.bassDrum_.isActive()) voice.silenceFrames_=0;
             else if(std::fabs(value)<(roundedDC ? 64.e-6f : 1.e-5f)) {
-                if(++voice.silenceFrames_>=32) voice.active_=false;
+                voice.silenceFrames_+=renderStride;
+                if(voice.silenceFrames_>=32) voice.active_=false;
             } else voice.silenceFrames_=0;
             if(controlRate!=1) controls.finish();
         }
@@ -193,6 +211,11 @@ int main(int argc, char** argv) {
             value=(quadraticSaturation ? SynthDrums606::quadraticSoft(value*gain) : std::tanh(value*gain))/std::sqrt(gain);
         }
         if(!std::isfinite(value)) return 4;
+        if(renderStride==2) {
+            currentOutput=value;
+            value=.5f*(previousOutput+currentOutput);
+            previousOutput=currentOutput;
+        }
         out.write(reinterpret_cast<char*>(&value),sizeof(value));
     }
     std::cout << std::setprecision(10) << "active_at_end=" << voice.isActive()

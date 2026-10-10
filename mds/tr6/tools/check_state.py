@@ -45,6 +45,7 @@ def main():
     p.add_argument('--bd-linear-base',action='store_true')
     p.add_argument('--bd-linear-base-gain',type=float,default=1.0)
     p.add_argument('--bd-tail-elision',action='store_true')
+    p.add_argument('--bd-render-stride',type=int,choices=(1,2),default=1)
     p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
@@ -79,6 +80,7 @@ def main():
         p.error('Recursive body requires omitted impulse and control rate 32')
     if args.bd_lean_mix and not (args.bd_recursive_body and args.bd_lcg_noise):
         p.error('Lean mix requires recursive body and LCG')
+    if args.bd_render_stride!=1 and not (args.bd_bounded_activity and args.bd_scheduled_mix): p.error('Stride 2 requires bounded activity and scheduled mix')
     if args.bd_tail_elision and not (args.bd_bounded_activity and args.bd_scheduled_mix):
         p.error('Tail elision requires bounded activity and scheduled mix')
     if not 0<args.bd_linear_base_gain<=1 or (args.bd_linear_base_gain!=1 and not args.bd_linear_base):
@@ -167,6 +169,7 @@ def main():
     if args.bd_linear_base: suffix+='-bd-linear-base'
     if args.bd_linear_base_gain!=1: suffix+='-bd-gain'+str(args.bd_linear_base_gain)
     if args.bd_tail_elision: suffix+='-bd-tail-elision'
+    if args.bd_render_stride!=1: suffix+='-bd-stride'+str(args.bd_render_stride)
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -194,7 +197,7 @@ def main():
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
         elif name=='bd':
-            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse,sequential_tanh=args.bd_sequential_tanh,quadratic_saturation=args.bd_quadratic_saturation,recursive_body=args.bd_recursive_body,lean_mix=args.bd_lean_mix,bounded_activity=args.bd_bounded_activity,scheduled_mix=args.bd_scheduled_mix,rounded_dc=args.bd_rounded_dc,linear_base=args.bd_linear_base,linear_base_gain=args.bd_linear_base_gain,tail_elision=args.bd_tail_elision)
+            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse,sequential_tanh=args.bd_sequential_tanh,quadratic_saturation=args.bd_quadratic_saturation,recursive_body=args.bd_recursive_body,lean_mix=args.bd_lean_mix,bounded_activity=args.bd_bounded_activity,scheduled_mix=args.bd_scheduled_mix,rounded_dc=args.bd_rounded_dc,linear_base=args.bd_linear_base,linear_base_gain=args.bd_linear_base_gain,tail_elision=args.bd_tail_elision,render_stride=args.bd_render_stride)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
@@ -295,7 +298,7 @@ def main():
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
-                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,bd_sequential_tanh=args.bd_sequential_tanh,bd_quadratic_saturation=args.bd_quadratic_saturation,bd_recursive_body=args.bd_recursive_body,bd_lean_mix=args.bd_lean_mix,bd_bounded_activity=args.bd_bounded_activity,bd_scheduled_mix=args.bd_scheduled_mix,bd_rounded_dc=args.bd_rounded_dc,bd_linear_base=args.bd_linear_base,bd_linear_base_gain=args.bd_linear_base_gain,bd_tail_elision=args.bd_tail_elision,
+                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,bd_sequential_tanh=args.bd_sequential_tanh,bd_quadratic_saturation=args.bd_quadratic_saturation,bd_recursive_body=args.bd_recursive_body,bd_lean_mix=args.bd_lean_mix,bd_bounded_activity=args.bd_bounded_activity,bd_scheduled_mix=args.bd_scheduled_mix,bd_rounded_dc=args.bd_rounded_dc,bd_linear_base=args.bd_linear_base,bd_linear_base_gain=args.bd_linear_base_gain,bd_tail_elision=args.bd_tail_elision,bd_render_stride=args.bd_render_stride,
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,

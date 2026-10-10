@@ -53,9 +53,11 @@ def main():
     ap.add_argument('--linear-base',action='store_true',help='Approximation: bypass first saturation stage; requires scheduled mix')
     ap.add_argument('--linear-base-gain',type=float,default=1.0,help='Explicit fixed gain for the linear base experiment, in (0,1]')
     ap.add_argument('--tail-elision',action='store_true',help='Exact audio: skip dead oscillator work and jump tail RNG; requires bounded activity and scheduled mix')
+    ap.add_argument('--render-stride',type=int,choices=(1,2),default=1,help='Approximation: stride 2 uses a 22050 Hz engine and linear output interpolation')
     ap.add_argument('--out',type=Path)
     args=ap.parse_args()
     if args.tail_elision and not (args.bounded_activity and args.scheduled_mix): ap.error('Tail elision requires bounded activity and scheduled mix')
+    if args.render_stride!=1 and not (args.bounded_activity and args.scheduled_mix): ap.error('Stride 2 requires bounded activity and scheduled mix')
     if args.seed is not None and not 0<=args.seed<=0xffffffff: ap.error('--seed must fit uint32')
     if args.blocks is not None and args.blocks<1: ap.error('--blocks must be positive')
     if args.control_rate!=1 and not args.resident_state: ap.error('--control-rate requires --resident-state')
@@ -88,10 +90,11 @@ def main():
     if args.linear_base: suffix+='-linear-base'
     if args.linear_base_gain!=1: suffix+='-gain'+str(args.linear_base_gain)
     if args.tail_elision: suffix+='-tail-elision'
+    if args.render_stride!=1: suffix+='-stride'+str(args.render_stride)
     if args.knobs is not None: suffix+='-k'+'-'.join(str(v) for v in args.knobs)
     out=(args.out or ROOT/'build'/suffix).resolve(); out.mkdir(parents=True,exist_ok=True)
-    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix,args.bounded_activity,args.scheduled_mix,args.rounded_dc,args.linear_base,args.linear_base_gain,args.tail_elision); (out/'bd.asm').write_text(source)
-    states=state_layout(args.control_rate)
+    source=generate(args.tanh_bits,args.resident_state,args.lcg_noise,args.seed,args.control_rate,args.simple_impulse,args.omit_impulse,args.sequential_tanh,args.quadratic_saturation,args.recursive_body,args.lean_mix,args.bounded_activity,args.scheduled_mix,args.rounded_dc,args.linear_base,args.linear_base_gain,args.tail_elision,args.render_stride); (out/'bd.asm').write_text(source)
+    states=state_layout(args.control_rate,args.render_stride)
     manifest=json.loads((ROOT/'machines/bd/bd.json').read_text())
     package,build=assemble_package(source,manifest,args.assembler,{'mds_sine':(1,1)})
     (out/'bd.mds').write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
@@ -137,6 +140,7 @@ def main():
         if args.recursive_body: model_args=[int(args.lcg_noise),args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),args.control_rate,0,1,int(args.quadratic_saturation),1]
         if args.lean_mix: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1]
         if args.rounded_dc or args.linear_base: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1,int(args.linear_base),int(args.rounded_dc),args.linear_base_gain]
+        if args.render_stride!=1: model_args=[1,args.seed if args.seed is not None else 0x606606,int(name=='heat_modulation'),32,0,1,int(args.quadratic_saturation),1,1,int(args.linear_base),int(args.rounded_dc),args.linear_base_gain,args.render_stride]
         reference=run([exe,*knobs,blocks*32,repeat,delay,str(prefix)+'.reference.raw',*model_args])
         lines=['load P 110023 code.bin','load X 148000 sine.bin','voice 800',
                'set Y ff 123456','set Y 120 654321']
@@ -192,9 +196,10 @@ def main():
         if args.lean_mix: model.update(noise_filter='bypassed',mix_filter='shared-body-lowpass')
         if args.rounded_dc: model.update(output_filter='rounded-dc',silence_threshold=64.e-6)
         if args.linear_base: model.update(base_saturation='linear',base_saturation_gain=args.linear_base_gain)
+        if args.render_stride!=1: model.update(render_stride=args.render_stride,internal_sample_rate=44100//args.render_stride,upsampling='causal-linear',noise_gain=1/math.sqrt(args.render_stride),dc_pole=.995**args.render_stride)
         checks=dict(parameters=True,output_guards=True,unused_state=True,activity=True,pretrigger=True,idle=True,buffer_written=True)
         metrics=dict(machine='bd',case=name,knobs=knobs,samples=len(actual),rms_error=math.sqrt(mse),tanh_bits=args.tanh_bits,program_words=build['program_words'],
-                     resident_state=args.resident_state,bounded_activity=args.bounded_activity,scheduled_mix=args.scheduled_mix,tail_elision=args.tail_elision,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
+                     resident_state=args.resident_state,bounded_activity=args.bounded_activity,scheduled_mix=args.scheduled_mix,tail_elision=args.tail_elision,render_stride=args.render_stride,reference_model=model,full_source_comparison=not args.lcg_noise and args.control_rate==1 and not args.simple_impulse and not args.omit_impulse,output_gain=1,checks=checks,
                      local_words=len(states),control_rate=args.control_rate,sequential_tanh=args.sequential_tanh,
                      peak_error=max(abs(e) for e in error),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),

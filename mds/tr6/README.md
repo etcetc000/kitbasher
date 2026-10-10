@@ -49,6 +49,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Exact kick mixer/DC scheduling and two-loop activity dispatch](audit/BD-MIX-SCHEDULE.md)
 - [Rounded kick DC feedback, linear-base experiments and perceptual tradeoffs](audit/BD-OUTPUT.md)
 - [Kick tail oscillator/RNG elision and retrigger-state verification](audit/BD-TAIL-ELISION.md)
+- [Half-rate kick engine, output interpolation and frequency-range checks](audit/BD-HALF-RATE.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

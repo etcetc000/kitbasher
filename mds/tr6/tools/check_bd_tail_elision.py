@@ -60,6 +60,8 @@ def main():
         models[0]['reference_model'].get('mix_filter')!='shared-body-lowpass' or
         models[0].get('tail_elision',False) or not models[1].get('tail_elision')):
         raise ValueError('Requires matching BD models, with only candidate tail elision enabled')
+    stride=models[0]['reference_model'].get('render_stride',1)
+    if stride not in (1,2): raise ValueError('Unsupported render stride')
     paths=[a.host.resolve(),Path(__file__).resolve(),Path(__file__).with_name('generate_bd.py'),
            Path(__file__).with_name('render_bd.py'),Path(__file__).with_name('compare_variants.py')]
     for source in sources:
@@ -111,7 +113,7 @@ def main():
     for i,case in enumerate(cases):
         expected=case['seed']
         for block in range(2):
-            draws=(32-case['silent'] if block==0 else 0) if case['mode']=='release' else (32 if case['mode']=='sustained-tail' else 0)
+            draws=((32-case['silent']+stride-1)//stride if block==0 else 0) if case['mode']=='release' else (32//stride if case['mode']=='sustained-tail' else 0)
             for _ in range(draws): expected=(1664525*expected+1013904223)&0xffffff
             for _,words in outputs:
                 state=words[(i*snapshots+block)*4]
@@ -126,7 +128,7 @@ def main():
             if old[1:]!=new[1:] or old[2:]!=[(0x123456,),(0x654321,)]:
                 raise AssertionError('Parameters or output guards differ')
     if inputs!={str(path):digest(path) for path in paths}: raise AssertionError('Inputs changed')
-    report=dict(input_sha256=inputs,render_cases=rows,fixtures=len(cases),blocks_per_fixture=blocks,
+    report=dict(input_sha256=inputs,render_cases=rows,fixtures=len(cases),blocks_per_fixture=blocks,render_stride=stride,
         state_snapshots_per_fixture=snapshots,native_audio_bitexact=True,live_state_bitexact=True,
         rng_draw_counts_verified=True,retrigger_all_state_bitexact=True,dead_state_snapshots=dead_differences,
         output_sha256={str(path):digest(path) for path in out.glob('*/*')},hardware_validated=False)
