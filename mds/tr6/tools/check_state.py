@@ -14,18 +14,26 @@ from mds_build import ROOT, assemble_package, mds_format
 from render_bd import run
 
 MACHINES={'bd':dict(base=0x110023,knobs=[51,102,75,0,0]),
-          'sd':dict(base=0x120031,knobs=[102,64,95,64])}
+          'sd':dict(base=0x120031,knobs=[102,64,95,64]),
+          'lt':dict(base=0x130023,knobs=[102,64]),
+          'ht':dict(base=0x140001,knobs=[102,64])}
 
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--assembler',required=True); p.add_argument('--host',required=True)
+    p.add_argument('--compiler',default='clang++')
     p.add_argument('--out',type=Path,default=ROOT/'build/state-check')
     args=p.parse_args(); out=args.out.resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
+    from generate_toms import build_reference, generate as generate_tom
+    tom_reference=build_reference(out,args.compiler)
     for name,settings in MACHINES.items():
-        generator=importlib.import_module('generate_'+name)
-        package,_=assemble_package(generator.generate(),
+        if name in ('lt','ht'):
+            source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
+        else:
+            source=importlib.import_module('generate_'+name).generate()
+        package,_=assemble_package(source,
             json.loads((ROOT/f'machines/{name}/{name}.json').read_text()),args.assembler,{'mds_sine':(1,1)})
         parsed=mds_format().parse_package(package); base=settings['base']
         code=[int.from_bytes(parsed['program'][i:i+3],'big') for i in range(0,len(parsed['program']),3)]
@@ -60,7 +68,8 @@ def main():
         return list(struct.unpack('<'+'i'*(len(raw)//4),raw))
 
     count=512
-    tracks=[('bd',0x800,None),('sd',0x840,None),('sd',0x880,[127,0,127,127])]
+    tracks=[('bd',0x800,None),('sd',0x840,None),('sd',0x880,[127,0,127,127]),
+            ('lt',0x8c0,None),('ht',0x900,None),('ht',0x940,[127,0])]
     isolated=[]
     for i,(name,voice,knobs) in enumerate(tracks):
         lines=setup(name,voice,knobs=knobs)
@@ -77,24 +86,28 @@ def main():
             if mixed[start:start+32]!=isolated[i][n*32:(n+1)*32]:
                 raise AssertionError(f'interleaved track {i}, block {n}')
 
-    for before,after in (('bd','sd'),('sd','bd')):
+    reassignments=(('bd','sd'),('sd','bd'),('lt','ht'),('ht','lt'),
+                   ('bd','lt'),('lt','bd'),('sd','ht'),('ht','sd'))
+    default_track={'bd':0,'sd':1,'lt':3,'ht':4}
+    for before,after in reassignments:
         lines=setup(before,0x800)
         for n in range(173): lines+=block(before,0x800,n)
         lines+=setup(after,0x800,dirty=False)
         for n in range(count): lines+=block(after,0x800,n)
         actual=render(before+'_to_'+after,lines)[173*32:]
-        baseline=isolated[0 if after=='bd' else 1]
+        baseline=isolated[default_track[after]]
         if actual!=baseline: raise AssertionError(f'{before} -> {after} reassignment')
-    lines=setup('sd',0x800)
-    for n in range(137):
-        if n==30:
-            lines += [f'set Y {0x801+i:x} {value*128:x}' for i,value in enumerate((127,0,127,127))]
-        lines+=block('sd',0x800,n)
-    if render('sd_controls_during_tail',lines)!=isolated[1][:137*32]:
-        raise AssertionError('Snare controls changed a tail before retrigger')
+    for name,knobs in (('sd',(127,0,127,127)),('lt',(127,0)),('ht',(0,127))):
+        lines=setup(name,0x800)
+        for n in range(137):
+            if n==30:
+                lines += [f'set Y {0x801+i:x} {value*128:x}' for i,value in enumerate(knobs)]
+            lines+=block(name,0x800,n)
+        if render(name+'_controls_during_tail',lines)!=isolated[default_track[name]][:137*32]:
+            raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
-                blocks_per_track=count,reassignment=['bd -> sd','sd -> bd'],
-                sd_controls_captured_at_trigger=True,hardware_validated=False)
+                blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
+                controls_captured_at_trigger=['sd','lt','ht'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))
 
 

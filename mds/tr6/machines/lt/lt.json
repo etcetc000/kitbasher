@@ -1,0 +1,19 @@
+{
+  "id": "org.kitbasher.tr6.lt",
+  "display_name": "TR6 LOW TOM",
+  "category": "TR6",
+  "short_label": "LT",
+  "machine_version": "0.1",
+  "params": [
+    {
+      "name": "DEC",
+      "default": 102,
+      "transform": "raw14"
+    },
+    {
+      "name": "TUNE",
+      "default": 64,
+      "transform": "raw14"
+    }
+  ]
+}
