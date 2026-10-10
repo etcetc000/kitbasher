@@ -40,6 +40,8 @@ def main():
     p.add_argument('--metal-block-noise',action='store_true')
     p.add_argument('--metal-linear-saturation',action='store_true')
     p.add_argument('--metal-cubic-saturation',action='store_true')
+    p.add_argument('--metal-fused-mix',action='store_true')
+    p.add_argument('--metal-bounded-loops',action='store_true')
     args=p.parse_args()
     if args.metal_lean_math and (args.metal_partial_count!=3 or not args.metal_no_wobble):
         p.error('--metal-lean-math requires three partials and no wobble')
@@ -57,6 +59,10 @@ def main():
         p.error('Linear saturation requires lean math')
     if args.metal_cubic_saturation and (not args.metal_lean_math or args.metal_linear_saturation):
         p.error('Cubic saturation requires lean math and excludes linear saturation')
+    if args.metal_fused_mix and (not args.metal_block_noise or not args.metal_resident_state):
+        p.error('Fused mixing requires block noise and resident state')
+    if args.metal_bounded_loops and (not args.metal_resident_state or args.metal_envelope_rate==1 or not (args.metal_linear_saturation or args.metal_cubic_saturation)):
+        p.error('Bounded loops require resident state, control-rate envelopes and linear/cubic saturation')
     variant=args.metal_partial_count!=47 or args.metal_no_wobble or args.metal_tanh_bits!=13
     suffix=f'-p{args.metal_partial_count}'+('-static' if args.metal_no_wobble else '-wobble')+f'-lut{args.metal_tanh_bits}' if variant else ''
     if args.metal_lean_math: suffix+='-lean'
@@ -68,6 +74,8 @@ def main():
     if args.metal_block_noise: suffix+='-blocknoise'
     if args.metal_linear_saturation: suffix+='-linear'
     if args.metal_cubic_saturation: suffix+='-cubic'
+    if args.metal_fused_mix: suffix+='-fused'
+    if args.metal_bounded_loops: suffix+='-bounded'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -82,7 +90,7 @@ def main():
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
         elif name in ('ch','oh','cy'):
             controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble)]).stdout)
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise,args.metal_linear_saturation,args.metal_cubic_saturation,args.metal_fused_mix,args.metal_bounded_loops)
             imports['mds_track']=(2,6)
             if args.metal_block_oscillators: imports['mds_scratch_x']=(3,7)
             if args.metal_block_noise: imports['mds_scratch_y']=(4,8)
@@ -184,7 +192,7 @@ def main():
         if render(name+'_controls_during_tail',lines)!=isolated[default_track[name]][:137*32]:
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
-                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise,saturation='linear' if args.metal_linear_saturation else 'cubic' if args.metal_cubic_saturation else 'tanh'),
+                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise,saturation='linear' if args.metal_linear_saturation else 'cubic' if args.metal_cubic_saturation else 'tanh',fused_mix=args.metal_fused_mix,bounded_loops=args.metal_bounded_loops),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))

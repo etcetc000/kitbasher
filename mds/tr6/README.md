@@ -31,6 +31,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Interpolated envelopes, CPU savings and perceptual tradeoffs](audit/ENVELOPE-METAL.md)
 - [Exact block noise/filter passes and shared scratch checks](audit/BLOCK-NOISE.md)
 - [Cubic and linear saturation: CPU, perceptual loss and storage](audit/SATURATION-METAL.md)
+- [Folded mixer gains and exact active-sample loops](audit/FUSED-METAL.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
