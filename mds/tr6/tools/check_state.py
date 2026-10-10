@@ -37,6 +37,7 @@ def main():
     p.add_argument('--metal-block-oscillators',action='store_true')
     p.add_argument('--metal-resident-state',action='store_true')
     p.add_argument('--metal-envelope-rate',type=int,choices=(1,4,8,16),default=1)
+    p.add_argument('--metal-block-noise',action='store_true')
     args=p.parse_args()
     if args.metal_lean_math and (args.metal_partial_count!=3 or not args.metal_no_wobble):
         p.error('--metal-lean-math requires three partials and no wobble')
@@ -48,6 +49,8 @@ def main():
         p.error('Resident state requires block oscillators')
     if args.metal_envelope_rate!=1 and not args.metal_resident_state:
         p.error('Control-rate envelopes require resident state')
+    if args.metal_block_noise and not args.metal_block_oscillators:
+        p.error('Block noise requires block oscillators')
     variant=args.metal_partial_count!=47 or args.metal_no_wobble or args.metal_tanh_bits!=13
     suffix=f'-p{args.metal_partial_count}'+('-static' if args.metal_no_wobble else '-wobble')+f'-lut{args.metal_tanh_bits}' if variant else ''
     if args.metal_lean_math: suffix+='-lean'
@@ -56,6 +59,7 @@ def main():
     if args.metal_block_oscillators: suffix+='-blockosc'
     if args.metal_resident_state: suffix+='-resident'
     if args.metal_envelope_rate!=1: suffix+=f'-env{args.metal_envelope_rate}'
+    if args.metal_block_noise: suffix+='-blocknoise'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -70,9 +74,10 @@ def main():
             source=generate_tom(name,json.loads(run([tom_reference,'--tables',name]).stdout))
         elif name in ('ch','oh','cy'):
             controls=json.loads(run([metal_reference,'--tables',name,args.metal_partial_count,int(args.metal_no_wobble)]).stdout)
-            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate)
+            source=generate_metal(name,controls,args.metal_tanh_bits,args.metal_no_wobble,args.metal_lean_math,args.metal_resonators,args.metal_lcg_noise,args.metal_block_oscillators,args.metal_resident_state,args.metal_envelope_rate,args.metal_block_noise)
             imports['mds_track']=(2,6)
             if args.metal_block_oscillators: imports['mds_scratch_x']=(3,7)
+            if args.metal_block_noise: imports['mds_scratch_y']=(4,8)
         elif name=='cp':
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
@@ -83,7 +88,7 @@ def main():
         parsed=mds_format().parse_package(package); base=settings['base']
         code=[int.from_bytes(parsed['program'][i:i+3],'big') for i in range(0,len(parsed['program']),3)]
         for i in parsed['relocations']: code[i]+=base
-        for imp in parsed['imports']: code[imp.patch_word]+={1:0x148000,6:0x160000,7:0x200}[imp.symbol]
+        for imp in parsed['imports']: code[imp.patch_word]+={1:0x148000,6:0x160000,7:0x200,8:0x240}[imp.symbol]
         (out/(name+'.bin')).write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
         loads.append(f'load P {base:x} {name}.bin')
         entries[name]={key:base+parsed[value] for key,value in
@@ -115,6 +120,8 @@ def main():
         if index%137==0: lines+=['scrub 1f',f'call {entries[name]["trigger"]:x}']
         if args.metal_block_oscillators:
             lines += [f'set X {0x200+i:x} {0x5a5a5a^(index&0xffff):x}' for i in range(32)]
+        if args.metal_block_noise:
+            lines += [f'set Y {0x240+i:x} {0xa5a5a5^(index&0xffff):x}' for i in range(32)]
         return lines+['scrub 1f',f'call {entries[name]["render"]:x}','out']
 
     def render(tag,lines):
@@ -169,7 +176,7 @@ def main():
         if render(name+'_controls_during_tail',lines)!=isolated[default_track[name]][:137*32]:
             raise AssertionError(f'{name} controls changed a tail before retrigger')
     result=dict(status='pass',comparison='bit-exact',interleaved_tracks=len(tracks),
-                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate),
+                metal_model=dict(partial_count=args.metal_partial_count,wobble=not args.metal_no_wobble,tanh_bits=args.metal_tanh_bits,lean_math=args.metal_lean_math,resonators=args.metal_resonators,lcg_noise=args.metal_lcg_noise,block_oscillators=args.metal_block_oscillators,resident_state=args.metal_resident_state,envelope_rate=args.metal_envelope_rate,block_noise=args.metal_block_noise),
                 blocks_per_track=count,reassignment=[before+' -> '+after for before,after in reassignments],
                 controls_captured_at_trigger=['sd','lt','ht','ch','oh','cy','cp'],hardware_validated=False)
     (out/'result.json').write_text(json.dumps(result,indent=2)+'\n'); print(json.dumps(result))

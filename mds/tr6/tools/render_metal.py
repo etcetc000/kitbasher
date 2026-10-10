@@ -32,6 +32,7 @@ def main():
     p.add_argument('--resident-state',action='store_true',help='Keep hot state in spare registers within each render call')
     p.add_argument('--end-boundaries',action='store_true',help='Render one complete integer-decay case for every final-block length 1..32')
     p.add_argument('--envelope-rate',type=int,choices=(1,4,8,16),default=1,help='Interpolate envelope endpoints this many samples apart')
+    p.add_argument('--block-noise',action='store_true',help='Render noise/filter passes through shared Y scratch')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
@@ -39,6 +40,7 @@ def main():
     if a.resident_state and not a.block_oscillators: p.error('--resident-state requires --block-oscillators')
     if a.end_boundaries and (a.case or a.blocks): p.error('--end-boundaries requires complete renders and cannot be combined with --case/--blocks')
     if a.envelope_rate!=1 and not a.resident_state: p.error('--envelope-rate requires --resident-state')
+    if a.block_noise and not a.block_oscillators: p.error('--block-noise requires --block-oscillators')
     variant=a.partial_count!=47 or a.no_wobble
     suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
     if a.lean_math: suffix+='-lean'
@@ -47,6 +49,7 @@ def main():
     if a.block_oscillators: suffix+='-blockosc'
     if a.resident_state: suffix+='-resident'
     if a.envelope_rate!=1: suffix+=f'-env{a.envelope_rate}'
+    if a.block_noise: suffix+='-blocknoise'
     if a.end_boundaries: suffix+='-endings'
     out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     model_args=[a.partial_count,int(a.no_wobble)] if variant else []
@@ -55,16 +58,17 @@ def main():
         model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise)]
         if a.envelope_rate!=1: model_args += [a.envelope_rate]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
+    if a.block_noise: imports['mds_scratch_y']=(4,8)
     package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,imports)
     (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
     image=mds_format().parse_package(package); base=0x110023; extbase=0x160000; ext=extbase+a.track*1536
     code=[int.from_bytes(image['program'][i:i+3],'big') for i in range(0,len(image['program']),3)]
     for i in image['relocations']: code[i]+=base
-    for i in image['imports']: code[i.patch_word]+={1:0x148000,6:extbase,7:0x200}[i.symbol]
+    for i in image['imports']: code[i.patch_word]+={1:0x148000,6:extbase,7:0x200,8:0x240}[i.symbol]
     (out/'code.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
     # The existing instruction host has no register-set command. This test-only
     # trampoline supplies INIT's R1 track number without changing the machine.
@@ -130,8 +134,11 @@ def main():
             for line in lines:
                 if line==f'call {base+image["execute_word"]:x}':
                     poisoned += ['set X 1ff 123456','set X 220 654321',*[f'set X {0x200+i:x} 5a5a5a' for i in range(32)]]
+                    if a.block_noise:
+                        poisoned += ['set Y 23f 123456','set Y 260 654321',*[f'set Y {0x240+i:x} 5a5a5a' for i in range(32)]]
                 poisoned.append(line)
             lines=poisoned+['dump X 1ff 1','dump X 220 1']
+            if a.block_noise: lines+=['dump Y 23f 1','dump Y 260 1']
         script=out/(name+'.script'); script.write_text('\n'.join(lines)+'\n')
         result=run([Path(a.host).resolve(),script.name,name+'.raw'],cwd=out,timeout=600)
         (out/(name+'.host.log')).write_text(result.stdout+'\n'+result.stderr)
@@ -154,12 +161,13 @@ def main():
                     idle=bool(ref['active']) or not any(native_i[-32:]),tanh_range=native['tanh_clamps']==0)
         for n in ('phase','wobble','noise'): checks[n+'_rng']=(native[n+'hi']<<24|native[n+'lo'])==ref[n+'_rng']
         if a.lcg_noise: checks['noise_rng']=native['noiselo']==ref['noise_rng']
-        if a.block_oscillators: checks['scratch_guards']=dumps[11:]==[[0x123456],[0x654321]]
+        if a.block_oscillators: checks['scratch_guards']=dumps[11:13]==[[0x123456],[0x654321]]
+        if a.block_noise: checks['scratch_y_guards']=dumps[13:]==[[0x123456],[0x654321]]
         peak_error=max(abs(e) for e in error); tolerance=.003
         cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate),
-                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,
+                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,
                      full_source_comparison=not variant,
                      rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
                      native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),

@@ -29,6 +29,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Recursive oscillators, cheaper noise and multi-seed loss](audit/RECURSIVE-METAL.md)
 - [Block processing and register state with bit-exact comparisons](audit/BLOCK-METAL.md)
 - [Interpolated envelopes, CPU savings and perceptual tradeoffs](audit/ENVELOPE-METAL.md)
+- [Exact block noise/filter passes and shared scratch checks](audit/BLOCK-NOISE.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:
