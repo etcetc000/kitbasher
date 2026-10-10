@@ -36,6 +36,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Rounded DC feedback and noise pre-filter bypass](audit/DC-METAL.md)
 - [Interpolated fade gates and exact voice lifetime](audit/GATED-ENVELOPES.md)
 - [Rejected half-rate experiment and native seed ensembles](audit/HALF-RATE-METAL.md)
+- [Bit-exact register mixer and full-rate timing savings](audit/REGISTER-MIXER.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

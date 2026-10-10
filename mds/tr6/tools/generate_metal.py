@@ -54,7 +54,9 @@ def build_reference(out,compiler='clang++'):
     return exe
 
 
-def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None):
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False):
+    if register_mix and not (fused_mix and bounded_loops): raise ValueError('Register mixing requires fused mixing and bounded loops')
+    count_register='r4' if register_mix else 'r0'
     if render_stride not in (1,2): raise ValueError('Render stride must be 1 or 2')
     if render_stride!=1 and not bounded_loops: raise ValueError('Reduced synthesis rate requires bounded loops')
     sample_rate=c.get('sample_rate',44100)
@@ -104,6 +106,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         if envelope_rate==1: raise ValueError('Interpolated gate requires control-rate envelopes')
         lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
     if render_stride!=1: lines.append(f'; Synthesis runs at {sample_rate:g} Hz; each sample is repeated {render_stride} times at the output.')
+    if register_mix: lines.append('; Mixer temporaries stay in registers; paired X/Y reads consume the block scratch buffers.')
     tables={}
     resident={}
     def emit(*s): lines.extend(s)
@@ -319,8 +322,8 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
                  '    move a1,x:(r4)+',f'block_oscillator_{j}_end:')
             extsave('phase','x0'); extsave('phasefrac','x1')
             emit('    move (r2)+n2','    nop')
-        emit('    move #>mds_scratch_x,r4')
-    if bounded_loops: emit('    move n5,r0')  # Before N5 becomes the click envelope.
+        emit('    move #>mds_scratch_x,'+('r0' if register_mix else 'r4'))
+    if bounded_loops: emit(f'    move n5,{count_register}')  # Before N5 becomes the click envelope.
     if resident_state:
         cached=dict(attack='n1',fastenv='n2',slowenv='n3',bell='n4',click='n5',
                     fastloss='n6',slowloss='n7',duration='r1',frame='r3',tonal='r2',envelope='r5')
@@ -332,11 +335,13 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         if block_noise:
             cached.pop('slowloss',None)
             cached['envelope']='n7'  # R5 walks the filtered-noise buffer.
-        for name,reg in cached.items(): load(name,reg)
+        if register_mix: cached.update(tonal='n0',noise='r2',bellgain='x1')
+        for name,reg in cached.items():
+            if not (register_mix and name in ('tonal','noise','bellgain')): load(name,reg)
         resident.update(cached)
     if envelope_rate!=1:
         if bounded_loops:
-            emit('    move r0,a',f'    add #>{envelope_rate-1},a',
+            emit(f'    move {count_register},a',f'    add #>{envelope_rate-1},a',
                  f'    asr #{int(math.log2(envelope_rate))},a,a','    move a1,n0','    do n0,block_end')
         else: emit(f'    do #{32//envelope_rate},block_end')
         emit('control_envelopes:')
@@ -371,6 +376,7 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    do #32,block_end')
     if not bounded_loops:
         load('active'); emit('    tst a','    jeq sample_silent')
+    sample_mix_start=len(lines)
     load('bell')
     if fused_mix: imm(tone_base)
     else: mul(c['bell_amount']/2); imm(.5)
@@ -423,6 +429,16 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    move y:(r5)+,a'); save('noise')
     else:
         rng('noise'); emit('    asr #4,a,a'); dc('white'); filt(0); filt(1); save('noise')
+    if register_mix:
+        # Save the pre-increment bell gain while undoing its addition, then
+        # advance the bell and read both scratch buffers. The MAC inputs and
+        # 24-bit truncation points are unchanged. Persist all temporaries later.
+        lines[sample_mix_start:]=[]
+        load('bell'); imm(tone_base)
+        emit('    add x0,a n3,y0','    sub x0,a a1,x1',
+             '    add y0,a','    move x:(r0)+,x0 y:(r5)+,y1',
+             '    move a1,n4','    move x1,y0',
+             '    mpy x0,y0,a y1,r2','    move a1,n0','lean_noise:')
     if lean_math: emit('lean_envelope:')
     if envelope_rate!=1:
         load('fastenverr'); load('slowenverr','x0'); emit('    add x0,a'); save('fastenverr'); save('envelope')
@@ -478,14 +494,19 @@ def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=Fals
         emit('    jmp sample_done','sample_silent:','    clr a','    move a,y:(r7)+','sample_done:','    nop')
     if envelope_rate!=1: emit('control_samples_end:','    nop')
     emit('block_end:')
+    if register_mix:
+        # N0 is about to become the zero-suffix loop count. Persist the final
+        # scratch values first, preserving even diagnostic state bit-for-bit.
+        for name in ('tonal','noise','bellgain'): emit(f'    move {cached[name]},{S[name]}')
     if bounded_loops:
         load('frame'); load('duration','x0'); emit('    cmp x0,a','    jlt active_stays','    clr a'); save('active')
-        emit('active_stays:',f'    move #>{block_samples},a','    move r0,x0','    sub x0,a','    jeq output_ready',
+        emit('active_stays:',f'    move #>{block_samples},a',f'    move {count_register},x0','    sub x0,a','    jeq output_ready',
              '    move a1,n0','    clr a','    do n0,zero_tail_end',*['    move a,y:(r7)+']*render_stride,
              'zero_tail_end:','output_ready:')
     if resident_state:
         resident.clear()
-        for name,reg in cached.items(): save(name,reg)
+        for name,reg in cached.items():
+            if not (register_mix and name in ('tonal','noise','bellgain')): save(name,reg)
     emit('    rts','silent_block:','    clr a','    do #32,zero_end','    move a,y:(r7)+','zero_end:','    rts')
     partials=[]
     for freq,amp,bell in c['partials']: partials += [*split(freq/sample_rate),word(amp/4),int(bell)]

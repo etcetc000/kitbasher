@@ -43,6 +43,7 @@ def main():
     p.add_argument('--interpolated-gate',action='store_true',help='Include the fade gate in interpolated envelope endpoints; requires envelope rate > 1')
     p.add_argument('--render-stride',type=int,choices=(1,2),default=1,help='Output samples per synthesis step; 2 runs at 22050 Hz with sample repetition and requires bounded loops')
     p.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 initial seed for native/reference ensemble evidence')
+    p.add_argument('--register-mix',action='store_true',help='Retain mixer temporaries and read X/Y scratch together; requires fused mixing and bounded loops')
     a=p.parse_args(); kind=a.kind
     if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
     if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
@@ -57,6 +58,7 @@ def main():
     if a.interpolated_gate and a.envelope_rate==1: p.error('--interpolated-gate requires --envelope-rate > 1')
     if a.render_stride!=1 and not a.bounded_loops: p.error('--render-stride 2 requires --bounded-loops')
     if a.seed is not None and not 0<=a.seed<=0xffffffff: p.error('--seed must fit uint32')
+    if a.register_mix and not (a.fused_mix and a.bounded_loops): p.error('--register-mix requires --fused-mix and --bounded-loops')
     if a.cubic_saturation and (not a.lean_math or a.linear_saturation): p.error('--cubic-saturation requires --lean-math and excludes --linear-saturation')
     if a.fused_mix and (not a.block_noise or not a.resident_state): p.error('--fused-mix requires --block-noise and --resident-state')
     if a.bounded_loops and (not a.resident_state or a.envelope_rate==1 or not (a.linear_saturation or a.cubic_saturation)):
@@ -78,6 +80,7 @@ def main():
     if a.rounded_dc: suffix+='-rounded-dc'
     if a.bypass_noise_dc: suffix+='-no-noise-dc'
     if a.interpolated_gate: suffix+='-gate'
+    if a.register_mix: suffix+='-register-mix'
     if a.render_stride!=1: suffix+=f'-stride{a.render_stride}'
     if a.seed is not None: suffix+=f'-seed{a.seed:08x}'
     if a.end_boundaries: suffix+='-endings'
@@ -104,7 +107,7 @@ def main():
         selected_seed=a.seed if a.seed is not None else {'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
         model_args=[a.partial_count,int(a.no_wobble),selected_seed,int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),int(a.interpolated_gate),a.render_stride]
     (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
-    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed); (out/(kind+'.asm')).write_text(source)
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix); (out/(kind+'.asm')).write_text(source)
     external_words=a.partial_count*8
     imports={'mds_sine':(1,1),'mds_track':(2,6)}
     if a.block_oscillators: imports['mds_scratch_x']=(3,7)
@@ -220,6 +223,7 @@ def main():
         if a.seed is not None: reference_model['seed']=a.seed
         metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
                      render_stride=a.render_stride,synthesis_sample_rate=44100/a.render_stride,
+                     register_mix=a.register_mix,
                      physical_duration_samples=native['duration']*a.render_stride,
                      reference_model=reference_model,
                      lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,deduplicate_tables=a.deduplicate_tables,rounded_dc=a.rounded_dc,bypass_noise_dc=a.bypass_noise_dc,
