@@ -29,7 +29,7 @@ def word(value):
     return min(Q-1,n) & 0xffffff
 
 
-def generate(tanh_bits=13,resident_state=False,lcg_noise=False,seed=None,control_rate=1,simple_impulse=False,omit_impulse=False):
+def generate(tanh_bits=13,resident_state=False,lcg_noise=False,seed=None,control_rate=1,simple_impulse=False,omit_impulse=False,sequential_tanh=False):
     if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
     if seed is not None and not 0<=seed<=0xffffffff: raise ValueError('seed must fit uint32')
     if control_rate not in (1,16,32): raise ValueError('control_rate must be 1, 16 or 32')
@@ -46,6 +46,7 @@ def generate(tanh_bits=13,resident_state=False,lcg_noise=False,seed=None,control
     if control_rate!=1: code.append(f'; Approximation: interpolate envelope/pitch endpoints every {control_rate} samples; remainder slots hold steps.')
     if simple_impulse: code.append('; Approximation: use a one-pole impulse high-pass in place of the original biquad.')
     if omit_impulse: code.append('; Approximation: omit the differentiated-body impulse layer; body and click controls remain.')
+    if sequential_tanh: code.append('; Exact: adjacent tanh reads use a single pointer; fraction arithmetic hides its setup latency.')
     def emit(*lines): code.extend(lines)
     def load(name, reg='a'): emit(f'    move {resident.get(name,S[name])},{reg}')
     def save(name, reg='a1'): emit(f'    move {reg},{resident.get(name,S[name])}')
@@ -80,6 +81,15 @@ def generate(tanh_bits=13,resident_state=False,lcg_noise=False,seed=None,control
         emit('    mpy x1,y0,a', '    add x0,a'); save(state)
     def tanh():
         # Q21 input, linear interpolation over 2**tanh_bits intervals on [-4,4].
+        if sequential_tanh:
+            # M0 is linear at the MDS entry point. R0 is scratch, so advance it
+            # through adjacent table entries instead of loading two bases.
+            emit('    move a1,b',f'    asr #{table_shift},a,a',
+                 f'    add #>tanh_table+{1<<(tanh_bits-1)},a','    move a1,r0',
+                 f'    and #>${(1<<table_shift)-1:x},b',f'    asl #{23-table_shift},b,b','    move b1,y1',
+                 '    move p:(r0)+,x0','    move p:(r0),a',
+                 '    sub x0,a','    move a1,x1','    mpy x1,y1,a','    add x0,a')
+            return
         emit('    move a1,b',f'    and #>${(1<<table_shift)-1:x},b',f'    asl #{23-table_shift},b,b','    move b1,y1',
              f'    asr #{table_shift},a,a', f'    add #>${1<<(tanh_bits-1):06x},a', '    move a1,n0',
              '    move #>tanh_table,r0','    nop','    move p:(r0+n0),x0',

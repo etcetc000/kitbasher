@@ -43,6 +43,7 @@ progress. Nothing here is hardware-qualified or ready for installation.
 - [Combined gain envelopes and the first sub-129 sampled metal model](audit/COMBINED-MIX.md)
 - [Kick cutoff correction, register scheduling and scored noise changes](audit/BD-OPTIMIZATION.md)
 - [Kick control-rate and impulse candidates, perceptual evidence and remaining gaps](audit/BD-CONTROL.md)
+- [Exact kick saturation-table scheduling and accumulator-boundary checks](audit/BD-TANH-SCHEDULE.md)
 
 From this directory, with Python 3.11+, Clang C++14, and configured absolute
 assembler/instruction-host paths:

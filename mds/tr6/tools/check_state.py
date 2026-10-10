@@ -35,6 +35,7 @@ def main():
     p.add_argument('--bd-control-rate',type=int,choices=(1,16,32),default=1)
     p.add_argument('--bd-simple-impulse',action='store_true')
     p.add_argument('--bd-omit-impulse',action='store_true')
+    p.add_argument('--bd-sequential-tanh',action='store_true')
     p.add_argument('--metal-partial-count',type=int,choices=(3,6,47),default=47)
     p.add_argument('--metal-no-wobble',action='store_true')
     p.add_argument('--metal-tanh-bits',type=int,choices=range(8,14),default=13)
@@ -131,6 +132,7 @@ def main():
     if args.bd_control_rate!=1: suffix+=f'-bd-control{args.bd_control_rate}'
     if args.bd_simple_impulse: suffix+='-bd-simple-impulse'
     if args.bd_omit_impulse: suffix+='-bd-omit-impulse'
+    if args.bd_sequential_tanh: suffix+='-bd-sequential-tanh'
     out=(args.out or ROOT/('build/state-check'+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
     entries={}; loads=[]
     from generate_toms import build_reference, generate as generate_tom
@@ -158,7 +160,7 @@ def main():
             source=generate_clap(json.loads(run([clap_reference,'--tables']).stdout))
             imports['mds_track']=(2,6)
         elif name=='bd':
-            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse)
+            source=importlib.import_module('generate_bd').generate(args.bd_tanh_bits,resident_state=args.bd_resident_state,lcg_noise=args.bd_lcg_noise,control_rate=args.bd_control_rate,simple_impulse=args.bd_simple_impulse,omit_impulse=args.bd_omit_impulse,sequential_tanh=args.bd_sequential_tanh)
         else:
             source=importlib.import_module('generate_'+name).generate()
         package,_=assemble_package(source,
@@ -259,7 +261,7 @@ def main():
                 bypass_noise_dc=args.metal_bypass_noise_dc,
                 interpolated_gate=args.metal_interpolated_gate,
                 render_stride=args.metal_render_stride,
-                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,
+                bd_resident_state=args.bd_resident_state,bd_lcg_noise=args.bd_lcg_noise,bd_tanh_bits=args.bd_tanh_bits,bd_control_rate=args.bd_control_rate,bd_simple_impulse=args.bd_simple_impulse,bd_omit_impulse=args.bd_omit_impulse,bd_sequential_tanh=args.bd_sequential_tanh,
                 register_mix=args.metal_register_mix,
                 resident_output=args.metal_resident_output,
                 bandpass_noise=args.metal_bandpass_noise,
