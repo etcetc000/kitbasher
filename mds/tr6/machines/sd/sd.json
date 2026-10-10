@@ -1,0 +1,29 @@
+{
+  "id": "org.kitbasher.tr6.sd",
+  "display_name": "TR6 SNARE",
+  "category": "TR6",
+  "short_label": "SD",
+  "machine_version": "0.1",
+  "params": [
+    {
+      "name": "DEC",
+      "default": 102,
+      "transform": "raw14"
+    },
+    {
+      "name": "TUNE",
+      "default": 64,
+      "transform": "raw14"
+    },
+    {
+      "name": "SNAP",
+      "default": 95,
+      "transform": "raw14"
+    },
+    {
+      "name": "COLR",
+      "default": 64,
+      "transform": "raw14"
+    }
+  ]
+}

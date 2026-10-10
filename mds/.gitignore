@@ -1,0 +1,7 @@
+**/.audit-sources/
+**/.tools/
+**/audit/results/
+**/build/
+**/__pycache__/
+*.mds
+*.syx

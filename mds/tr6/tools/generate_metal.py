@@ -1,0 +1,618 @@
+"""Full 47-partial Simple606 CH/OH/CY baseline. See LICENSE-Simple606.
+
+Audio Q19, envelopes Q23, wobble Q26, phases and increments 24+24 bits.
+External track storage holds 47 eight-word records; no partials are removed.
+"""
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import re
+
+from mds_build import ROOT
+from generate_bd import word
+from render_bd import run
+from table_pool import emit_tables
+
+Q=1<<23
+OUTPUT_GAIN=.5
+EXTERNAL_WORDS=47*8
+FIELDS={'phase':0,'phasefrac':1,'inch':2,'incl':3,'amp':4,'bell':5,'wobble':6,'wobbleerr':7}
+STATE=('active frame duration fade invhi invlo ext '
+       'phaselo phasehi wobblelo wobblehi noiselo noisehi rngtemp '
+       'whitein whiteout whiteerr outin outout outerr '
+       'fastenv fastenverr fastloss slowenv slowenverr slowloss attack attackerr '
+       'bell bellerr click clickerr bellgain ratiohi ratiolo basehi baselo '
+       'freqhi freqlo ampbase flag taper tonal temp1 temp2 noise envelope f0b0 f0a1 f0a2 f0z1 f0z2 '
+       'f1b0 f1a1 f1a2 f1z1 f1z2 tanh_clamps').split()
+assert len(STATE)<=64
+S={n:f'x:(r6+${i:x})' for i,n in enumerate(STATE)}
+
+
+def split(value):
+    high=math.floor(value*Q)
+    low=round((value*Q-high)*Q)
+    if low==Q: high+=1; low=0
+    assert 0<=high<Q and 0<=low<Q
+    return high,low
+
+
+def build_reference(out,compiler='clang++'):
+    out=Path(out).resolve(); out.mkdir(parents=True,exist_ok=True)
+    src=ROOT/'.audit-sources/Simple606/Source'
+    match=re.search(r'static constexpr SynthDrums606::HiHatSpec kCymbalSpec = \{.*?\n\};',
+                    (src/'PluginProcessor.h').read_text(),re.S)
+    if not match: raise ValueError('Cymbal specification not found')
+    (out/'cymbal_spec.hpp').write_text(match[0]+'\n')
+    header=(src/'HiHats.hpp').read_text()
+    original='std::tanh(source * saturationDrive_)'
+    if header.count(original)!=1: raise ValueError('Expected one source saturation call')
+    (out/'tr6_hihats.hpp').write_text(header.replace(original,'::tr6Saturate(source * saturationDrive_)'))
+    exe=out/('reference.exe' if os.name=='nt' else 'reference')
+    run([compiler,'-std=c++14','-O2','-I',src,'-I',out,ROOT/'tests/metal_reference.cpp','-o',exe])
+    return exe
+
+
+def generate(kind,c,tanh_bits=13,no_wobble=False,lean_math=False,resonators=False,lcg_noise=False,block_oscillators=False,resident_state=False,envelope_rate=1,block_noise=False,linear_saturation=False,cubic_saturation=False,fused_mix=False,bounded_loops=False,deduplicate_tables=False,rounded_dc=False,bypass_noise_dc=False,interpolated_gate=False,render_stride=1,seed=None,register_mix=False,resident_output=False,bandpass_noise=False,combined_mix=False):
+    if combined_mix and not (linear_saturation and envelope_rate==32 and resident_output and interpolated_gate and bypass_noise_dc):
+        raise ValueError('Combined mixing requires linear saturation, 32-sample envelopes, resident output, interpolated gate and bypassed noise DC')
+    if bandpass_noise and (not block_noise or c.get('noise_filter')!='fitted-bandpass-v1'):
+        raise ValueError('Band-pass noise requires block noise and fitted controls')
+    if not bandpass_noise and c.get('noise_filter'): raise ValueError('Fitted controls require band-pass noise')
+    if resident_output and not register_mix: raise ValueError('Resident output requires register mixing')
+    if register_mix and not (fused_mix and bounded_loops): raise ValueError('Register mixing requires fused mixing and bounded loops')
+    count_register='r4' if register_mix else 'r0'
+    if render_stride not in (1,2): raise ValueError('Render stride must be 1 or 2')
+    if render_stride!=1 and not bounded_loops: raise ValueError('Reduced synthesis rate requires bounded loops')
+    sample_rate=c.get('sample_rate',44100)
+    if sample_rate!=44100/render_stride: raise ValueError('Coefficient sample rate does not match render stride')
+    block_samples=32//render_stride
+    if not 8<=tanh_bits<=13: raise ValueError('tanh_bits must be 8..13')
+    table_shift=23-tanh_bits
+    partial_count=len(c['partials'])
+    if partial_count not in (3,6,47): raise ValueError('Expected 3, 6 or 47 partials')
+    if lean_math and (partial_count!=3 or not no_wobble or not all(row[2] for row in c['partials'])):
+        raise ValueError('Lean math currently requires three bell partials and no wobble')
+    if (resonators or lcg_noise) and not lean_math: raise ValueError('Resonators/LCG noise require lean math')
+    if block_oscillators and not resonators: raise ValueError('Block oscillators require resonators')
+    if resident_state and not block_oscillators: raise ValueError('Resident state requires block oscillators')
+    if envelope_rate not in (1,4,8,16,32): raise ValueError('Envelope rate must be 1, 4, 8, 16 or 32')
+    if envelope_rate>block_samples: raise ValueError('Envelope interval cannot exceed synthesis samples per block')
+    if envelope_rate!=1 and not resident_state: raise ValueError('Control-rate envelopes require resident state')
+    if block_noise and not block_oscillators: raise ValueError('Block noise requires block oscillators')
+    if linear_saturation and not lean_math: raise ValueError('Linear saturation requires lean math')
+    if cubic_saturation and (not lean_math or linear_saturation): raise ValueError('Cubic saturation requires lean math and excludes linear saturation')
+    if fused_mix and (not block_noise or not resident_state): raise ValueError('Fused mixing requires block noise and resident state')
+    if bounded_loops and (not resident_state or envelope_rate==1 or not (linear_saturation or cubic_saturation)):
+        raise ValueError('Bounded loops require resident state, control-rate envelopes and linear/cubic saturation')
+    tone_base=c['tonal_mix']*c['drive']/4
+    lines=['; GENERATED by tools/generate_metal.py; pinned Simple606 HiHats.hpp.',
+           '; See LICENSE-Simple606. Full-path draft, not timing qualified.',
+           '; External record: phase, phasefrac, inch, incl, amp, bell, wobble, wobbleerr.']
+    if partial_count!=47 or no_wobble:
+        lines[1]=f'; See LICENSE-Simple606. Reduced model: {partial_count} partials, wobble={not no_wobble}; not timing qualified.'
+    if lean_math: lines.append('; Lean math: register reuse, common bell gain, rounded Q23 envelopes.')
+    if resonators: lines.append('; Oscillator records reuse phase/phasefrac/inch as y[-1]/y[-2]/cos(w).')
+    if lcg_noise: lines.append('; Noise uses a 24-bit LCG; the phase RNG remains the original xorshift32.')
+    if block_oscillators: lines.append('; Oscillators render into imported 32-word X scratch; no scratch survives calls.')
+    if resident_state: lines.append('; Selected state lives in spare R/N registers within RENDER only.')
+    if envelope_rate!=1: lines.append(f'; Envelopes use {envelope_rate}-sample endpoints with linear interpolation; '+('gate shares endpoints.' if interpolated_gate else 'gate stays audio-rate.'))
+    if block_noise: lines.append('; Noise/filter block passes use imported X coefficient scratch and Y sample scratch.')
+    if bandpass_noise: lines.append('; Approximation: one fitted band-pass replaces the high/low-pass noise cascade.')
+    if linear_saturation: lines.append('; Approximation: retain drive gain, replace tanh with identity.')
+    if cubic_saturation: lines.append('; Approximation: clamp driven input to +/-1, then apply x - x^3/4.')
+    if fused_mix: lines.append('; Fixed gains are folded into envelope state; MAC sums change fixed-point rounding.')
+    if bounded_loops: lines.append('; Loop counts cover only active samples; remaining output is zero-filled once.')
+    if rounded_dc:
+        if not lean_math: raise ValueError('Rounded DC filters require lean math')
+        lines.append('; DC feedback rounds to one state word instead of retaining fractional error.')
+    if bypass_noise_dc:
+        if not lean_math: raise ValueError('Bypassing the noise DC filter requires lean math')
+        lines.append('; Noise DC filter is bypassed before the fitted band-pass.' if bandpass_noise else
+                     '; Noise DC filter is bypassed; the following high/low-pass filters remain.')
+    if interpolated_gate:
+        if envelope_rate==1: raise ValueError('Interpolated gate requires control-rate envelopes')
+        lines.append('; Fade gate is folded into interpolated envelope endpoints; lifetime stays sample-exact.')
+    if render_stride!=1: lines.append(f'; Synthesis runs at {sample_rate:g} Hz; each sample is repeated {render_stride} times at the output.')
+    if register_mix: lines.append('; Mixer temporaries stay in registers; paired X/Y reads consume the block scratch buffers.')
+    if resident_output: lines.append('; Output DC history stays in R4/X1.' if combined_mix else
+                                     '; Output DC history stays in R4/X1; final bell gain is reconstructed once per block.')
+    if combined_mix: lines.append('; Combined gain envelopes reuse whitein/whiteout/whiteerr/clickerr; these histories are otherwise bypassed or unused.')
+    tables={}
+    resident={}
+    def emit(*s): lines.extend(s)
+    def load(n,r='a'): emit(f'    move {resident.get(n,S[n])},{r}')
+    def save(n,r='a1'): emit(f'    move {r},{resident.get(n,S[n])}')
+    def extload(n,r='a'): emit(f'    move x:(r2+${FIELDS[n]:x}),{r}')
+    def extsave(n,r='a1'): emit(f'    move {r},x:(r2+${FIELDS[n]:x})')
+    def imm(v,r='x0'): emit(f'    move #>${word(v):06x},{r}')
+    def mul(v):
+        shift=0
+        while abs(v)>=1: v/=2; shift+=1
+        emit('    move a1,x0'); imm(v,'y0'); emit('    mpy x0,y0,a')
+        if shift: emit(f'    asl #{shift},a,a')
+    def mulstate(n):
+        emit('    move a1,x0'); load(n,'y0'); emit('    mpy x0,y0,a')
+    def decay(n,loss):
+        if lean_math:
+            load(n,'x0')
+            if isinstance(loss,str): load(loss,'y0')
+            else: imm(1-loss/2,'y0')
+            emit('    mpyr x0,y0,a'); save(n)
+            return
+        # 2*(1-pole) preserves the source float32 coefficient's extra bit.
+        load(n,'x0')
+        if isinstance(loss,str): load(loss,'y0')
+        else: imm(loss,'y0')
+        emit('    mpy x0,y0,a','    asr #1,a,a','    neg a'); load(n,'b'); load(n+'err','b0')
+        emit('    add b,a'); save(n+'err','a0'); save(n)
+    def param(i):
+        emit(f'    move y:(r6+${i+1:x}),a','    asr #7,a,a','    and #>$7f,a','    move a1,n0')
+    def lookup(label,n,values):
+        tables[label]=values
+        emit(f'    move #>{label},r0','    nop','    move p:(r0+n0),x0'); save(n,'x0')
+    def rng(n):
+        if lcg_noise and n=='noise':
+            load(n+'lo','x0'); emit('    move #>$19660d,y0','    mpy x0,y0,a','    asr #1,a,a',
+                                  '    move a0,a','    add #>$6ef35f,a'); save(n+'lo')
+            emit('    move #>$800000,x0','    eor x0,a','    move a1,a')
+            return
+        if lean_math:
+            # Same 32-bit xorshift as the source; keep low24/high8 in registers.
+            load(n+'lo','x0'); load(n+'hi','y0')
+            emit('    move x0,a','    asr #11,a,a','    and #>$ff,a','    eor y0,a','    move a1,y0',
+                 '    move x0,a','    asl #13,a,a','    eor x0,a','    move a1,x0',
+                 '    asr #17,a,a','    and #>$7f,a','    move a1,y1',
+                 '    move y0,a','    asl #7,a,a','    or y1,a','    eor x0,a','    move a1,x0',
+                 '    asr #19,a,a','    and #>$1f,a','    move a1,y1',
+                 '    move y0,a','    asl #5,a,a','    or y1,a','    eor y0,a','    and #>$ff,a')
+            save(n+'hi'); emit('    move a1,y0','    move x0,a','    asl #5,a,a','    eor x0,a'); save(n+'lo')
+            emit('    asr #8,a,a','    and #>$ffff,a','    move a1,x0','    move y0,a','    asl #16,a,a',
+                 '    or x0,a','    move #>$800000,x0','    eor x0,a','    move a1,a')
+            return
+        load(n+'lo','x0'); load(n+'lo'); emit('    asl #13,a,a','    eor x0,a'); save('rngtemp')
+        load(n+'lo'); emit('    asr #11,a,a','    and #>$ff,a'); load(n+'hi','x0')
+        emit('    eor x0,a'); save(n+'hi'); load(n+'hi'); emit('    asl #7,a,a','    move a1,x0')
+        load('rngtemp'); emit('    asr #17,a,a','    and #>$7f,a','    or x0,a'); load('rngtemp','x0')
+        emit('    eor x0,a'); save('rngtemp')
+        emit('    asr #19,a,a','    and #>$1f,a','    move a1,x0'); load(n+'hi')
+        emit('    asl #5,a,a','    or x0,a'); load(n+'hi','x0'); emit('    eor x0,a','    and #>$ff,a'); save(n+'hi')
+        load('rngtemp'); emit('    asl #5,a,a'); load('rngtemp','x0'); emit('    eor x0,a'); save(n+'lo')
+        emit('    asr #8,a,a','    and #>$ffff,a','    move a1,x0'); load(n+'hi')
+        emit('    asl #16,a,a','    or x0,a','    move #>$800000,x0','    eor x0,a','    move a1,a')
+    def dc(n):
+        if bypass_noise_dc and n=='white': return
+        if combined_mix and rounded_dc and n=='out':
+            # The preceding MAC/ASL preload the coefficient/old input. Truncate
+            # the integer input difference, then round the feedback MAC once.
+            emit('    sub x0,a a1,r4')
+            emit('    move a1,a','    macr x1,y0,a','    move a1,x1')
+            return
+        if resident_output and rounded_dc and n=='out':
+            # Parallel moves capture the pre-ALU input/difference, preserving
+            # the original truncation while advancing the filter in registers.
+            emit('    move r4,x0','    sub x0,a a1,r4','    move x1,x0')
+            imm(.995,'y0')
+            emit('    mpyr x0,y0,a a1,y1','    add y1,a','    move a1,x1')
+            return
+        if rounded_dc:
+            load(n+'in','x0'); save(n+'in'); emit('    sub x0,a','    move a1,y1')
+            load(n+'out','x0'); imm(.995,'y0'); emit('    mpyr x0,y0,a','    add y1,a'); save(n+'out')
+            return
+        if lean_math:
+            load(n+'in','x0'); save(n+'in'); emit('    sub x0,a','    move a1,y1')
+            load(n+'out','x0'); imm(.995,'y0'); emit('    mpy x0,y0,a','    clr b'); load(n+'err','b0')
+            emit('    add b,a'); save(n+'err','a0'); emit('    add y1,a'); save(n+'out')
+            return
+        load(n+'in','x0'); save(n+'in'); emit('    sub x0,a'); save('temp1')
+        load(n+'out'); mul(.995); emit('    clr b'); load(n+'err','b0')
+        emit('    add b,a'); save(n+'err','a0'); load('temp1','x0'); emit('    add x0,a'); save(n+'out')
+    def filt(i):
+        if lean_math:
+            n=f'f{i}'; mulstate(n+'b0'); emit('    asl #1,a,a','    move a1,y1')
+            load(n+'z1','x0'); emit('    add x0,a','    move a1,x1')
+            load(n+'a1','y0'); emit('    mpy x1,y0,a','    asl #1,a,a'); load(n+'z2','x0'); emit('    add x0,a')
+            op='sub' if i==0 else 'add'
+            emit(f'    {op} y1,a',f'    {op} y1,a'); save(n+'z1')
+            load(n+'a2','y0'); emit('    mpy x1,y0,a','    asl #1,a,a','    add y1,a'); save(n+'z2')
+            emit('    move x1,a')
+            return
+        n=f'f{i}'; mulstate(n+'b0'); emit('    asl #1,a,a'); save('temp1')
+        load(n+'z1','x0'); emit('    add x0,a'); save('temp2')
+        mulstate(n+'a1'); emit('    asl #1,a,a'); load(n+'z2','x0'); emit('    add x0,a')
+        load('temp1','x0'); op='sub' if i==0 else 'add'
+        emit(f'    {op} x0,a',f'    {op} x0,a'); save(n+'z1')
+        load('temp2'); mulstate(n+'a2'); emit('    asl #1,a,a'); load('temp1','x0')
+        emit('    add x0,a'); save(n+'z2'); load('temp2')
+
+    emit('init:','    clr a')
+    for n in STATE: save(n)
+    if seed is None: seed={'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
+    if not 0<=seed<=0xffffffff: raise ValueError('Seed must fit uint32')
+    if seed==0: seed=0x606606
+    for n,salt in [('phase',0x9e3779b9),('wobble',0x51d3b7a1),('noise',0xa511e9b3)]:
+        val=seed^salt
+        # Source Random::seed substitutes this state for a zero xorshift seed.
+        # The independent LCG model deliberately permits its own zero state.
+        if val==0 and not (n=='noise' and lcg_noise): val=0x12345678
+        emit(f'    move #>${val&0xffffff:06x},x0'); save(n+'lo','x0')
+        emit(f'    move #>${val>>24:06x},x0'); save(n+'hi','x0')
+    emit('    move r1,a','    asl #9,a,a','    tfr a,b','    asl #1,a,a','    add b,a',
+         '    add #>mds_track,a'); save('ext')
+    emit('    move a1,r2','    move #>$ffffff,m2','    clr a',f'    do #{partial_count*8},init_clear_end',
+         '    move a,x:(r2)+','init_clear_end:','    rts','trigger:','    clr a')
+    preserved={'ext','phaselo','phasehi','wobblelo','wobblehi','noiselo','noisehi','whitein','whiteout','whiteerr','tanh_clamps'}
+    if combined_mix: preserved-= {'whitein','whiteout','whiteerr'}
+    for n in STATE:
+        if n not in preserved: save(n)
+    emit('    move #>$ffffff,m2','    move #>$ffffff,m3')
+    param(0)
+    for n in ('duration','fade'): lookup('t_'+n,n,[r[n] for r in c['decay']])
+    for j,n in enumerate(('invhi','invlo')): lookup('t_'+n,n,[split(r['inverse'])[j] for r in c['decay']])
+    for n in ('fast','slow'): lookup('t_'+n+'loss',n+'loss',[word(r[n]**envelope_rate if lean_math else 2*(1-r[n])) for r in c['decay']])
+    param(1)
+    for j,n in enumerate(('ratiohi','ratiolo')): lookup('t_'+n,n,[split(r['ratio']/4)[j] for r in c['pitch']])
+    for i in range(1 if bandpass_noise else 2):
+        for j,n in enumerate(('b0','a1','a2')):
+            lookup(f't_f{i}{n}',f'f{i}{n}',[word(r['filters'][i][j]*(.5 if j==0 else -.5)) for r in c['pitch']])
+    emit('    move #>$7fffff,x0')
+    if fused_mix:
+        save('attack','x0')
+        imm(c['trim']/2); save('fastenv','x0'); save('slowenv','x0')
+        imm(c['bell_amount']*tone_base); save('bell','x0')
+        imm(c['click_amount']*c['trim']/2); save('click','x0')
+        if combined_mix: save('whiteout','x0')
+    else:
+        for n in ('fastenv','slowenv','attack','bell','click'): save(n,'x0')
+    load('ext','r2'); emit('    move #>partials,r3','    move #>8,n2',f'    do #{partial_count},trigger_partials_end')
+    rng('phase'); mul(.3); imm(.3); emit('    add x0,a'); extsave('phase')
+    emit('    clr a')
+    for n in ('phasefrac','wobble','wobbleerr'): extsave(n)
+    for n in ('basehi','baselo','ampbase','flag'):
+        emit('    move p:(r3)+,x0'); save(n,'x0')
+    load('basehi','x0'); load('ratiohi','y0'); emit('    mpy x0,y0,a')
+    load('ratiolo','y0'); emit('    mpy x0,y0,b','    asr #23,b,b','    add b,a')
+    load('baselo','x0'); load('ratiohi','y0'); emit('    mpy x0,y0,b','    asr #23,b,b','    add b,a','    asl #2,a,a')
+    save('freqhi'); save('freqlo','a0'); imm(.48); emit('    cmp x0,a','    jge muted_partial')
+    emit('    asl #1,a,a'); extsave('inch'); extsave('incl','a0')
+    load('freqhi'); imm(.4); emit('    cmp x0,a','    jle full_partial')
+    imm(.48); emit('    neg a','    add x0,a'); mul(12.5); save('taper')
+    mulstate('taper'); save('temp1'); load('taper'); mul(-.5); imm(.75); emit('    add x0,a')
+    mulstate('temp1'); emit('    asl #2,a,a'); mulstate('ampbase'); extsave('amp'); emit('    jmp partial_ready',
+        'full_partial:'); load('ampbase'); extsave('amp'); emit('    jmp partial_ready','muted_partial:','    clr a')
+    for n in ('inch','incl','amp'): extsave(n)
+    emit('partial_ready:'); load('flag'); extsave('bell')
+    emit('    move (r2)+n2','    nop','trigger_partials_end:')
+    if resonators:
+        load('ext','r2'); param(1)
+        for j,(freq,_,_) in enumerate(c['partials']):
+            # Initialize the same source phase, one and two samples earlier.
+            extload('phase'); extload('inch','x0'); emit('    sub x0,a'); save('temp1')
+            emit('    asr #9,a,a','    and #>$7fff,a','    move a1,r0','    move x:(r0+>mds_sine),x0')
+            extload('amp','y0'); emit('    mpy x0,y0,a'); extsave('phase')
+            load('temp1'); extload('inch','x0'); emit('    sub x0,a','    asr #9,a,a','    and #>$7fff,a',
+                 '    move a1,r0','    move x:(r0+>mds_sine),x0')
+            extload('amp','y0'); emit('    mpy x0,y0,a'); extsave('phasefrac')
+            label=f't_resonator{j}'
+            tables[label]=[word(math.cos(2*math.pi*freq*r['ratio']/sample_rate)) for r in c['pitch']]
+            emit(f'    move #>{label},r0','    nop','    move p:(r0+n0),x0'); extsave('inch','x0')
+            emit('    move (r2)+n2','    nop')
+    emit('    move #>1,x0'); save('active','x0')
+    emit('    rts','render:'); load('active'); emit('    tst a','    jeq silent_block','    move #>8,n2')
+    if block_oscillators:
+        # The last partial block must advance oscillator states only for the
+        # remaining active samples. Every scratch word is written before use.
+        load('duration'); load('frame','x0'); emit('    sub x0,a',f'    move #>{block_samples},x0','    cmp x0,a',
+             '    jle block_count_ready','    move x0,a','block_count_ready:','    move a1,n5')
+        if block_noise:
+            # RNG/DC history is resident only during this pass. N5 is the
+            # active sample count, including the final partial block.
+            white_cache=dict(noiselo='n1',noisehi='n2',whitein='n3',whiteout='n4',whiteerr='n6')
+            if bypass_noise_dc: white_cache=dict(noiselo='n1',noisehi='n2')
+            for name,reg in white_cache.items(): load(name,reg)
+            resident.update(white_cache)
+            emit('    move #>mds_scratch_y,r5','    do n5,block_white_end')
+            rng('noise'); emit('    asr #4,a,a'); dc('white')
+            emit('    move a1,y:(r5)+','block_white_end:')
+            resident.clear()
+            for name,reg in white_cache.items(): save(name,reg)
+            emit('    move #>$fffffd,n3')
+            for i in range(1 if bandpass_noise else 2):
+                emit('    move #>mds_scratch_x,r3')
+                for name in ('b0','a1','a2'):
+                    load(f'f{i}'+name,'x0'); emit('    move x0,x:(r3)+')
+                load(f'f{i}z1','b'); load(f'f{i}z2','x1')
+                # Keep the coefficient read separate from the Y store: this
+                # assembler silently misencodes that combined parallel move.
+                emit('    move #>mds_scratch_x,r3','    move #>mds_scratch_y,r5',
+                     f'    do n5,block_filter_{i}_end',
+                     '    move x:(r3)+,x0 y:(r5),y0',
+                     '    mpy x0,y0,a x:(r3)+,x0','    asl a',
+                     '    add b,a a1,y0','    move a1,y1',
+                     '    mpy x0,y1,a a1,y:(r5)+','    move x:(r3)+,x0',
+                     '    asl a x1,b','    add b,a (r3)+n3')
+                op='sub' if i==0 else 'add'
+                if not bandpass_noise: emit(f'    {op} y0,a',f'    {op} y0,a')
+                emit('    move a1,b',
+                     '    mpy x0,y1,a','    asl a','    sub y0,a' if bandpass_noise else '    add y0,a','    move a1,x1',
+                     f'block_filter_{i}_end:')
+                save(f'f{i}z1','b1'); save(f'f{i}z2','x1')
+            emit('    move #>8,n2','    move #>mds_scratch_y,r5')
+        load('ext','r2')
+        for j in range(3):
+            emit('    move #>mds_scratch_x,r4')
+            extload('phase','x0'); extload('phasefrac','x1'); extload('inch','y0')
+            emit(f'    do n5,block_oscillator_{j}_end',
+                 '    mpy x0,y0,a'+(' x:(r4),y1' if j else ''),
+                 '    asl a','    sub x1,a x0,x1','    rnd a',
+                 '    add y1,a a1,x0' if j else '    move a1,x0',
+                 '    move a1,x:(r4)+',f'block_oscillator_{j}_end:')
+            extsave('phase','x0'); extsave('phasefrac','x1')
+            emit('    move (r2)+n2','    nop')
+        emit('    move #>mds_scratch_x,'+('r0' if register_mix else 'r4'))
+    if resident_output and envelope_rate!=32:
+        # Capture the outer loop count before N5 becomes the click envelope.
+        # R0's advancing scratch pointer supplies the consumed count at return.
+        emit('    move n5,a',f'    add #>{envelope_rate-1},a',
+             f'    asr #{int(math.log2(envelope_rate))},a,a','    move a1,n0')
+    elif bounded_loops and not resident_output: emit(f'    move n5,{count_register}')
+    if resident_state:
+        cached=dict(attack='n1',fastenv='n2',slowenv='n3',bell='n4',click='n5',
+                    fastloss='n6',slowloss='n7',duration='r1',frame='r3',tonal='r2',envelope='r5')
+        if envelope_rate!=1:
+            # Unused wide-error slots become the interpolated base envelope
+            # and three per-sample increments. The endpoints stay in X memory.
+            cached=dict(fastenverr='n1',slowenverr='n2',attackerr='n3',bell='n4',click='n5',
+                        bellerr='n6',duration='r1',frame='r3',tonal='r2',envelope='r5')
+        if block_noise:
+            cached.pop('slowloss',None)
+            cached['envelope']='n7'  # R5 walks the filtered-noise buffer.
+        if register_mix: cached.update(tonal='n0',noise='r2',bellgain='x1')
+        if resident_output:
+            cached.pop('bellgain')
+            cached.update(outin='r4',outout='x1')
+        if combined_mix:
+            cached=dict(whitein='n1',whiteout='n2',whiteerr='n3',clickerr='n6',bell='n4',click='n5',
+                        duration='r1',frame='r3',envelope='n7',outin='r4',outout='x1')
+        for name,reg in cached.items():
+            if not (register_mix and name in ('tonal','noise','bellgain')): load(name,reg)
+        resident.update(cached)
+        if combined_mix and rounded_dc: imm(.995,'r2')
+    if envelope_rate!=1:
+        if envelope_rate==32:
+            pass  # One control interval per full-rate block; no outer DO.
+        elif bounded_loops:
+            if not resident_output:
+                emit(f'    move {count_register},a',f'    add #>{envelope_rate-1},a',
+                     f'    asr #{int(math.log2(envelope_rate))},a,a','    move a1,n0')
+            emit('    do n0,block_end')
+        else: emit(f'    do #{32//envelope_rate},block_end')
+        emit('control_envelopes:')
+        if not bounded_loops:
+            load('active'); emit('    tst a','    jeq control_ready')
+        decay('attack',2*(1-(1-c['attack'])**envelope_rate))
+        decay('fastenv','fastloss'); decay('slowenv','slowloss')
+        load('fastenv'); mul(c['fast_weight']); save('temp1'); load('slowenv'); mul(1-c['fast_weight'])
+        load('temp1','x0'); emit('    add x0,a'); save('envelope')
+        emit('    move #>$7fffff,a'); load('attack','x0'); emit('    sub x0,a'); mulstate('envelope')
+        if interpolated_gate:
+            # The powered endpoint is the sample at frame+rate-1. A final
+            # partial interval can extend beyond the lifetime; clamp its gate
+            # to zero and retain the exact active-sample loop/zero suffix.
+            save('envelope'); load('duration'); load('frame','x0')
+            emit('    sub x0,a',f'    sub #>{envelope_rate-1},a','    tst a','    jle control_gate_zero')
+            load('fade','x0'); emit('    cmp x0,a','    jge control_gate_full','    move a1,x0')
+            load('invhi','y0'); emit('    mpy x0,y0,a','    asl #23,a,a')
+            load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope')
+            emit('    jmp control_gate_ready','control_gate_zero:','    clr a','    jmp control_gate_ready','control_gate_full:')
+            load('envelope'); emit('control_gate_ready:')
+        if combined_mix:
+            save('envelope')
+            decay('bell',2*(1-c['bell']**envelope_rate)); imm(tone_base); emit('    add x0,a'); mulstate('envelope')
+            load('whitein','x0'); emit('    sub x0,a','    asr #5,a,a'); save('whiteerr')
+            decay('click',2*(1-c['click']**envelope_rate))
+            load('envelope'); mul(c['noise_mix']*c['drive']); load('click','x0'); emit('    add x0,a')
+            load('whiteout','x0'); emit('    sub x0,a','    asr #5,a,a'); save('clickerr')
+        else:
+            load('fastenverr','x0'); emit('    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save('slowenverr')
+            for n,step in (('bell','attackerr'),('click','bellerr')):
+                load(n,'x0'); imm(c[n]**envelope_rate,'y0'); emit('    mpyr x0,y0,a','    sub x0,a',f'    asr #{int(math.log2(envelope_rate))},a,a'); save(step)
+        emit('control_ready:')
+        if bounded_loops:
+            load('duration'); load('frame','x0')
+            emit('    sub x0,a',f'    move #>{envelope_rate},x0','    cmp x0,a',
+                 '    tgt x0,a','    move a1,n0','    do n0,control_samples_end')
+        else: emit(f'    do #{envelope_rate},control_samples_end')
+    else:
+        emit('    do #32,block_end')
+    if not bounded_loops:
+        load('active'); emit('    tst a','    jeq sample_silent')
+    sample_mix_start=len(lines)
+    load('bell')
+    if fused_mix: imm(tone_base)
+    else: mul(c['bell_amount']/2); imm(.5)
+    emit('    add x0,a'); save('bellgain')
+    if envelope_rate!=1:
+        load('bell'); load('attackerr','x0'); emit('    add x0,a'); save('bell')
+    else: decay('bell',2*(1-c['bell']))
+    scalar_oscillator_start=len(lines)
+    if lean_math: emit('    clr b')
+    else: emit('    clr a'); save('tonal')
+    load('ext','r2')
+    emit(f'    do #{partial_count},render_partials_end')
+    if not no_wobble:
+        rng('wobble'); mul(c['wobble_drive']*1024); emit('    asr #7,a,a'); save('temp1'); save('temp2','a0')
+        extload('wobble','x0'); imm(c['wobble_alpha']*128,'y0'); emit('    mpy x0,y0,a','    asr #7,a,a','    neg a')
+        extload('wobble','b'); extload('wobbleerr','b0'); emit('    add b,a'); load('temp1','b'); load('temp2','b0')
+        emit('    add b,a'); extsave('wobble'); extsave('wobbleerr','a0')
+    if resonators:
+        extload('phase','x0'); extload('inch','y0'); emit('    mpy x0,y0,a','    asl #1,a,a')
+        extload('phasefrac','x1'); emit('    sub x1,a','    rnd a')
+        extsave('phasefrac','x0'); extsave('phase'); emit('    add a,b')
+    elif lean_math:
+        extload('phase'); emit('    asr #9,a,a','    and #>$7fff,a','    move a1,r0','    move x:(r0+>mds_sine),x0')
+        extload('amp','y0'); emit('    mac x0,y0,b')
+        extload('phase'); extload('phasefrac','a0'); extload('inch','x1'); extload('incl','x0')
+        emit('    add x,a'); extsave('phase'); extsave('phasefrac','a0')
+    else:
+        extload('phase'); emit('    asr #9,a,a','    and #>$7fff,a','    move a1,r0','    move x:(r0+>mds_sine),x0')
+        extload('amp','y0'); emit('    mpy x0,y0,a','    asr #2,a,a'); save('temp1')
+        extload('bell'); emit('    tst a','    jeq no_bell_accent'); load('temp1'); mulstate('bellgain'); emit('    asl #1,a,a'); save('temp1')
+        emit('no_bell_accent:'); load('tonal'); load('temp1','x0'); emit('    add x0,a'); save('tonal')
+        if not no_wobble:
+            extload('inch','x0'); extload('wobble','y0'); emit('    mpy x0,y0,a','    asr #3,a,a')
+            extload('inch','b'); extload('incl','b0'); emit('    add b,a')
+        else:
+            extload('inch'); extload('incl','a0')
+        extload('phase','b'); extload('phasefrac','b0'); emit('    add b,a'); extsave('phase'); extsave('phasefrac','a0')
+    emit('    move (r2)+n2','    nop','render_partials_end:')
+    if block_oscillators:
+        # The scalar loop above remains the source of truth for other modes.
+        # Replace just its oscillator section; bell/envelope timing stays put.
+        lines[scalar_oscillator_start:]=['    move x:(r4)+,b']
+    if lean_math:
+        if fused_mix:
+            emit('    move b1,x0'); load('bellgain','y0'); emit('    mpy x0,y0,a'); save('tonal')
+        else:
+            emit('    move b1,a','    asr #2,a,a'); mulstate('bellgain'); emit('    asl #1,a,a'); save('tonal')
+        emit('lean_noise:')
+    if block_noise:
+        emit('    move y:(r5)+,a'); save('noise')
+    else:
+        rng('noise'); emit('    asr #4,a,a'); dc('white'); filt(0); filt(1); save('noise')
+    if register_mix:
+        # Save the pre-increment bell gain while undoing its addition, then
+        # advance the bell and read both scratch buffers. The MAC inputs and
+        # 24-bit truncation points are unchanged. Persist all temporaries later.
+        lines[sample_mix_start:]=[]
+        load('bell'); imm(tone_base)
+        if resident_output:
+            emit('    add x0,a n3,y1','    sub x0,a a1,y0',
+                 '    add y1,a','    move a1,n4','    move x:(r0)+,x0 y:(r5)+,y1',
+                 '    mpy x0,y0,a y1,r2','    move a1,n0','lean_noise:')
+        else:
+            emit('    add x0,a n3,y0','    sub x0,a a1,x1',
+                 '    add y0,a','    move x:(r0)+,x0 y:(r5)+,y1',
+                 '    move a1,n4','    move x1,y0',
+                 '    mpy x0,y0,a y1,r2','    move a1,n0','lean_noise:')
+    if lean_math: emit('lean_envelope:')
+    if envelope_rate!=1:
+        load('fastenverr'); load('slowenverr','x0'); emit('    add x0,a'); save('fastenverr')
+        if not (resident_output and interpolated_gate): save('envelope')
+    else:
+        decay('attack',2*c['attack']); decay('fastenv','fastloss'); decay('slowenv','slowloss')
+        load('fastenv'); mul(c['fast_weight']); save('temp1'); load('slowenv'); mul(1-c['fast_weight'])
+        load('temp1','x0'); emit('    add x0,a'); save('envelope')
+        emit('    move #>$7fffff,a'); load('attack','x0'); emit('    sub x0,a'); mulstate('envelope'); save('envelope')
+    if not interpolated_gate:
+        load('duration'); load('frame','x0'); emit('    sub x0,a'); load('fade','x0'); emit('    cmp x0,a','    jge gate_ready')
+        emit('    move a1,x0'); load('invhi','y0'); emit('    mpy x0,y0,a','    asl #23,a,a')
+        load('invlo','y0'); emit('    mpy x0,y0,b','    add b,a'); mulstate('envelope'); save('envelope')
+    emit('gate_ready:')
+    if fused_mix:
+        load('tonal'); load('noise','x0'); imm(c['noise_mix']*c['drive'],'y0'); emit('    mac x0,y0,a')
+    else:
+        load('tonal'); mul(c['tonal_mix']); save('temp1'); load('noise'); mul(c['noise_mix'])
+        load('temp1','x0'); emit('    add x0,a'); mul(c['drive'])
+    saturation_start=len(lines)
+    # Interpolated tanh over [-8,8], Q19. Count any range clamp explicitly.
+    emit('    move #>$3fffff,x0','    cmp x0,a','    jgt tanh_high','    move #>$c00000,x0','    cmp x0,a','    jlt tanh_low','    jmp tanh_ready',
+         'tanh_high:','    move #>$3fffff,a','    jmp tanh_clamped','tanh_low:','    move #>$c00000,a',
+         'tanh_clamped:'); save('temp1'); load('tanh_clamps'); emit('    add #>1,a'); save('tanh_clamps'); load('temp1')
+    emit('tanh_ready:','    move a1,b',f'    and #>${(1<<table_shift)-1:x},b',f'    asl #{23-table_shift},b,b','    move b1,y1',
+         f'    asr #{table_shift},a,a',f'    add #>${1<<(tanh_bits-1):x},a','    move a1,n0','    move #>tanh_table,r0','    nop',
+         '    move p:(r0+n0),x0','    move #>tanh_table+1,r0','    nop','    move p:(r0+n0),a',
+         '    sub x0,a','    move a1,x1','    mpy x1,y1,a','    add x0,a')
+    if linear_saturation or cubic_saturation: del lines[saturation_start:]
+    if cubic_saturation:
+        # Audio is Q19. With u=x/4 in Q23, u*(1/4-u*u) gives
+        # (x-x*x*x/4)/16, restoring the Q19 scale without a table.
+        emit('    move #>$080000,x0','    cmp x0,a','    tgt x0,a',
+             '    move #>$f80000,x0','    cmp x0,a','    tlt x0,a',
+             '    asl #2,a,a','    move a1,x0','    mpy x0,x0,a',
+             '    neg a','    add #>$200000,a','    move a1,y0','    mpy x0,y0,a')
+    if lean_math: emit('lean_output:')
+    if fused_mix:
+        emit('    move a1,x0'); load('fastenverr' if resident_output and interpolated_gate else 'envelope','y0'); emit('    mpy x0,y0,b')
+        load('noise','x0'); load('click','y0'); emit('    mac x0,y0,b','    asl b','    move b1,a')
+    else:
+        mulstate('envelope'); save('tonal'); load('noise'); mul(c['click_amount']); mulstate('click')
+        load('tonal','x0'); emit('    add x0,a'); mul(c['trim'])
+    if combined_mix:
+        # Advance only two combined gain envelopes, then sum two products.
+        # Endpoints include bell, drive, base envelope and the noise click.
+        lines[sample_mix_start:]=[]
+        emit('lean_combined_mix:','    move n1,a','    move n3,x0','    add x0,a n2,b','    move a1,n1',
+             '    move n6,x0','    add x0,b a1,y0','    move b1,n2',
+             '    move x:(r0)+,x0 y:(r5)+,y1','    mpy x0,y0,a b1,x0',
+             '    mac x0,y1,a r2,y0' if rounded_dc else '    mac x0,y1,a',
+             *(['    asl a r4,x0'] if rounded_dc else ['    asl a','    move a1,a']))
+    dc('out')
+    if combined_mix: emit('    asl #3,a,a','    move a,y:(r7)+')
+    elif resident_output:
+        emit('    asl #3,a,a','    move n5,b','    move n6,x0',
+             '    add x0,b a,y:(r7)+',*['    move a,y:(r7)+']*(render_stride-1),'    move b1,n5')
+    else: emit('    asl #3,a,a',*['    move a,y:(r7)+']*render_stride)
+    if not resident_output:
+        if envelope_rate!=1:
+            load('click'); load('bellerr','x0'); emit('    add x0,a'); save('click')
+        else: decay('click',2*(1-c['click']))
+    if bounded_loops:
+        emit('    move (r3)+')  # Frame is resident in R3; ABI M3 is linear.
+    else:
+        load('frame'); emit('    add #>1,a'); save('frame'); load('duration','x0')
+        emit('    cmp x0,a','    jlt sample_done','    clr a'); save('active')
+        emit('    jmp sample_done','sample_silent:','    clr a','    move a,y:(r7)+','sample_done:','    nop')
+    if envelope_rate!=1: emit('control_samples_end:','    nop')
+    emit('block_end:')
+    if register_mix and not combined_mix:
+        # N0 is about to become the zero-suffix loop count. Persist the final
+        # scratch values first, preserving even diagnostic state bit-for-bit.
+        for name in ('tonal','noise') if resident_output else ('tonal','noise','bellgain'):
+            emit(f'    move {cached[name]},{S[name]}')
+        if resident_output:
+            # Bell is bounded well within Q23. Undo its last integer increment
+            # to recover the last pre-increment gain without consuming X1.
+            load('bell'); load('attackerr','x0'); emit('    sub x0,a'); imm(tone_base)
+            emit('    add x0,a',f'    move a1,{S["bellgain"]}')
+    if bounded_loops:
+        load('frame'); load('duration','x0'); emit('    cmp x0,a','    jlt active_stays','    clr a'); save('active')
+        emit('active_stays:')
+        if resident_output:
+            # MDS import offsets must stay inside the 32-word resource.
+            emit('    move #>mds_scratch_x,a',f'    add #>{block_samples},a','    move r0,x0')
+        else: emit(f'    move #>{block_samples},a',f'    move {count_register},x0')
+        emit('    sub x0,a','    jeq output_ready',
+             '    move a1,n0','    clr a','    do n0,zero_tail_end',*['    move a,y:(r7)+']*render_stride,
+             'zero_tail_end:','output_ready:')
+    if resident_state:
+        resident.clear()
+        for name,reg in cached.items():
+            if resident_output and interpolated_gate and not combined_mix and name=='envelope': reg='n1'
+            if not (register_mix and name in ('tonal','noise','bellgain')): save(name,reg)
+    emit('    rts','silent_block:','    clr a','    do #32,zero_end','    move a,y:(r7)+','zero_end:','    rts')
+    partials=[]
+    for freq,amp,bell in c['partials']: partials += [*split(freq/sample_rate),word(amp/4),int(bell)]
+    tables['partials']=partials
+    if not (linear_saturation or cubic_saturation):
+        tables['tanh_table']=[word(math.tanh((i-(1<<(tanh_bits-1)))/(1<<(tanh_bits-4)))/16) for i in range((1<<tanh_bits)+1)]
+    emit(*emit_tables(tables,deduplicate_tables))
+    return '\n'.join(lines)+'\n'
+
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument('--compiler',default='clang++')
+    a=p.parse_args(); exe=build_reference(ROOT/'build/metal-reference',a.compiler)
+    for kind in ('ch','oh','cy'):
+        controls=json.loads(run([exe,'--tables',kind]).stdout)
+        directory=ROOT/'machines'/kind; directory.mkdir(parents=True,exist_ok=True)
+        (directory/(kind+'.asm')).write_text(generate(kind,controls))
+        manifest=dict(id='org.kitbasher.tr6.'+kind,display_name='TR6 '+{'ch':'CLOSED HAT','oh':'OPEN HAT','cy':'CYMBAL'}[kind],
+                      category='TR6',short_label=kind.upper(),machine_version='0.1',
+                      params=[dict(name='DEC',default=102 if kind=='cy' else 89,transform='raw14'),dict(name='TUNE',default=64,transform='raw14')])
+        (directory/(kind+'.json')).write_text(json.dumps(manifest,indent=2)+'\n')
+        print(kind,len(STATE),'local words,',EXTERNAL_WORDS,'external words')
+
+
+if __name__=='__main__': main()

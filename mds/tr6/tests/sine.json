@@ -1,0 +1,10 @@
+{
+  "id": "org.kitbasher.mds.test.sine",
+  "display_name": "ABI TEST",
+  "category": "TST",
+  "short_label": "SI",
+  "params": [
+    {"name": "STEP", "default": 64, "transform": "raw14"},
+    {"name": "AMP", "default": 64, "transform": "unipolar_q23"}
+  ]
+}

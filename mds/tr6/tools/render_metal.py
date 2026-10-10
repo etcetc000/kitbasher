@@ -1,0 +1,273 @@
+"""Compare complete CH/OH/CY drafts with Simple606, including external-track guards."""
+import argparse
+import json
+import math
+from pathlib import Path
+import re
+import struct
+import hashlib
+import shutil
+import sys
+
+from mds_build import ROOT, assemble_package, mds_format, assembly
+from generate_metal import generate, build_reference, STATE, OUTPUT_GAIN
+from render_bd import run, write_wave
+
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('kind',choices=['ch','oh','cy']); p.add_argument('--assembler',required=True)
+    p.add_argument('--host',required=True); p.add_argument('--compiler',default='clang++')
+    p.add_argument('--case',choices=['default','minimum','maximum','low_pitch','short_high_pitch','retrigger','pretrigger','retrigger_idle','block_boundary'])
+    p.add_argument('--blocks',type=int,help='Diagnostic override; may end before the voice goes idle')
+    p.add_argument('--track',type=int,default=3,choices=range(16))
+    p.add_argument('--out',type=Path)
+    p.add_argument('--tanh-bits',type=int,choices=range(8,14),default=13,help='13 preserves the full-path baseline; lower values test compact tables')
+    p.add_argument('--partial-count',type=int,choices=(3,6,47),default=47,help='Keep the strongest partials, in original source order')
+    p.add_argument('--no-wobble',action='store_true',help='Remove per-partial random frequency wobble in native and comparison models')
+    p.add_argument('--lean-math',action='store_true',help='Register-based kernels and rounded Q23 envelopes; requires three partials and no wobble')
+    p.add_argument('--resonators',action='store_true',help='Recursive sine oscillators; requires lean math')
+    p.add_argument('--lcg-noise',action='store_true',help='24-bit LCG noise model; requires lean math')
+    p.add_argument('--block-oscillators',action='store_true',help='Keep recursive oscillator states in registers through each block')
+    p.add_argument('--resident-state',action='store_true',help='Keep hot state in spare registers within each render call')
+    p.add_argument('--end-boundaries',action='store_true',help='Render one complete integer-decay case for every final-block length 1..32')
+    p.add_argument('--envelope-rate',type=int,choices=(1,4,8,16,32),default=1,help='Interpolate envelope endpoints this many samples apart; 32 requires full-rate synthesis')
+    p.add_argument('--block-noise',action='store_true',help='Render noise/filter passes through shared Y scratch')
+    p.add_argument('--linear-saturation',action='store_true',help='Approximation: keep drive gain and bypass tanh; requires lean math')
+    p.add_argument('--cubic-saturation',action='store_true',help='Approximation: clamp driven input to +/-1 and use x-x^3/4; requires lean math')
+    p.add_argument('--fused-mix',action='store_true',help='Fold fixed gains into envelope state and MAC sums; requires block noise and resident state')
+    p.add_argument('--bounded-loops',action='store_true',help='Loop over active samples only; requires resident control-rate envelopes and linear/cubic saturation')
+    p.add_argument('--deduplicate-tables',action='store_true',help='Share identical literal tables without changing their values')
+    p.add_argument('--rounded-dc',action='store_true',help='Round DC-filter feedback to one state word; requires lean math')
+    p.add_argument('--bypass-noise-dc',action='store_true',help='Bypass the noise DC filter before the retained high/low-pass pair; requires lean math')
+    p.add_argument('--interpolated-gate',action='store_true',help='Include the fade gate in interpolated envelope endpoints; requires envelope rate > 1')
+    p.add_argument('--render-stride',type=int,choices=(1,2),default=1,help='Output samples per synthesis step; 2 runs at 22050 Hz with sample repetition and requires bounded loops')
+    p.add_argument('--seed',type=lambda value:int(value,0),help='Explicit uint32 initial seed for native/reference ensemble evidence')
+    p.add_argument('--register-mix',action='store_true',help='Retain mixer temporaries and read X/Y scratch together; requires fused mixing and bounded loops')
+    p.add_argument('--resident-output',action='store_true',help='Retain output DC history in registers; requires register mixing')
+    p.add_argument('--bandpass-noise',action='store_true',help='Approximation: fit one noise band-pass in place of two filters; requires block noise and NumPy/SciPy')
+    p.add_argument('--combined-mix',action='store_true',help='Approximation: interpolate combined tonal/noise gains; requires linear saturation, envelope rate 32, resident output, gate interpolation and bypassed noise DC')
+    a=p.parse_args(); kind=a.kind
+    if a.envelope_rate>32//a.render_stride: p.error('--envelope-rate cannot exceed synthesis samples per block')
+    if a.combined_mix and not (a.linear_saturation and a.envelope_rate==32 and a.resident_output and a.interpolated_gate and a.bypass_noise_dc):
+        p.error('--combined-mix requires linear saturation, envelope rate 32, resident output, interpolated gate and bypassed noise DC')
+    if a.resident_output and not a.register_mix: p.error('--resident-output requires --register-mix')
+    if a.bandpass_noise and not a.block_noise: p.error('--bandpass-noise requires --block-noise')
+    if a.lean_math and (a.partial_count!=3 or not a.no_wobble): p.error('--lean-math requires --partial-count 3 --no-wobble')
+    if (a.resonators or a.lcg_noise) and not a.lean_math: p.error('--resonators/--lcg-noise require --lean-math')
+    if a.block_oscillators and not a.resonators: p.error('--block-oscillators requires --resonators')
+    if a.resident_state and not a.block_oscillators: p.error('--resident-state requires --block-oscillators')
+    if a.end_boundaries and (a.case or a.blocks): p.error('--end-boundaries requires complete renders and cannot be combined with --case/--blocks')
+    if a.envelope_rate!=1 and not a.resident_state: p.error('--envelope-rate requires --resident-state')
+    if a.block_noise and not a.block_oscillators: p.error('--block-noise requires --block-oscillators')
+    if a.linear_saturation and not a.lean_math: p.error('--linear-saturation requires --lean-math')
+    if a.rounded_dc and not a.lean_math: p.error('--rounded-dc requires --lean-math')
+    if a.bypass_noise_dc and not a.lean_math: p.error('--bypass-noise-dc requires --lean-math')
+    if a.interpolated_gate and a.envelope_rate==1: p.error('--interpolated-gate requires --envelope-rate > 1')
+    if a.render_stride!=1 and not a.bounded_loops: p.error('--render-stride 2 requires --bounded-loops')
+    if a.seed is not None and not 0<=a.seed<=0xffffffff: p.error('--seed must fit uint32')
+    if a.register_mix and not (a.fused_mix and a.bounded_loops): p.error('--register-mix requires --fused-mix and --bounded-loops')
+    if a.cubic_saturation and (not a.lean_math or a.linear_saturation): p.error('--cubic-saturation requires --lean-math and excludes --linear-saturation')
+    if a.fused_mix and (not a.block_noise or not a.resident_state): p.error('--fused-mix requires --block-noise and --resident-state')
+    if a.bounded_loops and (not a.resident_state or a.envelope_rate==1 or not (a.linear_saturation or a.cubic_saturation)):
+        p.error('--bounded-loops requires resident state, control-rate envelopes and linear/cubic saturation')
+    variant=a.partial_count!=47 or a.no_wobble
+    suffix=f'-p{a.partial_count}'+('-static' if a.no_wobble else '-wobble')+f'-lut{a.tanh_bits}' if variant else ('-comparison' if a.tanh_bits==13 else f'-lut{a.tanh_bits}')
+    if a.lean_math: suffix+='-lean'
+    if a.resonators: suffix+='-resonators'
+    if a.lcg_noise: suffix+='-lcg'
+    if a.block_oscillators: suffix+='-blockosc'
+    if a.resident_state: suffix+='-resident'
+    if a.envelope_rate!=1: suffix+=f'-env{a.envelope_rate}'
+    if a.block_noise: suffix+='-blocknoise'
+    if a.linear_saturation: suffix+='-linear'
+    if a.cubic_saturation: suffix+='-cubic'
+    if a.fused_mix: suffix+='-fused'
+    if a.bounded_loops: suffix+='-bounded'
+    if a.deduplicate_tables: suffix+='-dedup'
+    if a.rounded_dc: suffix+='-rounded-dc'
+    if a.bypass_noise_dc: suffix+='-no-noise-dc'
+    if a.interpolated_gate: suffix+='-gate'
+    if a.register_mix: suffix+='-register-mix'
+    if a.resident_output: suffix+='-resident-output'
+    if a.bandpass_noise: suffix+='-bandpass'
+    if a.combined_mix: suffix+='-combined'
+    if a.render_stride!=1: suffix+=f'-stride{a.render_stride}'
+    if a.seed is not None: suffix+=f'-seed{a.seed:08x}'
+    if a.end_boundaries: suffix+='-endings'
+    if a.render_stride!=1 or a.seed is not None or a.resident_output or a.bandpass_noise:
+        # Keep generated paths usable by Windows C++ tools with short-path
+        # limits, while distinguishing the complete option set and fixtures.
+        suffix=f'-stride{a.render_stride}'+(f'-seed{a.seed:08x}' if a.seed is not None else '')+'-'+hashlib.sha256(suffix.encode()).hexdigest()[:12]
+    out=(a.out or ROOT/('build/'+kind+suffix)).resolve(); out.mkdir(parents=True,exist_ok=True)
+    model_args=[a.partial_count,int(a.no_wobble)] if variant else []
+    exe=build_reference(out,a.compiler); controls=json.loads(run([exe,'--tables',kind,*model_args]).stdout)
+    fixture_controls=controls
+    if a.render_stride!=1:
+        controls=json.loads(run([exe,'--tables',kind,a.partial_count,int(a.no_wobble),a.render_stride]).stdout)
+        (out/'fixture-controls.json').write_text(json.dumps(fixture_controls,indent=2)+'\n')
+    if a.bandpass_noise:
+        from fit_noise_bandpass import fit_controls,write_coefficients
+        (out/'cascade-controls.json').write_text(json.dumps(controls,indent=2)+'\n')
+        controls,fit_report=fit_controls(controls)
+        (out/'bandpass-fit.json').write_text(json.dumps(fit_report,indent=2)+'\n')
+        write_coefficients(controls,out/'bandpass-coefficients.txt')
+    if a.lcg_noise or a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc:
+        model_args += [{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise)]
+        if a.envelope_rate!=1 or a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc: model_args += [a.envelope_rate]
+        if a.linear_saturation or a.cubic_saturation or a.bypass_noise_dc: model_args += [int(a.linear_saturation)]
+        if a.cubic_saturation or a.bypass_noise_dc: model_args += [int(a.cubic_saturation)]
+        if a.bypass_noise_dc: model_args += [1]
+    if a.interpolated_gate:
+        model_args=[a.partial_count,int(a.no_wobble),{'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind],int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),1]
+    if a.render_stride!=1 or a.seed is not None or a.bandpass_noise or a.combined_mix:
+        selected_seed=a.seed if a.seed is not None else {'ch':0x606606,'oh':0x606607,'cy':0x606608}[kind]
+        model_args=[a.partial_count,int(a.no_wobble),selected_seed,int(a.lcg_noise),a.envelope_rate,int(a.linear_saturation),int(a.cubic_saturation),int(a.bypass_noise_dc),int(a.interpolated_gate),a.render_stride]
+        if a.bandpass_noise or a.combined_mix: model_args.append(out/'bandpass-coefficients.txt' if a.bandpass_noise else '-')
+        if a.combined_mix: model_args.append(1)
+    (out/'controls.json').write_text(json.dumps(controls,indent=2)+'\n')
+    source=generate(kind,controls,a.tanh_bits,a.no_wobble,a.lean_math,a.resonators,a.lcg_noise,a.block_oscillators,a.resident_state,a.envelope_rate,a.block_noise,a.linear_saturation,a.cubic_saturation,a.fused_mix,a.bounded_loops,a.deduplicate_tables,a.rounded_dc,a.bypass_noise_dc,a.interpolated_gate,a.render_stride,a.seed,a.register_mix,a.resident_output,a.bandpass_noise,a.combined_mix); (out/(kind+'.asm')).write_text(source)
+    external_words=a.partial_count*8
+    imports={'mds_sine':(1,1),'mds_track':(2,6)}
+    if a.block_oscillators: imports['mds_scratch_x']=(3,7)
+    if a.block_noise: imports['mds_scratch_y']=(4,8)
+    package,build=assemble_package(source,json.loads((ROOT/f'machines/{kind}/{kind}.json').read_text()),a.assembler,imports)
+    (out/(kind+'.mds')).write_bytes(package); (out/'assembly.json').write_text(json.dumps(build,indent=2)+'\n')
+    image=mds_format().parse_package(package); base=0x110023; extbase=0x160000; ext=extbase+a.track*1536
+    code=[int.from_bytes(image['program'][i:i+3],'big') for i in range(0,len(image['program']),3)]
+    for i in image['relocations']: code[i]+=base
+    for i in image['imports']: code[i.patch_word]+={1:0x148000,6:extbase,7:0x200,8:0x240}[i.symbol]
+    (out/'code.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in code))
+    # The existing instruction host has no register-set command. This test-only
+    # trampoline supplies INIT's R1 track number without changing the machine.
+    stub,_=assembly.assemble(f'move #>{a.track},r1\njmp >${base+image["init_word"]:x}\n',0x1000,exe=a.assembler)
+    (out/'init-stub.bin').write_bytes(b''.join(w.to_bytes(3,'big') for w in stub))
+    sine=[round(math.sin(i*2*math.pi/32768)*0x7fffff) for i in range(32768)]
+    (out/'sine.bin').write_bytes(b''.join((w&0xffffff).to_bytes(3,'big') for w in sine))
+    def hashes(paths): return {str(path.resolve()):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    source_root=ROOT/'.audit-sources/Simple606/Source'
+    input_paths=[Path(a.host).resolve(),Path(a.assembler).resolve(),Path(shutil.which(a.compiler) or a.compiler).resolve(),exe,
+                 Path(__file__).resolve(),ROOT/'tools/generate_metal.py',ROOT/'tools/table_pool.py',ROOT/'tools/mds_build.py',ROOT/'tools/render_bd.py',
+                 ROOT/'tests/metal_reference.cpp',source_root/'HiHats.hpp',source_root/'SynthDrumCommon.hpp',
+                 out/'cymbal_spec.hpp',out/'tr6_hihats.hpp',out/'controls.json',out/(kind+'.asm'),out/(kind+'.mds'),
+                 out/'assembly.json',out/'code.bin',out/'sine.bin',out/'init-stub.bin']
+    if a.render_stride!=1: input_paths.append(out/'fixture-controls.json')
+    if a.bandpass_noise:
+        input_paths.extend([ROOT/'tools/fit_noise_bandpass.py',out/'cascade-controls.json',out/'bandpass-fit.json',out/'bandpass-coefficients.txt'])
+    captured_hashes=hashes(input_paths)
+    provenance=dict(command=sys.argv,configuration={k:str(v) if isinstance(v,Path) else v for k,v in vars(a).items()},
+                    captured_before_render=True,inputs_sha256=captured_hashes,cases=[],complete=False)
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    default=102 if kind=='cy' else 89
+    cases=[('default',[default,64],0,0),('minimum',[0,0],0,0),('maximum',[127,127],0,0),
+           ('low_pitch',[127,0],0,0),('short_high_pitch',[0,127],0,0),
+           ('retrigger',[default,64],137*32,0),('pretrigger',[default,64],0,10*32),
+           ('retrigger_idle',[0,64],173*32,0)]
+    boundary=next((i for i,row in enumerate(fixture_controls['decay']) if row['duration']%32==0),None)
+    if boundary is not None:
+        cases.append(('block_boundary',[boundary,64],0,0))
+    elif a.case=='block_boundary':
+        raise ValueError('No integer decay has a block-aligned lifetime')
+    if a.end_boundaries:
+        selected={}
+        for knob,row in enumerate(fixture_controls['decay']):
+            length=(row['duration']-1)%32+1
+            if length not in selected or row['duration']<fixture_controls['decay'][selected[length]]['duration']:
+                selected[length]=knob
+        if set(selected)!=set(range(1,33)): raise ValueError('Integer decay controls do not cover all final-block lengths')
+        cases=[(f'end_{length:02d}',[selected[length],64],0,0) for length in range(1,33)]
+    report=[]
+    for name,knobs,repeat,delay in cases:
+        if a.case and name!=a.case: continue
+        blocks=a.blocks or (1024 if repeat else math.ceil((fixture_controls['decay'][knobs[0]]['duration']+delay)/32)+32)
+        samples=blocks*32
+        reference=run([exe,kind,*knobs,samples,repeat,delay,out/(name+'.reference.raw'),*model_args])
+        lines=['load P 110023 code.bin','load P 1000 init-stub.bin','load X 148000 sine.bin','voice 800',
+               'set Y ff 123456','set Y 120 654321','set X 7ff 123456','set X 840 654321',
+               'set Y 7ff 123456','set Y 840 654321']
+        for space in ('X','Y'): lines += [f'set {space} {0x800+i:x} 5a5a5a' for i in range(64)]
+        # Poison every track's external region, then verify all unowned words.
+        lines += [f'set X {extbase+i:x} 5a5a5a' for i in range(16*1536)]
+        lines += [f'set X {extbase-1:x} 123456',f'set X {extbase+16*1536:x} 654321']
+        for i,v in enumerate(knobs): lines.append(f'set Y {0x801+i:x} {v*128:x}')
+        lines+=['scrub 1f','call 1000','cycles']
+        for block in range(blocks):
+            if block*32==delay or (repeat and block*32>delay and (block*32-delay)%repeat==0):
+                lines+=['scrub 1f',f'call {base+image["mutate_word"]:x}','cycles']
+            lines += [f'set Y {0x100+i:x} 5a5a5a' for i in range(32)]
+            lines+=['scrub 1f',f'call {base+image["execute_word"]:x}','cycles','out']
+        lines+=['dump X 800 40','dump Y 800 40','dump Y ff 1','dump Y 120 1',
+                'dump X 7ff 1','dump X 840 1','dump Y 7ff 1','dump Y 840 1',f'dump X {extbase:x} 6000',
+                f'dump X {extbase-1:x} 1',f'dump X {extbase+16*1536:x} 1']
+        if a.block_oscillators:
+            # Poison scratch before every render to expose reads from prior calls.
+            poisoned=[]
+            for line in lines:
+                if line==f'call {base+image["execute_word"]:x}':
+                    poisoned += ['set X 1ff 123456','set X 220 654321',*[f'set X {0x200+i:x} 5a5a5a' for i in range(32)]]
+                    if a.block_noise:
+                        poisoned += ['set Y 23f 123456','set Y 260 654321',*[f'set Y {0x240+i:x} 5a5a5a' for i in range(32)]]
+                poisoned.append(line)
+            lines=poisoned+['dump X 1ff 1','dump X 220 1']
+            if a.block_noise: lines+=['dump Y 23f 1','dump Y 260 1']
+        script=out/(name+'.script'); script.write_text('\n'.join(lines)+'\n')
+        result=run([Path(a.host).resolve(),script.name,name+'.raw'],cwd=out,timeout=600)
+        (out/(name+'.host.log')).write_text(result.stdout+'\n'+result.stderr)
+        native_i=struct.unpack('<'+'i'*samples,(out/(name+'.raw')).read_bytes())
+        actual=[v/8388608 for v in native_i]
+        want=struct.unpack('<'+'f'*samples,(out/(name+'.reference.raw')).read_bytes())
+        error=[x/OUTPUT_GAIN-y for x,y in zip(actual,want)]
+        mse=sum(e*e for e in error)/samples; energy=sum(v*v for v in want)/samples
+        dumps=[[int(w,16) for w in row.split()] for row in re.findall(r'^dump (.+)$',result.stdout,re.M)]
+        native={n:dumps[0][i] for i,n in enumerate(STATE)}
+        ref={k:int(v) for k,v in re.findall(r'(\w+)=(\d+)',reference.stdout)}
+        expected_y=[0x5a5a5a]*64; expected_y[1:3]=[v*128 for v in knobs]
+        other_ext=dumps[8][:a.track*1536]+dumps[8][a.track*1536+external_words:]
+        checks=dict(parameters=dumps[1]==expected_y,unused_local=dumps[0][len(STATE):]==[0x5a5a5a]*(64-len(STATE)),
+                    guards=dumps[2:8]==[[0x123456],[0x654321]]*3,external_base=native['ext']==ext,
+                    external_guards=all(v==0x5a5a5a for v in other_ext),
+                    external_outer_guards=dumps[9:11]==[[0x123456],[0x654321]],
+                    active=native['active']==ref['active'],frame=native['frame']==ref['frame'],duration=native['duration']==ref['duration'],
+                    buffer_written=0x5a5a5a not in native_i,pretrigger=not delay or not any(native_i[:delay]),
+                    idle=bool(ref['active']) or not any(native_i[-32:]),tanh_range=native['tanh_clamps']==0)
+        for n in ('phase','wobble','noise'): checks[n+'_rng']=(native[n+'hi']<<24|native[n+'lo'])==ref[n+'_rng']
+        if a.lcg_noise: checks['noise_rng']=native['noiselo']==ref['noise_rng']
+        if a.block_oscillators: checks['scratch_guards']=dumps[11:13]==[[0x123456],[0x654321]]
+        if a.block_noise: checks['scratch_y_guards']=dumps[13:]==[[0x123456],[0x654321]]
+        if a.cubic_saturation: checks.pop('tanh_range')  # Cubic input limiting is intentional.
+        peak_error=max(abs(e) for e in error); tolerance=.003
+        cycles=[int(x) for x in re.findall(r'instructions \d+ cycles (\d+)',result.stdout)]
+        reference_model=dict(partial_count=a.partial_count,wobble=not a.no_wobble,noise='lcg24' if a.lcg_noise else 'xorshift32',envelope_rate=a.envelope_rate,saturation='linear' if a.linear_saturation else 'cubic' if a.cubic_saturation else 'tanh')
+        if a.bypass_noise_dc: reference_model['noise_dc']='bypass'
+        if a.interpolated_gate: reference_model['gate']='interpolated'
+        if a.render_stride!=1: reference_model['render_stride']=a.render_stride
+        if a.seed is not None: reference_model['seed']=a.seed
+        if a.bandpass_noise: reference_model['noise_filter']='fitted-bandpass-v1'
+        if a.combined_mix: reference_model['mix_envelopes']='combined'
+        metrics=dict(machine=kind,case=name,knobs=knobs,track=a.track,samples=samples,peak_error=peak_error,tanh_bits=a.tanh_bits,
+                     render_stride=a.render_stride,synthesis_sample_rate=44100/a.render_stride,
+                      register_mix=a.register_mix,
+                      resident_output=a.resident_output,
+                     physical_duration_samples=native['duration']*a.render_stride,
+                     reference_model=reference_model,
+                     lean_math=a.lean_math,resonators=a.resonators,lcg_noise=a.lcg_noise,block_oscillators=a.block_oscillators,resident_state=a.resident_state,block_noise=a.block_noise,fused_mix=a.fused_mix,bounded_loops=a.bounded_loops,deduplicate_tables=a.deduplicate_tables,rounded_dc=a.rounded_dc,bypass_noise_dc=a.bypass_noise_dc,
+                     full_source_comparison=not variant,
+                     rms_error=math.sqrt(mse),snr_db=10*math.log10(energy/max(mse,1e-30)),
+                     native_peak=max(abs(x) for x in actual),reference_peak=max(abs(x) for x in want),
+                     output_gain=OUTPUT_GAIN,peak_error_limit=tolerance,numeric_pass=peak_error<tolerance,
+                     checks=checks,source_state=ref,native_state={n:native[n] for n in ('active','frame','duration','tanh_clamps')},
+                     program_words=build['program_words'],local_words=len(STATE),external_words=external_words,
+                     host_cycle_table_max_call=max(cycles),cold_cache_measured=False)
+        report.append(metrics); (out/'comparison.json').write_text(json.dumps(report,indent=2)+'\n')
+        write_wave(out/(name+'.wav'),actual); write_wave(out/(name+'.reference.wav'),[v*OUTPUT_GAIN for v in want])
+        print(json.dumps(metrics),flush=True)
+        if not metrics['numeric_pass'] or not all(checks.values()): raise AssertionError(f'{kind}/{name} comparison failed')
+        if hashes(input_paths)!=captured_hashes: raise AssertionError('Render input/tool changed during the run')
+        provenance['cases'].append(dict(name=name,knobs=knobs,samples=samples,repeat_samples=repeat,delay_samples=delay,
+            output_sha256=hashes([script,out/(name+'.raw'),out/(name+'.reference.raw'),out/(name+'.host.log')]),checks_pass=True))
+        (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+    provenance['complete']=True
+    (out/'provenance.json').write_text(json.dumps(provenance,indent=2)+'\n')
+
+
+if __name__=='__main__': main()
