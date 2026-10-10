@@ -1,0 +1,34 @@
+{
+  "id": "org.kitbasher.tr6.bd",
+  "display_name": "TR6 BASS DRUM",
+  "category": "TR6",
+  "short_label": "BD",
+  "machine_version": "0.1",
+  "params": [
+    {
+      "name": "TRAN",
+      "default": 51,
+      "transform": "raw14"
+    },
+    {
+      "name": "DEC",
+      "default": 102,
+      "transform": "raw14"
+    },
+    {
+      "name": "TUNE",
+      "default": 75,
+      "transform": "raw14"
+    },
+    {
+      "name": "HEAT",
+      "default": 0,
+      "transform": "raw14"
+    },
+    {
+      "name": "XL",
+      "default": 0,
+      "transform": "boolean"
+    }
+  ]
+}
