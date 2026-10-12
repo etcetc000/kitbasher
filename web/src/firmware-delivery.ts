@@ -16,7 +16,6 @@ export class FirmwareDelivery {
     this.restoreSamples = () => { samples.hidden = true; sampleParent.insertBefore(samples, sampleNext); };
     samples.hidden = true;
     const title = node('h3', 'How would you like to install it?'); title.tabIndex = -1;
-    const caption = node('p', hasSamples ? 'First the firmware, then the UW samples your models need.' : 'Send from Chrome, or save the file for another MIDI utility.', 'delivery-caption');
     const firmware = node('div'), manual = node('div', '', 'delivery-manual'); manual.hidden = true;
     const next = node('button', 'Get UW samples', 'wizard-primary'); next.type = 'button'; next.id = 'delivery-samples'; next.hidden = true;
     const back = node('button', 'Choose another way', 'delivery-back'); back.type = 'button'; back.hidden = true;
@@ -25,14 +24,14 @@ export class FirmwareDelivery {
       this.element.dataset.stage = 'choose'; firmware.hidden = false; manual.hidden = true;
       this.midi.element.hidden = false; samples.hidden = true; next.hidden = true; back.hidden = true;
       this.midi.element.querySelector<HTMLElement>('.firmware-midi-actions')!.hidden = false;
-      title.textContent = 'How would you like to install it?'; caption.hidden = false;
+      title.textContent = 'How would you like to install it?';
       download.textContent = 'Download .syx'; title.focus();
     };
     this.midi = new FirmwareMidi(bytes, sending => {
       downloadWrap.inert = sending; back.disabled = sending; next.disabled = sending; busy(sending);
     }, state => {
       if (state === 'setup' && !manual.hidden) return;
-      this.element.dataset.stage = state; caption.hidden = true; next.hidden = true;
+      this.element.dataset.stage = state; next.hidden = true;
       title.textContent = state === 'sending' ? 'Sending your firmware' : state === 'sent' ? 'Firmware sent' : 'Prepare your Machinedrum';
       back.hidden = state !== 'sent';
       if (state === 'sent') {
@@ -53,17 +52,17 @@ export class FirmwareDelivery {
     download.addEventListener('click', event => {
       if (event.defaultPrevented) return;
       this.element.dataset.stage = 'download'; this.midi.element.hidden = true; manual.hidden = false;
-      title.textContent = 'Your firmware file'; caption.hidden = true; back.hidden = false;
+      title.textContent = 'Your firmware file'; back.hidden = false;
       download.textContent = 'Download .syx again'; next.textContent = 'Get UW samples'; next.hidden = !hasSamples;
     });
     next.addEventListener('click', () => {
       this.element.dataset.stage = 'samples'; firmware.hidden = true; samples.hidden = false;
-      title.textContent = 'Load your UW samples'; caption.hidden = true; next.hidden = true;
+      title.textContent = 'Load your UW samples'; next.hidden = true;
       back.textContent = 'Back to firmware'; back.hidden = false; title.focus();
     });
     back.addEventListener('click', () => { back.textContent = 'Choose another way'; reset(); });
     firmware.append(this.midi.element, manual, downloadWrap);
-    this.element.append(title, caption, firmware, samples, next, back);
+    this.element.append(title, firmware, samples, next, back);
     this.element.dataset.stage = 'choose';
   }
 

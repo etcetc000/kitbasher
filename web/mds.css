@@ -1,4 +1,5 @@
 /* Reuse the bench palette and type. The sixteen-slot rack is the central visual. */
+.mds-notice{flex-shrink:0;margin:0 0 12px;font-size:13px;line-height:1.5;color:#975300}[data-theme=dark] .mds-notice{color:#ffbf69}
 .mds-bank{display:flex;flex-direction:column}.mds-bank>*,.mds-bank-bottom{flex-shrink:0}.mds-bank #bank-slots{flex:1 1 120px;min-height:80px;overflow-y:auto}.mds-bank .mds-transfer{padding:12px;margin-top:12px;font-size:12px}.mds-bank .mds-transfer h2{font-size:14px}
 .site-nav{display:flex;gap:24px;border-bottom:1px solid var(--line);margin:0 0 12px;padding-bottom:8px}
 .site-nav a{color:var(--muted);text-decoration:none;padding:5px 0}.site-nav a[aria-current=page]{color:var(--ink);box-shadow:0 2px var(--ink)}
