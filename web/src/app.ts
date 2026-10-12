@@ -22,7 +22,7 @@ import { baseSet, identify, NotPatchable, unsupported, type Base, type BaseProfi
 import { prepare163 } from '../../engine/src/prepare.js';
 import { build, CompressedCapacityError, OsAreaCapacityError, type BuildReport, type BuildResult } from '../../engine/src/build.js';
 import { firmwareFilename } from '../../engine/src/firmware_version.js';
-import { FirmwareMidi } from './firmware-midi.js';
+import { FirmwareDelivery } from './firmware-delivery.js';
 import { readFirmware, type Firmware } from '../../engine/src/container.js';
 import type { TrimOptions } from '../../engine/src/e12.js';
 import { checkPack, modelWords, needLines, needsUwSamples, type CorePack, type Pack, type PackModel } from '../../engine/src/packs.js';
@@ -90,7 +90,7 @@ let step = 1;
 let revision = 0;
 let building = false;
 let sendingFirmware = false;
-let firmwareMidi: FirmwareMidi | undefined;
+let firmwareMidi: FirmwareDelivery | undefined;
 let downloadUrl: string | null = null;
 let fileRequest = 0;
 let packedCapacityProblem = false;
@@ -125,17 +125,21 @@ function clearDownload(): void {
   if (downloadUrl) URL.revokeObjectURL(downloadUrl);
   downloadUrl = null;
   $('result').replaceChildren();
+  $('build-details').replaceChildren();
+  $('download-needs').hidden = true;
 }
 
 function attachFirmwareSender(bytes: Uint8Array): void {
-  firmwareMidi = new FirmwareMidi(bytes, sending => {
+  const link = $('result').querySelector<HTMLAnchorElement>('.download')!;
+  $('build-details').replaceChildren(...Array.from($('result').children).filter(element => element !== link));
+  firmwareMidi = new FirmwareDelivery(bytes, link, $('download-needs'), sending => {
     sendingFirmware = sending;
     // Prevent navigation or rebuilding while these exact bytes are being sent.
-    for (const selector of ['.site-nav', '.wizard-steps', '#build-options', '.project-save', '#step-5 > .wizard-actions']) {
+    for (const selector of ['.site-nav', '.wizard-steps', '#delivery-options', '#step-5 > .wizard-actions']) {
       document.querySelector<HTMLElement>(selector)!.inert = sending;
     }
   });
-  $('result').prepend(firmwareMidi.element);
+  $('result').replaceChildren(firmwareMidi.element);
 }
 
 function syncWizard(): void {
@@ -542,16 +546,14 @@ function refresh(minAutoDb: number | null = null): void {
   const swapped = samples.state.swaps.size;
   $('download-summary').textContent = `${p.sel.length} models.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
-  $('download-needs').hidden = !needs.length;
+  $('download-needs').hidden = true;
   // nothing restored: a kit made with an earlier Kitbasher build may not find its machines
   $('ids-warning').hidden = layoutEd.restoredFrom !== null;
   $('ids-warning').textContent = 'Machine IDs are assigned fresh. To keep your kits\' machines, drop your previous Kitbasher .syx under "Restore an earlier layout" on step 1.';
   $('download-needs').replaceChildren(...(needs.length ? [
-    el('h3', {}, 'UW sample data: a separate step'),
-    el('p', {}, needs.join(' ')),
-    el('p', {}, 'These sample-based features require a UW Machinedrum. After installing the firmware, load the matching sample/wavetable SysEx through the UW sample manager, not the firmware upgrade screen. Back up your UW samples first and check the destination slot.'),
+    el('p', {}, 'Load these after updating the firmware, using C6 or another sample sender.'),
     uwDownloads(p.sel.map(s => s.m), data.packs),
-    uwGuide(),
+    uwInstructions(),
   ] : []));
   for (const i of boxes()) {
     const label = i.closest('.machine') as HTMLElement;
@@ -598,15 +600,13 @@ function refreshX20(minAutoDb: number | null): void {
   const swapped = samples.state.swaps.size;
   $('download-summary').textContent = `${p.sel.length} models for ${x20R!.name}.${swapped ? ` ${swapped} sample${swapped === 1 ? '' : 's'} replaced.` : ''}`;
   const needs = p.sel.flatMap(s => needLines(s.m));
-  $('download-needs').hidden = !needs.length;
+  $('download-needs').hidden = true;
   $('ids-warning').hidden = layoutEd.restoredFrom !== null;
   $('ids-warning').textContent = 'Machine IDs are assigned fresh. To keep your kits\' machines, drop your previous Kitbasher .syx under "Restore an earlier layout" on step 1.';
   $('download-needs').replaceChildren(...(needs.length ? [
-    el('h3', {}, 'UW sample data: a separate step'),
-    el('p', {}, needs.join(' ')),
-    el('p', {}, 'These sample-based features require a UW Machinedrum. After installing the firmware, load the matching sample/wavetable SysEx through the UW sample manager, not the firmware upgrade screen. Back up your UW samples first and check the destination slot.'),
+    el('p', {}, 'Load these after updating the firmware, using C6 or another sample sender.'),
     uwDownloads(p.sel.map(s => s.m), data.packs),
-    uwGuide(),
+    uwInstructions(),
   ] : []));
   for (const i of boxes()) {
     const label = i.closest('.machine') as HTMLElement;
@@ -760,6 +760,17 @@ async function onPackFiles(files: File[]): Promise<void> {
 
 function uwGuide(): HTMLElement {
   return el('a', { href: 'uw-samples.html', target: '_blank', rel: 'noopener' }, 'How to load UW sample data');
+}
+
+function uwInstructions(): HTMLElement {
+  return el('details', { class: 'uw-instructions' }, el('summary', {}, 'How to load these samples'),
+    el('ol', {},
+      el('li', {}, 'Back up your UW samples. Loading these files replaces the slots shown above.'),
+      el('li', {}, 'Connect both MIDI cables: interface OUT to Machinedrum IN, and Machinedrum OUT to interface IN.'),
+      el('li', {}, 'On the Machinedrum, open GLOBAL → FILE → SAMPLE MGR → RECEIVE. Choose ORG and press YES.'),
+      el('li', {}, 'In C6 on Windows, select your interface for MIDI input and output and enable SDS Handshake. Send one downloaded .syx at a time. Wait for receiving and loading to finish before the next file.')),
+    el('p', { class: 'fine' }, 'Keep the files unchanged. Check each sample’s name and slot afterward. Kitbasher does not send UW samples yet; Elektron Transfer only supports firmware updates for Machinedrum.'),
+    uwGuide());
 }
 
 function reportView(r: BuildReport): HTMLElement {

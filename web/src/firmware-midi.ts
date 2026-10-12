@@ -16,13 +16,14 @@ export class FirmwareMidi {
   private prepared = false;
   private sending = false;
 
-  constructor(private bytes: Uint8Array, private busy: (sending: boolean) => void) {
+  constructor(private bytes: Uint8Array, private busy: (sending: boolean) => void,
+    private changed: (state: 'setup' | 'sending' | 'sent' | 'error') => void = () => {}) {
     this.element.className = 'firmware-midi';
     this.element.setAttribute('aria-label', 'Send firmware over MIDI');
     this.button.type = this.cancel.type = 'button';
     this.button.className = 'wizard-primary';
     this.button.id = 'firmware-send';
-    this.button.textContent = 'Send firmware';
+    this.button.textContent = 'Send to Machinedrum';
     this.cancel.textContent = 'Cancel';
     this.cancel.hidden = true;
     this.cancel.addEventListener('click', () => this.controller?.abort(new DOMException('Cancelled', 'AbortError')));
@@ -80,7 +81,7 @@ export class FirmwareMidi {
       this.button.disabled = true;
       this.button.textContent = 'Connecting MIDI…';
       try {
-        if (!navigator.requestMIDIAccess || !isSecureContext) throw new Error('Open Kitbasher in Chrome to send over MIDI, or use Download firmware below.');
+        if (!navigator.requestMIDIAccess || !isSecureContext) throw new Error('Open Kitbasher in Chrome to send over MIDI, or choose Download .syx.');
         if (!this.access) {
           const access = await navigator.requestMIDIAccess({ sysex: true });
           if (this.disposed) return;
@@ -93,6 +94,7 @@ export class FirmwareMidi {
           throw new Error('Allow MIDI and SysEx access in your browser’s site settings, then try again.');
         }
         this.prepared = true;
+        this.changed('setup');
         this.setup.hidden = false;
         this.refresh();
         this.progress.hidden = true;
@@ -113,6 +115,7 @@ export class FirmwareMidi {
     const output = this.access?.outputs.get(this.ports.value);
     if (!output || output.state !== 'connected') { this.refresh(); this.message.textContent = 'Reconnect your MIDI interface, then try again.'; return; }
     this.sending = true;
+    this.changed('sending');
     this.busy(true);
     this.controller = new AbortController();
     const { signal } = this.controller;
@@ -172,7 +175,9 @@ export class FirmwareMidi {
         await session();
       }); else await session();
       this.message.textContent = 'Sent. Wait for the Machinedrum to finish the upgrade, then restart it. The browser cannot confirm installation.';
+      this.changed('sent');
     } catch (error) {
+      this.changed('error');
       this.message.dataset.error = 'true';
       this.message.textContent = error instanceof DOMException && error.name === 'AbortError'
         ? 'Send cancelled. Return to MIDI UPGRADE and send the firmware again from the beginning.' : (error as Error).message;

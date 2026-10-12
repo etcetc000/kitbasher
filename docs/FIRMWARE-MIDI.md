@@ -1,11 +1,11 @@
 # Browser firmware sending
 
 The builder's final page can send its current build directly through Web MIDI in
-Chrome over HTTPS (or localhost). Download remains available without MIDI access.
+Chrome over HTTPS (or localhost). Choose **Download .syx** to save the file without granting MIDI access.
 Only a MIDI output is needed for the standard OS update protocol. Unlike MDS
 machine installation, firmware updates do not use the MDS acknowledgement protocol.
 
-Click **Send firmware**, allow MIDI and SysEx access, select the output, and follow
+Choose **Send to Machinedrum**, allow MIDI and SysEx access, select the output, and follow
 the boot-menu instructions. The second click, **I'm ready — send firmware**, starts
 transmission. A single connected output is selected automatically; multiple outputs
 require a selection. The browser cannot detect the DIN cable or boot-menu readiness.
@@ -33,3 +33,11 @@ installation; wait for the Machinedrum's upgrade result before restarting.
 
 The startup-menu procedure is described in the
 [Elektron Machinedrum manual](https://www.elektron.se/wp-content/uploads/2024/09/machinedrum_manual_OS1.63.pdf).
+
+The final page shows one installation path at a time. Downloading opens optional
+manual installation steps. After sending, users wait for the device to finish and
+restart before continuing to the UW sample step. Builds without sample needs omit
+that step. Builds with sample needs offer only their matching verified files,
+deduplicated when several models use the same asset, with destination slots and
+sample-manager instructions. UW sample sending still uses an external SDS-capable
+utility; it is not sent through the firmware sender.

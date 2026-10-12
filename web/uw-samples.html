@@ -12,37 +12,17 @@ h1, h2 { line-height: 1.2; } li { margin: .8rem 0; } code { background: #eaeae5;
 </style>
 <main>
 <p><a href="index.html">Back to Kitbasher</a></p>
-<h1>Loading UW sample data</h1>
-<p>Some models need a separate sample or wavetable in the Machinedrum's UW sample memory.
-The model details and build report name the required data and describe what happens without it.
-Tables embedded in the firmware need no separate transfer.</p>
-<p>Sample data is sent through the sample manager, separately from the OS update.
-Kitbasher builds the firmware file only; it does not send samples or read what is on your device.</p>
+<h1>Load your UW samples</h1>
+<p>Install your firmware first. Then use the sample downloads shown at the end of your Kitbasher build.</p>
 <ol>
-<li><strong>Get the matching data file.</strong> Use the <code>.syx</code> file supplied or generated
-for your model version. When a SHA-256 checksum is published with it, compare it before sending.
-Files with the same name or the same four-character sample name can still have different contents.</li>
-<li><strong>Back up your UW samples and choose an empty slot.</strong> A normal kit/pattern SysEx
-backup does not include the UW samples, so use the sample manager's sample backup as well.
-Loading into an occupied slot overwrites that sample.</li>
-<li><strong>Check the destination encoded in the file.</strong> SDS sample numbers 0–47 correspond
-to displayed UW slots 1–48, so a file with sample number 46 targets displayed slot 47.
-Selecting another slot on the screen does not change the file's header. Use a file made for
-your chosen slot rather than editing its bytes by hand.</li>
-<li><strong>Connect MIDI in both directions.</strong> Computer MIDI OUT goes to Machinedrum MIDI IN;
-Machinedrum MIDI OUT returns to computer MIDI IN. Open the Machinedrum sample manager's receive
-screen and use an SDS sender that waits for ACK/NAK/WAIT replies, and let it finish acknowledging
-every packet. Use the sample receive screen, not the firmware upgrade boot screen.</li>
-<li><strong>Check the result.</strong> Confirm that the sample occupies the expected slot with
-the expected name and length. Then select the model and try the control that uses the data;
-optional data may affect only one control.</li>
+<li><strong>Back up the samples you want to keep.</strong> These files replace the UW slots listed beside each download. Kit and pattern backups do not include samples.</li>
+<li><strong>Connect both MIDI cables.</strong> Interface OUT ? Machinedrum IN. Machinedrum OUT ? interface IN.</li>
+<li><strong>Prepare the Machinedrum.</strong> Open GLOBAL ? FILE ? SAMPLE MGR ? RECEIVE. Choose ORG, then press YES. This uses the destinations saved in the files.</li>
+<li><strong>Send with a sample utility.</strong> In C6 on Windows, select your MIDI input and output and enable SDS Handshake. Load one downloaded .syx and click Send. Wait for receiving and loading to finish before sending the next file.</li>
+<li><strong>Check the sample name and slot.</strong> Keep the files unchanged: do not trim, normalize or convert them. Test wavetables through their model; they may sound like noise on their own.</li>
 </ol>
-<h2>If it stays silent</h2>
-<p>Check that the installed model and the data file belong to the same version, that the transfer
-completed, and that the device has UW sample memory. Follow any placement notes supplied with the model.
-Model data can sound like noise when auditioned as an ordinary sample; test it through its model.</p>
-<p>Send encoded data unchanged: do not normalize, trim, resample or otherwise process it. If a WAV
-alternative is supplied, use its documented transfer settings and sample rate. After a failed transfer,
-check the destination slot before retrying.</p>
+<p>Kitbasher provides the files and instructions; browser sending currently handles firmware only. <a href="https://support.elektron.se/support/solutions/articles/43000566543-c6-macos-compatibility-information">Elektron Transfer does not send Machinedrum UW samples.</a> On systems that cannot run C6, use a sample sender with MIDI SDS handshake support.</p>
+<details><summary>More help</summary><p>For a complete sample backup, use SAMPLE MGR ? SEND ? ALL with a sample receiver on your computer. See the <a href="https://www.elektron.se/wp-content/uploads/2024/09/machinedrum_manual_OS1.63.pdf#page=78">Machinedrum sample manager instructions</a>.</p></details>
+<footer><p>Kitbasher is not affiliated with Elektron or MDX.</p></footer>
 </main>
 </html>

@@ -21,6 +21,25 @@ body.simple-builder .upload #drop{margin:18px 0;padding:24px}
 .simple-builder #step-5>details{margin:22px 0}
 .simple-builder #step-5 .project-save{display:block}
 .simple-builder #step-5>p{margin:14px 0}
+.firmware-delivery{margin:24px 0 0;padding:28px;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+.firmware-delivery h3{font-size:21px;line-height:1.3;margin:0 0 12px;font-weight:600}
+.delivery-caption{color:var(--muted);font-size:14px;line-height:1.6}
+.firmware-delivery .firmware-midi{border:0;padding:0;margin:22px 0 12px;background:none}
+.firmware-delivery .firmware-midi-actions .wizard-primary{width:100%;padding:14px 20px}
+.firmware-delivery .firmware-midi-actions{display:grid}
+.firmware-delivery .firmware-midi-actions[hidden]{display:none}
+.delivery-download{border-top:1px solid var(--line);padding-top:12px;margin-top:16px;text-align:center}
+.simple-builder #step-5 #result .delivery-download .download{font-size:14px;padding:8px 14px}
+.delivery-manual{font-size:14px;line-height:1.6}
+.delivery-manual ol,.uw-instructions ol{padding-left:22px}
+.delivery-manual li,.uw-instructions li{margin:12px 0}
+.delivery-back{display:block;margin:16px 0 0;padding:0;border:0;background:none;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font:inherit}
+#delivery-samples{margin-top:20px}
+.simple-builder #delivery-options>details{margin:18px 0}
+.simple-builder #download-needs{border:0;padding:0;margin-top:16px;background:var(--panel);font-size:14px;line-height:1.6}
+#uw-downloads>p{padding:14px 0;border-bottom:1px solid var(--line)}
+#uw-downloads .uw-download{font-size:16px;font-weight:600;color:var(--ink);text-underline-offset:3px}
+.uw-instructions h4{font-size:16px;margin:24px 0 8px}
 .simple-builder #step-5 #ids-warning{font-size:13px}
 .simple-builder #step-5 #result .download{display:inline-block;font-size:14px;padding:8px 0;margin:4px 0;color:var(--ink);text-underline-offset:3px}
 .firmware-midi{margin:24px 0 4px;padding:20px;border:1px solid var(--line);border-radius:3px;background:var(--panel)}

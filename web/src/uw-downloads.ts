@@ -80,10 +80,10 @@ export function uwDownloads(models: PackModel[], packs: Pack[]): HTMLElement {
         link.className = 'uw-download';
         link.href = await download(a);
         link.download = a.file;
-        link.textContent = `Download ${a.name} sample SysEx`;
+        link.textContent = `Download ${a.name}`;
         const note = document.createElement('span');
         note.className = 'fine';
-        note.textContent = ` ${a.file} · UW slot ${a.displayed_slot} · used by ${users.join(' and ')}. Loading it replaces any sample in that slot.`;
+        note.textContent = `Slot ${a.displayed_slot} · for ${users.join(' and ')}. Replaces the sample in this slot.`;
         row.replaceChildren(link, document.createElement('br'), note);
       } catch (error) {
         row.textContent = (error as Error).message;

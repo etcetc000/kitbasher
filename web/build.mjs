@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import { cpSync, mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { buildMdsCatalog } from './build-mds.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,8 +74,16 @@ for (const file of bundle.outputFiles) writeFileSync(file.path, file.contents);
 for (const file of mdsBundle.outputFiles) writeFileSync(file.path, file.contents);
 const html = readFileSync(join(ROOT, 'web/index.html'), 'utf8');
 const appStyles = readFileSync(join(ROOT, 'web/styles.css'), 'utf8');
-writeFileSync(join(OUT, 'index.html'), html.replace('<!-- app-styles -->', `<style>${appStyles}</style>`));
-writeFileSync(join(OUT, 'mds.html'), readFileSync(join(ROOT, 'web/mds.html'), 'utf8').replace('<!-- app-styles -->', `<style>${appStyles}</style>`));
+// Recipes revalidate on each load. Give changed engine bundles new URLs too,
+// so a browser cannot reuse old code with a freshly fetched recipe.
+function scriptUrl(result, name) {
+  const script = result.outputFiles.find(file => file.path === join(OUT, name));
+  if (!script) throw new Error(`Missing site bundle: ${name}`);
+  return `${name}?v=${createHash('sha256').update(script.contents).digest('hex').slice(0, 16)}`;
+}
+writeFileSync(join(OUT, 'index.html'), html.replace('<!-- app-styles -->', `<style>${appStyles}</style>`).replace('src="app.js"', `src="${scriptUrl(bundle, 'app.js')}"`));
+writeFileSync(join(OUT, 'mds.html'), readFileSync(join(ROOT, 'web/mds.html'), 'utf8').replace('<!-- app-styles -->', `<style>${appStyles}</style>`).replace('src="mds.js"', `src="${scriptUrl(mdsBundle, 'mds.js')}"`));
+cpSync(join(ROOT, 'web/_headers'), join(OUT, '_headers'));
 cpSync(join(ROOT, 'web/mds.css'), join(OUT, 'mds.css'));
 cpSync(join(ROOT, 'web/builder.css'), join(OUT, 'builder.css'));
 mkdirSync(join(OUT, 'data/mds'), { recursive: true });
