@@ -701,6 +701,18 @@
       "sharedId": "org.spsx.usr.tx9-rs",
       "notes": "Original K55 package from the user-supplied K55_wftlrd archive. Source, license and hardware qualification were not included. Package bytes and controls are preserved.",
       "hidden": true
+    },
+    {
+      "file": "mds/community/samplesandsnacks/rasp/RASP.syx",
+      "sha256": "482300c133eb82607921e52108f81d141f7f2797236d41f71019f17d957ca6b8",
+      "channel": "community",
+      "author": "SamplesAndSnacks",
+      "summary": "Blown trill",
+      "source": null,
+      "project": "https://github.com/SamplesAndSnacks/machinedrum-rasp",
+      "license": "MIT",
+      "hardware": "all",
+      "notes": "Works on UW and non-UW models; uses no sample ROM."
     }
   ]
 }
