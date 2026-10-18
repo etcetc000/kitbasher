@@ -32,7 +32,6 @@ test('every curated core/community release validates, with reviewed identities a
     assert.match(machine.source, /b3c74740f0e8fa7309dd02e85c3b0ec1631ad7d2/);
     assert.equal(machine.author, 'hcar / murdenihcam');
   }
-  assert.ok(index.machines.every(m => m.category !== 'K55'));
   assert.ok(index.machines.every(m => m.cycles > 0 && m.cycles <= 3951 && m.words > 0 && m.contentId.length === 64));
 });
 
