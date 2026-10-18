@@ -681,6 +681,42 @@
       "license": "Not specified by author",
       "hardware": "all",
       "notes": "Works on UW and non-UW models. Neighbour effect: processes the track before (NBAL right) and/or two before (NBAL left); output is wet only. MODE SPIN pitch-shifting delay (RATE ±12 semitones), FLNG flanger, CHOR Monomachine-style 3-tap chorus, DBLR doubler, BODE frequency shifter (RATE ±1 kHz; DPTH 0 ring mod, 127 pure shift). FB 64 none, ~124 unity, 125–127 self-oscillation, below 64 negative. ENTI: a delay envelope fired by trigs (64 off). Mode changes fade in and out; DC offsets in the source are removed from the feedback loop."
+    },
+    {
+      "file": "mds/community/samplesandsnacks/rasp/RASP.syx",
+      "sha256": "9d699d3ad9154e4da6c3e6e666e97066994b191a0c8685f5c2d64f6e126d7e67",
+      "channel": "community",
+      "author": "SamplesAndSnacks",
+      "summary": "Blown trill",
+      "source": null,
+      "project": "https://github.com/SamplesAndSnacks/machinedrum-rasp",
+      "license": "MIT",
+      "hardware": "all",
+      "notes": "Works on UW and non-UW models; uses no sample ROM. Recategorised for this library from the original release: category and code changed to PHY-RS (description CRC, content ID and package CRC recomputed); program, machine ID, controls and cycle declaration unchanged."
+    },
+    {
+      "file": "mds/community/samplesandsnacks/kook/KOOK.syx",
+      "sha256": "d71fb3a6245550da7ebaae981be7676a5aabbae7b13e2931ce60962fcdd87276",
+      "channel": "community",
+      "author": "SamplesAndSnacks",
+      "summary": "Laughing kookaburra",
+      "source": null,
+      "project": "https://github.com/SamplesAndSnacks/machinedrum-rasp",
+      "license": "MIT",
+      "hardware": "all",
+      "notes": "Works on UW and non-UW models; uses no sample ROM. Recategorised for this library from the original release: category and code changed to PHY-KK (description CRC, content ID and package CRC recomputed); program, machine ID, controls and cycle declaration unchanged."
+    },
+    {
+      "file": "mds/community/samplesandsnacks/smsh/SMSH.syx",
+      "sha256": "40949abcd86a097fca8f17762714c6b0dd92e3c9db54b89aacaffc6fe331c998",
+      "channel": "community",
+      "author": "SamplesAndSnacks",
+      "summary": "Piano smash",
+      "source": null,
+      "project": "https://github.com/SamplesAndSnacks/machinedrum-rasp",
+      "license": "MIT",
+      "hardware": "all",
+      "notes": "Works on UW and non-UW models; uses no sample ROM. Recategorised for this library from the original release: category and code changed to PHY-SM (description CRC, content ID and package CRC recomputed); program, machine ID, controls and cycle declaration unchanged."
     }
   ]
 }
