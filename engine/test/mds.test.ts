@@ -88,8 +88,8 @@ test('query WAIT accepts a deferred reply without resending and ignores unrelate
   assert.equal(unrelated.sent.length, 1);
 });
 
-test('post-commit query WAIT does not interrupt an eight-machine K55 installation', async () => {
-  const machines = (await Promise.all(['01-K55-BD', '02-K55-SD', '03-K55-TM', '04-K55-CG', '05-K55-RS', '06-K55-CB', '07-K55-HH', '08-K55-CY'].map(name => parseSysex(file(`community/wftlrd/${name}.syx`))))).flat();
+test('post-commit query WAIT does not interrupt an eight-machine installation', async () => {
+  const machines = (await Promise.all(['BD', 'CB', 'CL', 'CP', 'CY', 'HH', 'MA', 'RS'].map(name => parseSysex(file(`core/TX8/TX8-${name}.syx`))))).flat();
   const s = empty(), reviewed = structuredClone(s); let busyUntil = 0;
   const io = new FakeMidi((m, io) => {
     if (m.command === CMD.slots || m.command === CMD.caps) {

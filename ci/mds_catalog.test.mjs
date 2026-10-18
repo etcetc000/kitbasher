@@ -25,14 +25,15 @@ test('every curated core/community release validates, with reviewed identities a
   assert.deepEqual(index.machines.find(m => m.alias === 'TX6-CP').parameters.map(p => p.name), ['TUNE', 'DEC', 'NOIS', 'BODY', 'TGHT']);
   assert.ok(index.machines.every(m => m.category !== 'TR6'));
   const smp = index.machines.filter(m => m.category === 'SMP');
-  assert.equal(smp.length, 3);
-  for (const [alias, hardware] of [['SMP-ST', 'uw'], ['SMP-SR', 'uw'], ['SMP-S2', 'all']]) {
+  assert.equal(smp.length, 9);
+  for (const [alias, hardware] of [['SMP-ST', 'uw'], ['SMP-SR', 'uw'], ['SMP-S2', 'all'], ['SMP-SL', 'uw'], ['SMP-SM', 'uw'],
+    ['SMP-SN', 'all'], ['SMP-GR', 'uw'], ['SMP-GM', 'uw'], ['SMP-G2', 'all']]) {
     const machine = smp.find(m => m.alias === alias);
-    assert.equal(machine.hardware, hardware); assert.equal(machine.version, '0.6');
-    assert.match(machine.source, /b3c74740f0e8fa7309dd02e85c3b0ec1631ad7d2/);
-    assert.equal(machine.author, 'hcar / murdenihcam');
+    assert.equal(machine.hardware, hardware, alias);
+    assert.match(machine.source, /^https:\/\/github\.com\/murdenihcam\/murdenihcam-usr-machines\//);
+    assert.equal(machine.author, 'murdenihcam');
   }
-  assert.ok(index.machines.every(m => m.category !== 'K55'));
+  for (const alias of ['SMP-ST', 'SMP-SR', 'SMP-S2']) assert.equal(smp.find(m => m.alias === alias).version, '0.6');
   assert.ok(index.machines.every(m => m.cycles > 0 && m.cycles <= 3951 && m.words > 0 && m.contentId.length === 64));
 });
 

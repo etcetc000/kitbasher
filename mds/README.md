@@ -2,9 +2,9 @@
 
 The MDS page installs individual user machines into an X.20 Machine Bank. It is separate from Kitbasher's firmware builder. `catalog.json` is the curated public index; the website build validates each package and publishes content-addressed files. Capacity, controls, version and identity come from the package itself.
 
-K55 is temporarily hidden from the public library pending further refinement. Its original files and metadata remain here. Set `hidden: true` on a catalog entry to withhold it from the generated index and download assets while retaining package validation; remove the flag to publish it again.
+Set `hidden: true` on a catalog entry to withhold it from the generated index and download assets while retaining package validation; remove the flag to publish it again.
 
-The collection contains the X.20 USR releases in `core/` (TX8, TX9, TXZ, SYN, P-I and NFX), the Simple606-inspired community TX6 port in `tx6/`, hcar/murdenihcam's three SMP time-stretch machines in `community/murdenihcam/`, and eight K55 machines from the supplied wftlrd archive in `community/wftlrd/`. Core, SMP and K55 binaries are preserved byte-for-byte from their supplied releases. Core release links point to [jmamma/MDX](https://github.com/jmamma/MDX). Missing source or license information for other releases is explicitly recorded. The site repository's license does not override individual machine licenses. TX6 source attribution and its MIT notice are in each assembly file.
+The collection contains the X.20 USR releases in `core/` (TX8, TX9, TXZ, SYN, P-I and NFX), the Simple606-inspired community TX6 port in `tx6/`, and hcar/murdenihcam's three SMP time-stretch machines in `community/murdenihcam/`. Core and SMP binaries are preserved byte-for-byte from their supplied releases. Core release links point to [jmamma/MDX](https://github.com/jmamma/MDX). Missing source or license information for other releases is explicitly recorded. The site repository's license does not override individual machine licenses. TX6 source attribution and its MIT notice are in each assembly file.
 
 ## Curating releases
 
