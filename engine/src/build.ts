@@ -463,7 +463,8 @@ async function buildAttempt(input: Uint8Array, base: Base, packs: Pack[], core: 
 
   // ---- the patch list, and what each site must hold before it
   if(fxDsp) img.align(4,0xff);
-  const fx = fxDsp ? fxOrderCode(codeImages(fw,base),alias+img.length,ram.dsp1?.entry??base.features.dsp1Drive!.sender) : null;
+  const fx = fxDsp ? fxOrderCode(codeImages(fw,base),alias+img.length,ram.dsp1?.entry??base.features.dsp1Drive!.sender,
+    base.features.dsp1Drive!.senderSites) : null;   // the sites below point at fx's sender until its first call
   if(fx) img.push(fx.code.bytes);
   const patches: [number, number][] = [[O.heap.site, E]];
   const checks: [number, number][] = [[O.heap.site, O.heap.old]];

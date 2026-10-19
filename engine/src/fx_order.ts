@@ -45,7 +45,12 @@ export function fxOrderGateSites(images:CodeImage[],patches:readonly (readonly [
   return {ranges,dataSites};
 }
 
-export function fxOrderCode(images:CodeImage[],org:number,sender:number) {
+/** `sites`: the OS's call sites of the DSP1 parameter sender that the build points at `sender` below. When
+ * given, the first call writes `sender`'s target back into them (interrupts masked), so every later send calls
+ * it directly instead of through this flash-resident wrapper. The sender runs ~20,000 times a second; the
+ * per-call flash detour starved the panel on hardware (track-select wheel lag after a busy pattern). A stale
+ * instruction-cache line still calling the wrapper is harmless: it keeps working after the first call. */
+export function fxOrderCode(images:CodeImage[],org:number,sender:number,sites:readonly number[]=[]) {
   assertNativeMenu(images);
   const read=reader(images);
   const a=new Asm(org),i=(op:string,...args:string[])=>a.i(op,...args),abs=(n:number)=>`0x${n.toString(16)}.l`;
@@ -64,8 +69,16 @@ export function fxOrderCode(images:CodeImage[],org:number,sender:number) {
   a.label('sender');
   // Seeing a native parameter send proves DSP1 is initialized. Global loading
   // also runs during startup, before it is safe to touch the host port.
-  i('move.l','d0','-(a7)');i('move.l',abs(S.ready),'d0');i('bne.b','sender_ready');
-  i('moveq','#1','d0');i('move.l','d0',abs(S.ready));i('move.l','(a7)+','d0');
+  i('move.l','d0','-(a7)');i('move.l',abs(S.ready),'d0');i('bne.w','sender_ready');
+  i('moveq','#1','d0');i('move.l','d0',abs(S.ready));
+  if(sites.length) {
+    // unhook: the call sites get the real sender back; masked, so no interrupt sees a half-written address
+    i('move.l','d3','-(a7)');a.bytes('unhook_save_sr',[0x40,0xc3,0x46,0xfc,0x27,0x00]); // move.w sr,d3; move.w #$2700,sr
+    i('move.l',`#${sender>>>0}`,'d0');
+    for(const s of sites)i('move.l','d0',abs(s));
+    a.bytes('unhook_restore_sr',[0x46,0xc3]);i('move.l','(a7)+','d3');                  // move.w d3,sr
+  }
+  i('move.l','(a7)+','d0');
   i('bsr.w','sync');i('jmp',abs(sender));
   a.label('sender_ready');i('move.l','(a7)+','d0');i('jmp',abs(sender));
   a.label('global_apply');i('bsr.w','sync');i('jmp','0x212b40.l');
