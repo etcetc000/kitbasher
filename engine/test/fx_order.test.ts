@@ -75,6 +75,21 @@ test('startup defers transport until DSP readiness and global application synchr
   c.w8(S.settings,0x20);c.call(f.code.labels.global_import,[123]);
   assert.equal(packets,3);assert.equal(c.r32(S.cache),2);assert.equal(ack,2);
 });
+test('the first native send unhooks the wrapper: every call site gets the real sender back, masked',()=>{
+  const sites=[0x20ac5e,0x100056a,0x2d6406],g=fxOrderCode(fixture(),0x100e0000,0x1000702,sites);
+  const c=new Cpu();c.load(0x100e0000,g.code.bytes);c.stubs.set(0x1000702,()=>{});
+  const writes:[number,number,number][]=[],w32=c.w32.bind(c);
+  c.w32=(at,v)=>{if(sites.includes(at))writes.push([at,v>>>0,c.sr]);w32(at,v);};
+  for(const s of sites)w32(s,g.code.labels.sender);
+  c.w8(g.settings.settings,0);c.sr=0x2300;c.d.set([91,82,73,64,55,46,37,28]);
+  const before=[...c.d],stack=c.a[7];
+  c.call(g.code.labels.sender,[7]);
+  assert.deepEqual(writes,sites.map(s=>[s,0x1000702,0x2700]));
+  for(const s of sites)assert.equal(c.r32(s),0x1000702);
+  assert.deepEqual([...c.d],before);assert.equal(c.a[7],stack);assert.equal(c.sr,0x2300);
+  c.call(g.code.labels.sender,[7]);assert.equal(writes.length,sites.length,'unhooked once');
+  assert.ok(f.code.bytes.length<g.code.bytes.length,'without sites the wrapper is unchanged');
+});
 test('an occupied page or changed menu ABI is refused before any image is written',()=>{
   for(const at of [0x26186c,0x2d226a,0x2c55f8,0x2c5c1e,0x22f98e,0x2c47f4,0x208428]) {
     const images=fixture();images[0].bytes[at-0x200000]^=1;
